@@ -59,12 +59,12 @@ namespace Timberbot
 
         // -- helper: find entity's GameObject by instance ID --
 
-        private GameObject FindEntity(int id)
+        private EntityComponent FindEntity(int id)
         {
             foreach (var ec in _entityRegistry.Entities)
             {
                 if (ec.GameObject.GetInstanceID() == id)
-                    return ec.GameObject;
+                    return ec;
             }
             return null;
         }
@@ -198,14 +198,14 @@ namespace Timberbot
             var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
             {
-                var go = ec.GameObject;
-                var building = go.GetComponent<Building>();
+                var building = ec.GetComponent<Building>();
                 if (building == null) continue;
 
-                var bo = go.GetComponent<BlockObject>();
-                var pausable = go.GetComponent<PausableBuilding>();
-                var floodgate = go.GetComponent<Floodgate>();
-                var prio = go.GetComponent<BuilderPrioritizable>();
+                var go = ec.GameObject;
+                var bo = ec.GetComponent<BlockObject>();
+                var pausable = ec.GetComponent<PausableBuilding>();
+                var floodgate = ec.GetComponent<Floodgate>();
+                var prio = ec.GetComponent<BuilderPrioritizable>();
 
                 var entry = new Dictionary<string, object>
                 {
@@ -245,6 +245,55 @@ namespace Timberbot
             return results;
         }
 
+        public object CollectDebug()
+        {
+            var entityCount = 0;
+            var withBuilding = 0;
+            var withBlockObject = 0;
+            var sampleNames = new List<string>();
+            var sampleComponents = new List<string>();
+
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                entityCount++;
+                var go = ec.GameObject;
+                // Try Timberborn's component system via EntityComponent
+                Building building = null;
+                BlockObject blockObject = null;
+                try { building = ec.GetComponent<Building>(); } catch { }
+                try { blockObject = ec.GetComponent<BlockObject>(); } catch { }
+                if (building != null) withBuilding++;
+                if (blockObject != null) withBlockObject++;
+
+                if (sampleNames.Count < 10)
+                {
+                    sampleNames.Add(go.name);
+                    // List Timberborn registered components
+                    try
+                    {
+                        var comps = ec.AllComponents;
+                        var names = new List<string>();
+                        foreach (var c in comps)
+                            names.Add(c.GetType().Name);
+                        sampleComponents.Add(string.Join(", ", names));
+                    }
+                    catch
+                    {
+                        sampleComponents.Add("(error reading components)");
+                    }
+                }
+            }
+
+            return new
+            {
+                entityCount,
+                withBuilding,
+                withBlockObject,
+                sampleNames,
+                sampleComponents
+            };
+        }
+
         // -- write endpoints (called on main thread) --
 
         public object CollectSpeed()
@@ -264,25 +313,25 @@ namespace Timberbot
 
         public object PauseBuilding(int buildingId, bool paused)
         {
-            var go = FindEntity(buildingId);
-            if (go == null)
+            var ec = FindEntity(buildingId);
+            if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
-            var pausable = go.GetComponent<PausableBuilding>();
+            var pausable = ec.GetComponent<PausableBuilding>();
             if (pausable == null)
                 return new { error = "building is not pausable", id = buildingId };
 
             pausable.Paused = paused;
-            return new { id = buildingId, name = go.name, paused = pausable.Paused };
+            return new { id = buildingId, name = ec.GameObject.name, paused = pausable.Paused };
         }
 
         public object SetFloodgateHeight(int buildingId, float height)
         {
-            var go = FindEntity(buildingId);
-            if (go == null)
+            var ec = FindEntity(buildingId);
+            if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
-            var floodgate = go.GetComponent<Floodgate>();
+            var floodgate = ec.GetComponent<Floodgate>();
             if (floodgate == null)
                 return new { error = "not a floodgate", id = buildingId };
 
@@ -291,7 +340,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = go.name,
+                name = ec.GameObject.name,
                 height = floodgate.Height,
                 maxHeight = floodgate.MaxHeight
             };
@@ -299,11 +348,11 @@ namespace Timberbot
 
         public object SetBuildingPriority(int buildingId, string priorityStr)
         {
-            var go = FindEntity(buildingId);
-            if (go == null)
+            var ec = FindEntity(buildingId);
+            if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
-            var prio = go.GetComponent<BuilderPrioritizable>();
+            var prio = ec.GetComponent<BuilderPrioritizable>();
             if (prio == null)
                 return new { error = "building has no priority", id = buildingId };
 
@@ -311,7 +360,7 @@ namespace Timberbot
                 return new { error = "invalid priority, use: VeryLow, Normal, VeryHigh", value = priorityStr };
 
             prio.SetPriority(parsed);
-            return new { id = buildingId, name = go.name, priority = prio.Priority.ToString() };
+            return new { id = buildingId, name = ec.GameObject.name, priority = prio.Priority.ToString() };
         }
     }
 }

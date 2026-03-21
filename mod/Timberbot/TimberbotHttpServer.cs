@@ -97,6 +97,20 @@ namespace Timberbot
                     continue;
                 }
 
+                // Speed is a simple field read, safe off main thread
+                if (path == "/api/speed" && method == "GET")
+                {
+                    try
+                    {
+                        Respond(ctx, 200, _service.CollectSpeed());
+                    }
+                    catch (Exception ex)
+                    {
+                        Respond(ctx, 500, new { error = ex.Message });
+                    }
+                    continue;
+                }
+
                 JObject body = null;
                 if (method == "POST" && ctx.Request.HasEntityBody)
                 {
@@ -148,6 +162,8 @@ namespace Timberbot
                         return _service.CollectBuildings();
                     case "/api/speed":
                         return _service.CollectSpeed();
+                    case "/api/debug":
+                        return _service.CollectDebug();
                 }
             }
 

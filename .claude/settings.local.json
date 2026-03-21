@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed 's/\\\\.dll$//')",
+      "Bash(powershell -NoProfile -Command \"\n\\\\$dllPath = 'C:\\\\Games\\\\Steam\\\\steamapps\\\\common\\\\Timberborn\\\\Timberborn_Data\\\\Managed\\\\Timberborn.HttpApiSystem.dll'\n\\\\$asm = [System.Reflection.Assembly]::LoadFrom\\(\\\\$dllPath\\)\nWrite-Host '=== Timberborn.HttpApiSystem.dll Types ===' -ForegroundColor Cyan\n\\\\$asm.GetTypes\\(\\) | ForEach-Object { \\\\$_.FullName } | Sort-Object\n\")",
+      "Bash(powershell -NoProfile -Command \"\n\\\\$dllPath = 'C:\\\\Games\\\\Steam\\\\steamapps\\\\common\\\\Timberborn\\\\Timberborn_Data\\\\Managed\\\\Timberborn.BuilderPrioritySystem.dll'\n\\\\$asm = [System.Reflection.Assembly]::LoadFrom\\(\\\\$dllPath\\)\nWrite-Host '=== Timberborn.BuilderPrioritySystem.dll Types ===' -ForegroundColor Cyan\n\\\\$asm.GetTypes\\(\\) | ForEach-Object { \\\\$_.FullName } | Sort-Object\n\")",
+      "Bash(powershell -Command \"\n\\\\$managed = 'C:\\\\Games\\\\Steam\\\\steamapps\\\\common\\\\Timberborn\\\\Timberborn_Data\\\\Managed'\n\\\\$asm = [System.Reflection.Assembly]::LoadFrom\\(\\\\\"\\\\$managed\\\\Timberborn.GameCycleSystem.dll\\\\\"\\)\n\\\\$asm.GetTypes\\(\\) | ForEach-Object { Write-Output \\\\$_.FullName }\n\")",
+      "Bash(python:*)",
+      "Bash(dotnet build:*)",
+      "Bash(mkdir -p Timberbot)",
+      "Bash(cp GameStateBridge/nuget.config Timberbot/)",
+      "Bash(curl:*)",
+      "Bash(cd:*)",
+      "Bash(reg add:*)"
+    ]
+  }
+}
