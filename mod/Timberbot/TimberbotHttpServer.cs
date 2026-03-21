@@ -190,9 +190,13 @@ namespace Timberbot
                         return _service.SetWorkers(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<int>("count") ?? 0);
-                    case "/api/cutting/mark":
-                        return _service.MarkTree(
-                            body?.Value<int>("id") ?? 0,
+                    case "/api/cutting/area":
+                        return _service.MarkCuttingArea(
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0,
+                            body?.Value<int>("z") ?? 0,
                             body?.Value<bool>("marked") ?? true);
                     case "/api/stockpile/capacity":
                         return _service.SetStockpileCapacity(
@@ -225,7 +229,7 @@ namespace Timberbot
                     "POST /api/floodgate           {id, height}",
                     "POST /api/priority            {id, priority}",
                     "POST /api/workers             {id, count}",
-                    "POST /api/cutting/mark        {id, marked}",
+                    "POST /api/cutting/area        {x1,y1,x2,y2,z,marked}",
                     "POST /api/stockpile/capacity  {id, capacity}",
                     "POST /api/stockpile/good      {id, good, allowed}"
                 }

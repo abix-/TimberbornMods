@@ -396,32 +396,32 @@ namespace Timberbot
             };
         }
 
-        public object MarkTree(int treeId, bool marked)
+        public object MarkCuttingArea(int x1, int y1, int x2, int y2, int z, bool marked)
         {
-            var ec = FindEntity(treeId);
-            if (ec == null)
-                return new { error = "tree not found", id = treeId };
+            var minX = Mathf.Min(x1, x2);
+            var maxX = Mathf.Max(x1, x2);
+            var minY = Mathf.Min(y1, y2);
+            var maxY = Mathf.Max(y1, y2);
 
-            var bo = ec.GetComponent<BlockObject>();
-            if (bo == null)
-                return new { error = "no block object", id = treeId };
-
-            var coords = bo.Coordinates;
-            var coordList = new List<Vector3Int> { coords };
+            var coords = new List<Vector3Int>();
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    coords.Add(new Vector3Int(x, y, z));
+                }
+            }
 
             if (marked)
-                _treeCuttingArea.AddCoordinates(coordList);
+                _treeCuttingArea.AddCoordinates(coords);
             else
-                _treeCuttingArea.RemoveCoordinates(coordList);
+                _treeCuttingArea.RemoveCoordinates(coords);
 
             return new
             {
-                id = treeId,
-                name = ec.GameObject.name,
-                marked = _treeCuttingArea.IsInCuttingArea(coords),
-                x = coords.x,
-                y = coords.y,
-                z = coords.z
+                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                marked,
+                tiles = coords.Count
             };
         }
 

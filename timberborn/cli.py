@@ -35,8 +35,8 @@ Timberbot write (port 8085):
   floodgate <id> <h>  set floodgate height
   priority <id> <p>   set priority (VeryLow/Normal/VeryHigh)
   workers <id> <n>    set desired workers
-  cut <id>            mark tree for cutting
-  uncut <id>          unmark tree
+  cut <x1> <y1> <x2> <y2> <z>    mark cutting area
+  uncut <x1> <y1> <x2> <y2> <z>  clear cutting area
   capacity <id> <n>   set stockpile capacity
 
 General:
@@ -316,15 +316,15 @@ def main():
                 else:
                     pp(api.set_workers(int(args[0]), int(args[1])))
             elif cmd == "cut":
-                if not args:
-                    print("  usage: cut <tree-id>")
+                if len(args) < 5:
+                    print("  usage: cut <x1> <y1> <x2> <y2> <z>")
                 else:
-                    pp(api.mark_tree(int(args[0]), True))
+                    pp(api.mark_cutting_area(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]), True))
             elif cmd == "uncut":
-                if not args:
-                    print("  usage: uncut <tree-id>")
+                if len(args) < 5:
+                    print("  usage: uncut <x1> <y1> <x2> <y2> <z>")
                 else:
-                    pp(api.mark_tree(int(args[0]), False))
+                    pp(api.mark_cutting_area(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]), False))
             elif cmd == "capacity":
                 if len(args) < 2:
                     print("  usage: capacity <building-id> <amount>")

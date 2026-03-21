@@ -159,9 +159,11 @@ class TimberbornAPI:
         """Set desired worker count on a workplace."""
         return self._post_bridge("/api/workers", {"id": building_id, "count": count}).json()
 
-    def mark_tree(self, tree_id, marked=True):
-        """Mark or unmark a tree for cutting."""
-        return self._post_bridge("/api/cutting/mark", {"id": tree_id, "marked": marked}).json()
+    def mark_cutting_area(self, x1, y1, x2, y2, z, marked=True):
+        """Mark or clear a rectangular cutting area."""
+        return self._post_bridge("/api/cutting/area", {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": marked
+        }).json()
 
     def set_stockpile_capacity(self, building_id, capacity):
         """Set stockpile capacity."""
