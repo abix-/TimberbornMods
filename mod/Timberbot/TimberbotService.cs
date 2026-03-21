@@ -3,16 +3,21 @@ using System.Collections.Generic;
 using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
+using Timberborn.Cutting;
 using Timberborn.EntitySystem;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
 using Timberborn.Goods;
+using Timberborn.InventorySystem;
+using Timberborn.NaturalResourcesLifecycle;
 using Timberborn.PrioritySystem;
 using Timberborn.ResourceCountingSystem;
 using Timberborn.SingletonSystem;
+using Timberborn.Stockpiles;
 using Timberborn.TimeSystem;
 using Timberborn.WaterBuildings;
 using Timberborn.WeatherSystem;
+using Timberborn.WorkSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -57,8 +62,6 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
-        // -- helper: find entity's GameObject by instance ID --
-
         private EntityComponent FindEntity(int id)
         {
             foreach (var ec in _entityRegistry.Entities)
@@ -69,7 +72,9 @@ namespace Timberbot
             return null;
         }
 
-        // -- read endpoints (called on main thread) --
+        // ================================================================
+        // READ ENDPOINTS
+        // ================================================================
 
         public object CollectSummary()
         {
@@ -206,6 +211,7 @@ namespace Timberbot
                 var pausable = ec.GetComponent<PausableBuilding>();
                 var floodgate = ec.GetComponent<Floodgate>();
                 var prio = ec.GetComponent<BuilderPrioritizable>();
+                var workplace = ec.GetComponent<Workplace>();
 
                 var entry = new Dictionary<string, object>
                 {
@@ -240,66 +246,63 @@ namespace Timberbot
                     entry["priority"] = prio.Priority.ToString();
                 }
 
+                if (workplace != null)
+                {
+                    entry["maxWorkers"] = workplace.MaxWorkers;
+                    entry["desiredWorkers"] = workplace.DesiredWorkers;
+                    entry["assignedWorkers"] = workplace.NumberOfAssignedWorkers;
+                }
+
                 results.Add(entry);
             }
             return results;
         }
 
-        public object CollectDebug()
+        public object CollectTrees()
         {
-            var entityCount = 0;
-            var withBuilding = 0;
-            var withBlockObject = 0;
-            var sampleNames = new List<string>();
-            var sampleComponents = new List<string>();
-
+            var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
             {
-                entityCount++;
+                var cuttable = ec.GetComponent<Cuttable>();
+                if (cuttable == null) continue;
+
                 var go = ec.GameObject;
-                // Try Timberborn's component system via EntityComponent
-                Building building = null;
-                BlockObject blockObject = null;
-                try { building = ec.GetComponent<Building>(); } catch { }
-                try { blockObject = ec.GetComponent<BlockObject>(); } catch { }
-                if (building != null) withBuilding++;
-                if (blockObject != null) withBlockObject++;
+                var bo = ec.GetComponent<BlockObject>();
+                var living = ec.GetComponent<LivingNaturalResource>();
 
-                if (sampleNames.Count < 10)
+                var entry = new Dictionary<string, object>
                 {
-                    sampleNames.Add(go.name);
-                    // List Timberborn registered components
-                    try
-                    {
-                        var comps = ec.AllComponents;
-                        var names = new List<string>();
-                        foreach (var c in comps)
-                            names.Add(c.GetType().Name);
-                        sampleComponents.Add(string.Join(", ", names));
-                    }
-                    catch
-                    {
-                        sampleComponents.Add("(error reading components)");
-                    }
+                    ["id"] = go.GetInstanceID(),
+                    ["name"] = go.name,
+                    ["marked"] = cuttable.Enabled
+                };
+
+                if (bo != null)
+                {
+                    var coords = bo.Coordinates;
+                    entry["x"] = coords.x;
+                    entry["y"] = coords.y;
+                    entry["z"] = coords.z;
                 }
+
+                if (living != null)
+                {
+                    entry["alive"] = !living.IsDead;
+                }
+
+                results.Add(entry);
             }
-
-            return new
-            {
-                entityCount,
-                withBuilding,
-                withBlockObject,
-                sampleNames,
-                sampleComponents
-            };
+            return results;
         }
-
-        // -- write endpoints (called on main thread) --
 
         public object CollectSpeed()
         {
             return new { speed = _speedManager.CurrentSpeed };
         }
+
+        // ================================================================
+        // WRITE ENDPOINTS -- Tier 1
+        // ================================================================
 
         public object SetSpeed(int speed)
         {
@@ -361,6 +364,95 @@ namespace Timberbot
 
             prio.SetPriority(parsed);
             return new { id = buildingId, name = ec.GameObject.name, priority = prio.Priority.ToString() };
+        }
+
+        // ================================================================
+        // WRITE ENDPOINTS -- Tier 2
+        // ================================================================
+
+        public object SetWorkers(int buildingId, int count)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var workplace = ec.GetComponent<Workplace>();
+            if (workplace == null)
+                return new { error = "not a workplace", id = buildingId };
+
+            var clamped = Mathf.Clamp(count, 0, workplace.MaxWorkers);
+            workplace.DesiredWorkers = clamped;
+            return new
+            {
+                id = buildingId,
+                name = ec.GameObject.name,
+                desiredWorkers = workplace.DesiredWorkers,
+                maxWorkers = workplace.MaxWorkers,
+                assignedWorkers = workplace.NumberOfAssignedWorkers
+            };
+        }
+
+        public object MarkTree(int treeId, bool marked)
+        {
+            var ec = FindEntity(treeId);
+            if (ec == null)
+                return new { error = "tree not found", id = treeId };
+
+            var cuttable = ec.GetComponent<Cuttable>();
+            if (cuttable == null)
+                return new { error = "not cuttable", id = treeId };
+
+            cuttable.Enabled = marked;
+
+            return new
+            {
+                id = treeId,
+                name = ec.GameObject.name,
+                marked = cuttable.Enabled
+            };
+        }
+
+        public object SetStockpileCapacity(int buildingId, int capacity)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var inventories = ec.GetComponent<Inventories>();
+            if (inventories == null)
+                return new { error = "no inventory", id = buildingId };
+
+            // Set capacity on all inventories
+            foreach (var inv in inventories.AllInventories)
+            {
+                inv.Capacity = capacity;
+            }
+
+            return new
+            {
+                id = buildingId,
+                name = ec.GameObject.name,
+                capacity
+            };
+        }
+
+        public object SetStockpileGood(int buildingId, string goodId)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var sga = ec.GetComponent<SingleGoodAllower>();
+            if (sga == null)
+                return new { error = "not a single-good stockpile", id = buildingId };
+
+            sga.AllowedGood = goodId;
+            return new
+            {
+                id = buildingId,
+                name = ec.GameObject.name,
+                good = sga.AllowedGood
+            };
         }
     }
 }

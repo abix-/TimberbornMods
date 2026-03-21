@@ -81,6 +81,24 @@
     <Reference Include="Timberborn.BuilderPrioritySystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.BuilderPrioritySystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Cutting" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.NaturalResourcesLifecycle" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.NaturalResourcesLifecycle.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.WorkSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.WorkSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.InventorySystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.InventorySystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Stockpiles" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Stockpiles.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.DistributionSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
+    </Reference>
 
     <!-- Non-publicized -->
     <Reference Include="Newtonsoft.Json">

@@ -148,3 +148,25 @@ class TimberbornAPI:
     def set_priority(self, building_id, priority):
         """Set building priority (VeryLow, Normal, VeryHigh)."""
         return self._post_bridge("/api/priority", {"id": building_id, "priority": priority}).json()
+
+    # -- Tier 2 endpoints --
+
+    def get_trees(self):
+        """All cuttable trees/resources with coords and marked status."""
+        return self._get_bridge("/api/trees").json()
+
+    def set_workers(self, building_id, count):
+        """Set desired worker count on a workplace."""
+        return self._post_bridge("/api/workers", {"id": building_id, "count": count}).json()
+
+    def mark_tree(self, tree_id, marked=True):
+        """Mark or unmark a tree for cutting."""
+        return self._post_bridge("/api/cutting/mark", {"id": tree_id, "marked": marked}).json()
+
+    def set_stockpile_capacity(self, building_id, capacity):
+        """Set stockpile capacity."""
+        return self._post_bridge("/api/stockpile/capacity", {"id": building_id, "capacity": capacity}).json()
+
+    def set_stockpile_good(self, building_id, good):
+        """Set allowed good on a single-good stockpile."""
+        return self._post_bridge("/api/stockpile/good", {"id": building_id, "good": good}).json()

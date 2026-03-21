@@ -26,6 +26,7 @@ Timberbot read (port 8085):
   weather             weather/drought cycle info
   districts           all districts with resources + population
   buildings           list all buildings with IDs
+  trees               list all cuttable trees
 
 Timberbot write (port 8085):
   speed [0-3]         get/set game speed (0=pause)
@@ -33,6 +34,10 @@ Timberbot write (port 8085):
   unpause <id>        unpause building
   floodgate <id> <h>  set floodgate height
   priority <id> <p>   set priority (VeryLow/Normal/VeryHigh)
+  workers <id> <n>    set desired workers
+  cut <id>            mark tree for cutting
+  uncut <id>          unmark tree
+  capacity <id> <n>   set stockpile capacity
 
 General:
   ping                check connectivity (game + bridge)
@@ -291,6 +296,40 @@ def main():
                     print("  usage: priority <building-id> <VeryLow|Normal|VeryHigh>")
                 else:
                     pp(api.set_priority(int(args[0]), args[1]))
+            elif cmd == "trees":
+                data = api.get_trees()
+                if isinstance(data, list):
+                    print(f"\n  Trees ({len(data)}):")
+                    for t in data:
+                        status = "MARKED" if t.get("marked") else ""
+                        alive = "" if t.get("alive", True) else " DEAD"
+                        coords = ""
+                        if "x" in t:
+                            coords = f" ({t['x']},{t['y']},{t['z']})"
+                        print(f"    {t.get('id', '?'):>10}  {t.get('name', '?')}{coords} {status}{alive}")
+                    print()
+                else:
+                    pp(data)
+            elif cmd == "workers":
+                if len(args) < 2:
+                    print("  usage: workers <building-id> <count>")
+                else:
+                    pp(api.set_workers(int(args[0]), int(args[1])))
+            elif cmd == "cut":
+                if not args:
+                    print("  usage: cut <tree-id>")
+                else:
+                    pp(api.mark_tree(int(args[0]), True))
+            elif cmd == "uncut":
+                if not args:
+                    print("  usage: uncut <tree-id>")
+                else:
+                    pp(api.mark_tree(int(args[0]), False))
+            elif cmd == "capacity":
+                if len(args) < 2:
+                    print("  usage: capacity <building-id> <amount>")
+                else:
+                    pp(api.set_stockpile_capacity(int(args[0]), int(args[1])))
             elif cmd == "watch":
                 interval = float(args[0]) if args else 5.0
                 watcher.interval = interval

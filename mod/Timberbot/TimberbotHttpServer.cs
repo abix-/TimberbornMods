@@ -160,10 +160,10 @@ namespace Timberbot
                         return _service.CollectDistricts();
                     case "/api/buildings":
                         return _service.CollectBuildings();
+                    case "/api/trees":
+                        return _service.CollectTrees();
                     case "/api/speed":
                         return _service.CollectSpeed();
-                    case "/api/debug":
-                        return _service.CollectDebug();
                 }
             }
 
@@ -186,6 +186,22 @@ namespace Timberbot
                         return _service.SetBuildingPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("priority") ?? "Normal");
+                    case "/api/workers":
+                        return _service.SetWorkers(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<int>("count") ?? 0);
+                    case "/api/cutting/mark":
+                        return _service.MarkTree(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<bool>("marked") ?? true);
+                    case "/api/stockpile/capacity":
+                        return _service.SetStockpileCapacity(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<int>("capacity") ?? 0);
+                    case "/api/stockpile/good":
+                        return _service.SetStockpileGood(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<string>("good") ?? "");
                 }
             }
 
@@ -202,11 +218,16 @@ namespace Timberbot
                     "GET  /api/weather",
                     "GET  /api/districts",
                     "GET  /api/buildings",
+                    "GET  /api/trees",
                     "GET  /api/speed",
-                    "POST /api/speed         {speed: 0-3}",
-                    "POST /api/building/pause {id, paused}",
-                    "POST /api/floodgate      {id, height}",
-                    "POST /api/priority       {id, priority}"
+                    "POST /api/speed              {speed: 0-3}",
+                    "POST /api/building/pause      {id, paused}",
+                    "POST /api/floodgate           {id, height}",
+                    "POST /api/priority            {id, priority}",
+                    "POST /api/workers             {id, count}",
+                    "POST /api/cutting/mark        {id, marked}",
+                    "POST /api/stockpile/capacity  {id, capacity}",
+                    "POST /api/stockpile/good      {id, good, allowed}"
                 }
             };
         }
