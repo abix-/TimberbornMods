@@ -4,7 +4,7 @@ C# mod + Python client that lets AI agents read and control a running Timberborn
 
 ## How it works
 
-The mod runs an HTTP server (port 8085) on a background thread inside the Unity game process. Incoming requests are queued and drained on the main thread (max 10/frame) so game state access is thread-safe.
+The mod runs an HTTP server (port 8085) on a background thread inside the Unity game process. Incoming requests are queued and drained on the main thread (max 10/frame) so game state access is thread-safe. GET requests for simple data (ping, speed) are handled directly on the listener thread so they work even when the game is paused.
 
 ```
 Timberborn (Unity)
@@ -30,7 +30,9 @@ Python client
 | `/api/time` | day number, progress |
 | `/api/weather` | cycle, drought countdown |
 | `/api/districts` | districts with resources + population |
-| `/api/buildings` | all buildings with id, name, coords, pause/floodgate/priority state |
+| `/api/buildings` | all buildings: id, name, coords, pause, priority, workers |
+| `/api/trees` | all cuttable trees: id, name, coords, marked status |
+| `/api/prefabs` | available building templates for placement |
 | `/api/speed` | current game speed (0-3) |
 
 ### Write (POST)
@@ -38,11 +40,17 @@ Python client
 | Endpoint | Body | Description |
 |----------|------|-------------|
 | `/api/speed` | `{"speed": 0}` | 0=pause, 1/2/3=speed |
-| `/api/building/pause` | `{"id": 12345, "paused": true}` | pause/unpause building |
-| `/api/floodgate` | `{"id": 12345, "height": 1.5}` | set floodgate height |
-| `/api/priority` | `{"id": 12345, "priority": "VeryHigh"}` | VeryLow / Normal / VeryHigh |
+| `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
+| `/api/building/demolish` | `{"id": N}` | demolish a building |
+| `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a new building |
+| `/api/floodgate` | `{"id": N, "height": 1.5}` | set floodgate height |
+| `/api/priority` | `{"id": N, "priority": "VeryHigh"}` | VeryLow / Normal / VeryHigh |
+| `/api/workers` | `{"id": N, "count": 2}` | set desired worker count |
+| `/api/cutting/area` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N, "marked": true}` | mark/clear cutting area |
+| `/api/stockpile/capacity` | `{"id": N, "capacity": 100}` | set stockpile capacity |
+| `/api/stockpile/good` | `{"id": N, "good": "Log"}` | set allowed good |
 
-Building IDs come from `GET /api/buildings`.
+Building IDs come from `GET /api/buildings`. Prefab names come from `GET /api/prefabs`.
 
 ## Install
 
@@ -83,10 +91,12 @@ python -m timberborn
 
 tb> summary
 tb> buildings
+tb> trees
 tb> speed 3
 tb> pause 12345
-tb> floodgate 12345 2.0
-tb> priority 12345 VeryHigh
+tb> workers 12345 0
+tb> cut 100 100 110 110 2
+tb> uncut 100 100 110 110 2
 ```
 
 ### Live dashboard
@@ -103,11 +113,30 @@ Polls `/api/summary` every 3s. Shows day progress bar, drought countdown, per-di
 from timberborn.api import TimberbornAPI
 
 api = TimberbornAPI()
+
+# read game state
+summary = api.get_summary()
+buildings = api.get_buildings()
+trees = api.get_trees()
+prefabs = api.get_prefabs()
+
+# control game speed
 api.set_speed(3)
 
-for b in api.get_buildings():
-    if b.get("floodgate"):
-        api.set_floodgate_height(b["id"], 2.0)
+# manage buildings
+api.pause_building(building_id, True)
+api.set_workers(building_id, 0)
+api.set_priority(building_id, "VeryHigh")
+api.demolish_building(building_id)
+
+# place new buildings
+api.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
+
+# mark trees for cutting (rectangle region)
+api.mark_cutting_area(100, 100, 110, 110, z=2, marked=True)
+
+# floodgate control
+api.set_floodgate_height(gate_id, 2.0)
 ```
 
 ## Requirements
