@@ -164,6 +164,8 @@ namespace Timberbot
                         return _service.CollectTrees();
                     case "/api/speed":
                         return _service.CollectSpeed();
+                    case "/api/prefabs":
+                        return _service.CollectPrefabs();
                 }
             }
 
@@ -206,6 +208,16 @@ namespace Timberbot
                         return _service.SetStockpileGood(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
+                    case "/api/building/demolish":
+                        return _service.DemolishBuilding(
+                            body?.Value<int>("id") ?? 0);
+                    case "/api/building/place":
+                        return _service.PlaceBuilding(
+                            body?.Value<string>("prefab") ?? "",
+                            body?.Value<int>("x") ?? 0,
+                            body?.Value<int>("y") ?? 0,
+                            body?.Value<int>("z") ?? 0,
+                            body?.Value<int>("orientation") ?? 0);
                 }
             }
 
@@ -224,6 +236,7 @@ namespace Timberbot
                     "GET  /api/buildings",
                     "GET  /api/trees",
                     "GET  /api/speed",
+                    "GET  /api/prefabs",
                     "POST /api/speed              {speed: 0-3}",
                     "POST /api/building/pause      {id, paused}",
                     "POST /api/floodgate           {id, height}",
@@ -231,7 +244,9 @@ namespace Timberbot
                     "POST /api/workers             {id, count}",
                     "POST /api/cutting/area        {x1,y1,x2,y2,z,marked}",
                     "POST /api/stockpile/capacity  {id, capacity}",
-                    "POST /api/stockpile/good      {id, good, allowed}"
+                    "POST /api/stockpile/good      {id, good, allowed}",
+                    "POST /api/building/demolish   {id}",
+                    "POST /api/building/place      {prefab, x, y, z, orientation}"
                 }
             };
         }

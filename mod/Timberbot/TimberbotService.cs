@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
+using Timberborn.BaseComponentSystem;
+using Timberborn.BlockObjectTools;
+using Timberborn.Coordinates;
 using Timberborn.Cutting;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
@@ -33,6 +36,9 @@ namespace Timberbot
         private readonly SpeedManager _speedManager;
         private readonly EntityRegistry _entityRegistry;
         private readonly TreeCuttingArea _treeCuttingArea;
+        private readonly BuildingService _buildingService;
+        private readonly BlockObjectPlacerService _blockObjectPlacerService;
+        private readonly EntityService _entityService;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -43,7 +49,10 @@ namespace Timberbot
             IDayNightCycle dayNightCycle,
             SpeedManager speedManager,
             EntityRegistry entityRegistry,
-            TreeCuttingArea treeCuttingArea)
+            TreeCuttingArea treeCuttingArea,
+            BuildingService buildingService,
+            BlockObjectPlacerService blockObjectPlacerService,
+            EntityService entityService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -53,6 +62,9 @@ namespace Timberbot
             _speedManager = speedManager;
             _entityRegistry = entityRegistry;
             _treeCuttingArea = treeCuttingArea;
+            _buildingService = buildingService;
+            _blockObjectPlacerService = blockObjectPlacerService;
+            _entityService = entityService;
         }
 
         public void Load()
@@ -466,6 +478,77 @@ namespace Timberbot
                 name = ec.GameObject.name,
                 good = sga.AllowedGood
             };
+        }
+
+        // ================================================================
+        // WRITE ENDPOINTS -- Tier 3
+        // ================================================================
+
+        public object CollectPrefabs()
+        {
+            var results = new List<object>();
+            foreach (var building in _buildingService.Buildings)
+            {
+                var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                var blockSpec = building.GetSpec<BlockObjectSpec>();
+
+                var entry = new Dictionary<string, object>
+                {
+                    ["name"] = templateSpec?.TemplateName ?? "unknown"
+                };
+
+                if (blockSpec != null)
+                {
+                    var size = blockSpec.Size;
+                    entry["sizeX"] = size.x;
+                    entry["sizeY"] = size.y;
+                    entry["sizeZ"] = size.z;
+                }
+
+                results.Add(entry);
+            }
+            return results;
+        }
+
+        public object DemolishBuilding(int buildingId)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "entity not found", id = buildingId };
+
+            var name = ec.GameObject.name;
+            _entityService.Delete(ec);
+            return new { id = buildingId, name, demolished = true };
+        }
+
+        public object PlaceBuilding(string prefabName, int x, int y, int z, int orientation)
+        {
+            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            if (buildingSpec == null)
+                return new { error = "unknown prefab", prefab = prefabName };
+
+            var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
+            if (blockObjectSpec == null)
+                return new { error = "no block object spec", prefab = prefabName };
+
+            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
+
+            var orient = (Timberborn.Coordinates.Orientation)orientation;
+            var placement = new Placement(new Vector3Int(x, y, z), orient,
+                FlipMode.Unflipped);
+
+            int placedId = 0;
+            string placedName = "";
+            placer.Place(blockObjectSpec, placement, (entity) =>
+            {
+                placedId = entity.GameObject.GetInstanceID();
+                placedName = entity.GameObject.name;
+            });
+
+            if (placedId == 0)
+                return new { error = "placement failed (invalid location?)", prefab = prefabName, x, y, z };
+
+            return new { id = placedId, name = placedName, x, y, z, orientation };
         }
     }
 }

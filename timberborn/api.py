@@ -172,3 +172,19 @@ class TimberbornAPI:
     def set_stockpile_good(self, building_id, good):
         """Set allowed good on a single-good stockpile."""
         return self._post_bridge("/api/stockpile/good", {"id": building_id, "good": good}).json()
+
+    # -- Tier 3 endpoints --
+
+    def get_prefabs(self):
+        """List all available building prefab templates."""
+        return self._get_bridge("/api/prefabs").json()
+
+    def demolish_building(self, building_id):
+        """Demolish/delete a building by ID."""
+        return self._post_bridge("/api/building/demolish", {"id": building_id}).json()
+
+    def place_building(self, prefab, x, y, z, orientation=0):
+        """Place a new building. orientation: 0-3 (0=default, 1=cw90, 2=cw180, 3=cw270)."""
+        return self._post_bridge("/api/building/place", {
+            "prefab": prefab, "x": x, "y": y, "z": z, "orientation": orientation
+        }).json()

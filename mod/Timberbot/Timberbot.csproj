@@ -84,6 +84,24 @@
     <Reference Include="Timberborn.Demolishing" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Demolishing.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.BlueprintSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BlueprintSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BlueprintPrefabSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BlueprintPrefabSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BlockObjectTools" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BlockObjectTools.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BuildingTools" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BuildingTools.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.TemplateInstantiation" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.TemplateInstantiation.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.TemplateSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.TemplateSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
     </Reference>
