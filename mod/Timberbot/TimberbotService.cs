@@ -7,6 +7,7 @@ using Timberborn.BaseComponentSystem;
 using Timberborn.BlockObjectTools;
 using Timberborn.Coordinates;
 using Timberborn.Cutting;
+using Timberborn.TemplateInstantiation;
 using Timberborn.MapIndexSystem;
 using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
@@ -42,6 +43,7 @@ namespace Timberbot
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
+        private readonly TemplateInstantiator _templateInstantiator;
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
@@ -60,6 +62,7 @@ namespace Timberbot
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
             EntityService entityService,
+            TemplateInstantiator templateInstantiator,
             ITerrainService terrainService,
             IThreadSafeWaterMap waterMap,
             MapIndexService mapIndexService,
@@ -76,6 +79,7 @@ namespace Timberbot
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
+            _templateInstantiator = templateInstantiator;
             _terrainService = terrainService;
             _waterMap = waterMap;
             _mapIndexService = mapIndexService;
@@ -604,12 +608,25 @@ namespace Timberbot
             if (blockObjectSpec == null)
                 return new { error = "no block object spec", prefab = prefabName };
 
-            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
-
             var orient = (Timberborn.Coordinates.Orientation)orientation;
             var placement = new Placement(new Vector3Int(x, y, z), orient,
                 FlipMode.Unflipped);
 
+            // validate before placing -- prevent ghost buildings
+            var previewGo = _templateInstantiator.Instantiate(
+                buildingSpec.GetSpec<Timberborn.TemplateSystem.TemplateSpec>().Blueprint,
+                null);
+            previewGo.SetActive(false);
+            var previewBo = previewGo.GetComponentInChildren<BlockObject>();
+            previewBo.MarkAsPreviewAndInitialize();
+            previewBo.Reposition(placement);
+            bool isValid = previewBo.IsValid();
+            UnityEngine.Object.Destroy(previewGo);
+
+            if (!isValid)
+                return new { error = "invalid placement", prefab = prefabName, x, y, z, orientation };
+
+            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
             string placedName = "";
             placer.Place(blockObjectSpec, placement, (entity) =>
@@ -617,9 +634,6 @@ namespace Timberbot
                 placedId = entity.GameObject.GetInstanceID();
                 placedName = entity.GameObject.name;
             });
-
-            if (placedId == 0)
-                return new { error = "placement failed (invalid location?)", prefab = prefabName, x, y, z };
 
             return new { id = placedId, name = placedName, x, y, z, orientation };
         }
