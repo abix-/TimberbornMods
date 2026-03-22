@@ -21,10 +21,11 @@ Every turn:
 
 1. `summary` - check day, resources, population, tree counts
 2. `beavers` - check wellbeing and critical needs
-3. Check trees: `markedGrown` is choppable supply. If < 10, run `tree_clusters` and mark trees near the best cluster
-4. Decide what to do based on what's critical
-5. Take ONE action (place building, set priority, plant crops, mark trees, adjust workers)
-6. `set_speed speed:2` or `speed:3` if stable, `speed:1` if struggling
+3. `alerts` - check unstaffed, unpowered, unreachable buildings
+4. Check trees: `markedGrown` is choppable supply. If < 10, run `tree_clusters` and mark trees near the best cluster
+5. Decide what to do based on what's critical
+6. Take ONE action (place building, set priority, plant crops, mark trees, adjust workers)
+7. `set_speed speed:2` or `speed:3` if stable, `speed:1` if struggling
 
 ## Placement workflow (MANDATORY every time)
 
