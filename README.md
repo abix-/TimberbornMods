@@ -36,7 +36,7 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 
 - [Getting Started](docs/getting-started.md). Install, first steps, examples
 - [API Reference](docs/api-reference.md). All HTTP endpoints
-- [AI Playbook](docs/ai-playbook.md). Strategy guide for AI agents playing Timberborn. Works as a Claude Code skill
+- [Timberbot AI](docs/timberbot.md). Strategy guide for AI agents playing Timberborn. Works as a Claude Code skill
 - [Developing](docs/developing.md). Build from source, add endpoints, Workshop publishing
 
 ## Requirements
