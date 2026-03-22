@@ -141,8 +141,32 @@ class Timberbot:
         """Set floodgate height (clamped to min/max)."""
         return self._post("/api/floodgate", {"id": building_id, "height": height})
 
+    _WATER_BUILDINGS = {"Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"}
+
     def place_building(self, prefab, x, y, z, orientation=0):
-        """Place a building. Get prefab names from prefabs(). orientation: 0-3."""
+        """Place a building. Validates origin tile before placing to prevent overlaps."""
+        # check if this is a water building
+        is_water_building = any(w.lower() in prefab.lower() for w in self._WATER_BUILDINGS)
+
+        # fetch origin tile data
+        tile_data = self.map(x, y, x, y)
+        tiles = tile_data.get("tiles", [])
+        if tiles:
+            t = tiles[0]
+            occupant = t.get("occupant")
+            has_water = t.get("water", 0) > 0
+
+            if occupant:
+                oname = occupant.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
+                if oname != "Path":
+                    return {"error": f"tile ({x},{y}) occupied by {oname}", "blocked": True}
+
+            if has_water and not is_water_building:
+                return {"error": f"tile ({x},{y}) is water -- only water buildings allowed", "blocked": True}
+
+            if t.get("terrain", 0) == 0 and not has_water:
+                return {"error": f"tile ({x},{y}) has no terrain", "blocked": True}
+
         return self._post("/api/building/place", {
             "prefab": prefab, "x": x, "y": y, "z": z, "orientation": orientation
         })
