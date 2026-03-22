@@ -744,17 +744,29 @@ namespace Timberbot
             var placement = new Placement(new Vector3Int(x, y, z), orient,
                 FlipMode.Unflipped);
 
-            // validate before placing -- uses PreviewFactory (handles water buildings correctly)
+            // validate if possible -- block clearly invalid placements
             var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
-            if (placeableSpec == null)
-                return new { error = "no placeable spec", prefab = prefabName };
+            bool validated = false;
+            bool isValid = false;
+            if (placeableSpec != null)
+            {
+                Preview preview = null;
+                try
+                {
+                    preview = _previewFactory.Create(placeableSpec);
+                    preview.Reposition(placement);
+                    isValid = preview.BlockObject.IsValid();
+                    validated = true;
+                }
+                catch { }
+                finally
+                {
+                    if (preview != null)
+                        UnityEngine.Object.Destroy(preview.GameObject);
+                }
+            }
 
-            var preview = _previewFactory.Create(placeableSpec);
-            preview.Reposition(placement);
-            bool isValid = preview.BlockObject.IsValid();
-            UnityEngine.Object.Destroy(preview.GameObject);
-
-            if (!isValid)
+            if (validated && !isValid)
             {
                 var size = blockObjectSpec.Size;
                 return new
@@ -775,6 +787,9 @@ namespace Timberbot
                 placedId = entity.GameObject.GetInstanceID();
                 placedName = entity.GameObject.name;
             });
+
+            if (placedId == 0)
+                return new { error = "placement failed", prefab = prefabName, x, y, z, orientation };
 
             return new { id = placedId, name = placedName, x, y, z, orientation };
         }
