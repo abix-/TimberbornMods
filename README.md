@@ -42,3 +42,12 @@ timberbot pause_building 12345
 - Timberborn (Steam)
 - .NET SDK 6+ (to build the mod)
 - Python 3.8+ (for the client, optional)
+
+## Credits
+
+Inspired by and learned from these Timberborn modding projects:
+
+- [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding) -- official modding tools and examples
+- [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods) -- Automation, SmartPower, and other mods (repo structure reference)
+- [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- large mod collection (repo structure reference)
+- [TobbyTheBobby/TimberbornMods](https://github.com/TobbyTheBobby/TimberbornMods) -- ChooChoo, MorePaths, and other mods
