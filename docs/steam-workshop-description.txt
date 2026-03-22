@@ -1,0 +1,77 @@
+Let an AI play Timberborn. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can run a beaver colony.
+
+[h1]What can it do?[/h1]
+
+[b]Read the world:[/b]
+[list]
+[*] Colony snapshot -- population, resources, weather, drought countdown
+[*] All buildings with coordinates, workers, priority, orientation, entrances
+[*] All trees with growth status (seedling vs mature) and cutting marks
+[*] Berry bushes and other gatherables
+[*] Terrain map with water levels and building occupancy
+[*] Available building templates (prefabs)
+[/list]
+
+[b]Build and demolish:[/b]
+[list]
+[*] Place any building at specific coordinates with rotation
+[*] Demolish buildings
+[*] View full building footprints on the map
+[/list]
+
+[b]Manage the colony:[/b]
+[list]
+[*] Pause/unpause buildings
+[*] Set worker counts per workplace
+[*] Set building priority (VeryLow / Normal / VeryHigh)
+[*] Control game speed (pause, 1x, 2x, 3x)
+[/list]
+
+[b]Control resources:[/b]
+[list]
+[*] Mark and clear tree cutting areas
+[*] Plant crops (Kohlrabi, Carrots, etc)
+[*] Set floodgate heights
+[*] Set stockpile capacity and allowed goods
+[*] Set water tank contents
+[/list]
+
+[b]Tools:[/b]
+[list]
+[*] ASCII map scanner -- see terrain, water, buildings, trees, entrances in your terminal
+[*] Live dashboard -- auto-refreshing colony status
+[*] Find nearby resources, buildings, berry bushes
+[/list]
+
+[h1]How it works[/h1]
+
+The mod runs an HTTP server (port 8085) inside the game. Any program that can make HTTP requests can read and control your game. The included Python client makes it easy:
+
+[code]
+python timberbot.py summary              # colony snapshot
+python timberbot.py buildings            # list all buildings
+python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:3
+python timberbot.py plant_crop x1:123 y1:138 x2:128 y2:141 z:2 crop:Kohlrabi
+python timberbot.py scan x:120 y:140 radius:10   # ASCII map
+python timberbot.py watch                # live dashboard
+[/code]
+
+Or use it as a Python library:
+
+[code]
+from timberbot import Timberbot
+bot = Timberbot()
+bot.set_speed(3)
+bot.place_building("FarmHouse.IronTeeth", x=121, y=140, z=2, orientation=1)
+bot.plant_crop(123, 138, 128, 141, 2, "Kohlrabi")
+[/code]
+
+[h1]Getting started[/h1]
+
+1. Subscribe to this mod
+2. Enable it in the Mod Manager
+3. Start a game -- the API starts automatically on port 8085
+4. Download timberbot.py from the GitHub release
+5. Run: python timberbot.py ping
+
+Full docs and source: https://github.com/abix-/TimberbornMods
