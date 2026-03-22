@@ -628,10 +628,18 @@ namespace Timberbot
             previewBo.MarkAsPreviewAndInitialize();
             previewBo.Reposition(placement);
             bool isValid = previewBo.IsValid();
+            var size = blockObjectSpec.Size;
             UnityEngine.Object.Destroy(previewGo);
 
             if (!isValid)
-                return new { error = "invalid placement", prefab = prefabName, x, y, z, orientation };
+                return new
+                {
+                    error = "invalid placement",
+                    prefab = prefabName,
+                    x, y, z, orientation,
+                    sizeX = size.x, sizeY = size.y, sizeZ = size.z,
+                    hint = "check terrain height, water, existing buildings, and building size"
+                };
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
