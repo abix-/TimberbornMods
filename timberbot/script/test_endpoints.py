@@ -181,6 +181,18 @@ def main():
         passed += 1
     else:
         failed += 1
+    unlockables = result.get("unlockables", [])
+    if check(f"science unlockables populated ({len(unlockables)})", len(unlockables) > 0):
+        passed += 1
+    else:
+        failed += 1
+    if unlockables:
+        u = unlockables[0]
+        for field in ["name", "cost", "unlocked"]:
+            if check(f"unlockable has {field}", field in u):
+                passed += 1
+            else:
+                failed += 1
 
     # work hours write (set + verify + restore)
     old = bot.workhours().get("endHours", 16)
@@ -264,6 +276,21 @@ def main():
             failed += 1
     else:
         if check("stockpile good write (no tank found)", False):
+            passed += 1
+        else:
+            failed += 1
+
+    # placement unlock validation (try placing a locked building)
+    science = bot.science()
+    locked = [u for u in science.get("unlockables", []) if not u.get("unlocked")]
+    if locked:
+        result = bot.place_building(locked[0]["name"], 100, 100, 2, "south")
+        if check("locked building rejected", "error" in result and "not unlocked" in result.get("error", "")):
+            passed += 1
+        else:
+            failed += 1
+    else:
+        if check("locked building rejected (none locked)", False):
             passed += 1
         else:
             failed += 1

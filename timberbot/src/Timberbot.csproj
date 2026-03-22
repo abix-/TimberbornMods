@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>Timberbot</AssemblyName>
-    <Version>0.4.4</Version>
+    <Version>0.4.5</Version>
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
@@ -119,6 +119,18 @@
     <Reference Include="Timberborn.BlockObjectTools" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BlockObjectTools.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ToolButtonSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ToolButtonSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ToolSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ToolSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.PlantingUI" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.PlantingUI.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BuildingTools" Publicize="true">
       <Private>false</Private>

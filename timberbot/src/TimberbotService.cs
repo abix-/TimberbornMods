@@ -44,6 +44,9 @@ using Timberborn.DwellingSystem;
 using Timberborn.PowerManagement;
 using Timberborn.SoilContaminationSystem;
 using Timberborn.GameDistrictsMigration;
+using Timberborn.ToolButtonSystem;
+using Timberborn.ToolSystem;
+using Timberborn.PlantingUI;
 using UnityEngine;
 
 namespace Timberbot
@@ -72,6 +75,8 @@ namespace Timberbot
         private readonly WorkingHoursManager _workingHoursManager;
         private readonly ISoilContaminationService _soilContaminationService;
         private readonly PopulationDistributorRetriever _populationDistributorRetriever;
+        private readonly ToolButtonService _toolButtonService;
+        private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -96,7 +101,9 @@ namespace Timberbot
             NotificationSaver notificationSaver,
             WorkingHoursManager workingHoursManager,
             ISoilContaminationService soilContaminationService,
-            PopulationDistributorRetriever populationDistributorRetriever)
+            PopulationDistributorRetriever populationDistributorRetriever,
+            ToolButtonService toolButtonService,
+            UnlockedPlantableGroupsRegistry unlockedPlantableGroupsRegistry)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -120,6 +127,8 @@ namespace Timberbot
             _workingHoursManager = workingHoursManager;
             _soilContaminationService = soilContaminationService;
             _populationDistributorRetriever = populationDistributorRetriever;
+            _toolButtonService = toolButtonService;
+            _unlockedPlantableGroupsRegistry = unlockedPlantableGroupsRegistry;
         }
 
         public void Load()
@@ -1054,18 +1063,15 @@ namespace Timberbot
         public object CollectScience()
         {
             var unlockables = new List<object>();
-            try
+            foreach (var building in _buildingService.Buildings)
             {
-                foreach (var building in _buildingService.Buildings)
-                {
-                    if (!building.HasSpec<ScienceNeedingBuilding>()) continue;
-                    var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
-                    var name = templateSpec?.TemplateName ?? "unknown";
-                    var unlocked = _buildingUnlockingService.Unlocked(building);
-                    unlockables.Add(new { name, unlocked });
-                }
+                var bs = building.GetSpec<BuildingSpec>();
+                if (bs == null || bs.ScienceCost <= 0) continue;
+                var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                var name = templateSpec?.TemplateName ?? "unknown";
+                var unlocked = _buildingUnlockingService.Unlocked(bs);
+                unlockables.Add(new { name, cost = bs.ScienceCost, unlocked });
             }
-            catch { }
 
             return new
             {
@@ -1083,6 +1089,20 @@ namespace Timberbot
                     return new { error = "building not found", building = buildingName };
 
                 _buildingUnlockingService.Unlock(buildingSpec);
+
+                // update UI toolbar (pattern from BeaverBuddies)
+                foreach (var toolButton in _toolButtonService.ToolButtons)
+                {
+                    var blockObjectTool = toolButton.Tool as BlockObjectTool;
+                    if (blockObjectTool == null) continue;
+                    var toolBuilding = blockObjectTool.Template.GetSpec<BuildingSpec>();
+                    if (toolBuilding == buildingSpec)
+                    {
+                        _unlockedPlantableGroupsRegistry.AddUnlockedPlantableGroups(toolBuilding);
+                        toolButton.OnToolUnlocked(new ToolUnlockedEvent(toolButton.Tool));
+                    }
+                }
+
                 return new { building = buildingName, unlocked = true,
                              remaining = _scienceService.SciencePoints };
             }
@@ -1317,6 +1337,13 @@ namespace Timberbot
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
                 return new { error = "no block object spec", prefab = prefabName };
+
+            // check building is unlocked
+            var bs = buildingSpec.GetSpec<BuildingSpec>();
+            if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
+                return new { error = "building not unlocked", prefab = prefabName,
+                             scienceCost = bs.ScienceCost,
+                             currentPoints = _scienceService.SciencePoints };
 
             // correct origin so user coords = bottom-left corner regardless of orientation
             // orientations 1,3 swap x/y dimensions

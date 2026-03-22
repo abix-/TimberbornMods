@@ -21,7 +21,7 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/beavers` | tabular | `[N]{id,name,wellbeing,needs,anyCritical,lifeProgress,workplace,isBot,contaminated,hasHome}` |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
 | `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
-| `/api/science` | nested | `{points, unlockables[N]{name,unlocked}}` |
+| `/api/science` | nested | `{points, unlockables[N]{name,cost,unlocked}}` |
 | `/api/notifications` | tabular | `[N]{subject,description,cycle,cycleDay}` |
 | `/api/workhours` | flat kv | `{endHours, areWorkingHours}` |
 | `/api/speed` | flat kv | `speed: 0-3` (0=pause, 1=normal, 2=fast, 3=fastest) |
