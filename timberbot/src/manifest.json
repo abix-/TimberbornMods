@@ -1,7 +1,7 @@
 {
   "Name": "Timberbot",
-  "Version": "0.2.0",
+  "Version": "0.3.0",
   "Id": "claude.Timberbot",
-  "MinimumGameVersion": "0.7.0.0",
-  "Description": "HTTP API for AI agents to read and control Timberborn"
+  "MinimumGameVersion": "1.0.0.0",
+  "Description": "HTTP API that lets external programs read and control your game. Query resources, population, weather. Place buildings, manage workers, control floodgates. Built for AI agents, scripts, and custom dashboards. Python client included."
 }
