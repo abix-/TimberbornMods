@@ -45,9 +45,9 @@ timberbot pause_building 12345
 
 ## Credits
 
-Inspired by and learned from these Timberborn modding projects:
+Learned from these Timberborn modding projects:
 
-- [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding) -- official modding tools and examples
-- [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods) -- Automation, SmartPower, and other mods (repo structure reference)
-- [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- large mod collection (repo structure reference)
-- [TobbyTheBobby/TimberbornMods](https://github.com/TobbyTheBobby/TimberbornMods) -- ChooChoo, MorePaths, and other mods
+- [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding) -- official modding tools, wiki, and examples
+- [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies) -- multiplayer replay mod. Learned `BlockObjectPlacerService.Place()` for building placement, `EntityService.Delete()` for demolition, and `PlantingSelectionService.MarkArea()` for planting
+- [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- CutAllTrees mod taught us `TreeCuttingArea.AddCoordinates()` for tree marking. BuildingBlueprints mod showed `PreviewFactory` validation and place-then-delete pattern
+- [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- CutterTool showed `TreeCuttingArea.IsInCuttingArea()` for checking cut status. PlantingOverride showed `PlantingService.SetPlantingCoordinates()` for direct planting
