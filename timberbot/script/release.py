@@ -11,12 +11,13 @@ import subprocess
 import sys
 import zipfile
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 SRC_DIR = os.path.join(ROOT, "timberbot", "src")
 DIST_DIR = os.path.join(ROOT, "dist")
 MANIFEST = os.path.join(SRC_DIR, "manifest.json")
 DLL_PATH = os.path.join(SRC_DIR, "bin", "Release", "netstandard2.1", "Timberbot.dll")
-SCRIPT = os.path.join(ROOT, "timberbot", "script", "timberbot.py")
+SCRIPT = os.path.join(SCRIPT_DIR, "timberbot.py")
 
 
 def run(cmd, **kwargs):
