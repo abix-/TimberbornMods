@@ -630,7 +630,7 @@ namespace Timberbot
 
             var previous = _speedManager.CurrentSpeed;
             _speedManager.ChangeSpeed(speed);
-            return new { speed = _speedManager.CurrentSpeed, previous };
+            return new { speed, previous };
         }
 
         public object PauseBuilding(int buildingId, bool paused)
