@@ -208,14 +208,14 @@ def main():
 
     # priority write (find a building, set + restore)
     buildings = bot.buildings(limit=5)
-    prio_bldg = next((b for b in buildings if "priority" in b and b.get("priority") == "Normal"), None)
+    prio_bldg = next((b for b in buildings if "workplacePriority" in b and b.get("workplacePriority") == "Normal"), None)
     if prio_bldg:
-        result = bot.set_priority(prio_bldg["id"], "VeryHigh")
-        if check("priority write", result.get("priority") == "VeryHigh"):
+        result = bot.set_priority(prio_bldg["id"], "VeryHigh", type="workplace")
+        if check("priority write", result.get("workplacePriority") == "VeryHigh"):
             passed += 1
         else:
             failed += 1
-        bot.set_priority(prio_bldg["id"], "Normal")  # restore
+        bot.set_priority(prio_bldg["id"], "Normal", type="workplace")  # restore
     else:
         if check("priority write (no building found)", False):
             passed += 1
