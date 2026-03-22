@@ -1,9 +1,9 @@
 """Timberborn live dashboard -- polls Timberbot and prints colorful status."""
 import sys
 import time
-import requests
 
-URL = "http://localhost:8085"
+from timberbot_cli.api import Timberbot
+
 POLL = 3  # seconds
 
 # ANSI colors
@@ -11,11 +11,6 @@ RST = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RED = "\033[31m"
-GRN = "\033[32m"
-YEL = "\033[33m"
-BLU = "\033[34m"
-MAG = "\033[35m"
-CYN = "\033[36m"
 WHT = "\033[37m"
 BRED = "\033[91m"
 BGRN = "\033[92m"
@@ -29,14 +24,6 @@ def bar(pct, width=20):
     filled = int(pct * width)
     empty = width - filled
     return f"{BGRN}{'#' * filled}{DIM}{'.' * empty}{RST}"
-
-
-def fetch(path):
-    try:
-        r = requests.get(f"{URL}{path}", timeout=3)
-        return r.json()
-    except Exception:
-        return None
 
 
 def render(data):
@@ -114,11 +101,11 @@ def render(data):
 
 
 def main():
+    bot = Timberbot()
+
     print(f"\n  {BOLD}{BMAG}=== Timberborn Live ==={RST}\n")
 
-    # check connection
-    ping = fetch("/api/ping")
-    if not ping:
+    if not bot.ping():
         print(f"  {RED}cannot reach Timberbot on port 8085{RST}")
         print(f"  {DIM}start Timberborn with the mod loaded{RST}\n")
         sys.exit(1)
@@ -127,8 +114,10 @@ def main():
 
     try:
         while True:
-            data = fetch("/api/summary")
-            # clear screen
+            try:
+                data = bot.summary()
+            except Exception:
+                data = None
             print("\033[2J\033[H", end="")
             print(f"\n  {BOLD}{BMAG}=== Timberborn Live ==={RST}\n")
             render(data)

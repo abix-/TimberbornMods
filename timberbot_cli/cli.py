@@ -3,7 +3,7 @@ import json
 import shlex
 import threading
 
-import requests
+from requests.exceptions import ConnectionError as ConnError, HTTPError
 
 from timberbot_cli.api import Timberbot
 
@@ -83,7 +83,7 @@ class Watcher:
                     if prev is not None and prev != state:
                         print(f"\n[CHANGE] {name}: {'ON' if prev else 'OFF'} -> {'ON' if state else 'OFF'}")
                     self._prev[name] = state
-            except requests.ConnectionError:
+            except ConnError:
                 pass
             except Exception as exc:
                 print(f"\n[watch] error: {exc}")
@@ -206,9 +206,9 @@ def main():
                 print(f"  unknown command: {cmd} (type 'help')")
         except IndexError:
             print(f"  missing arguments (type 'help')")
-        except requests.ConnectionError:
+        except ConnError:
             print("  not reachable -- is Timberborn running?")
-        except requests.HTTPError as exc:
+        except HTTPError as exc:
             print(f"  API error: {exc.response.status_code} {exc.response.text}")
         except Exception as exc:
             print(f"  error: {exc}")
