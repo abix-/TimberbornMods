@@ -240,56 +240,111 @@ class Timberbot:
         return [i for i in items if low in i.get("name", "").lower()]
 
     def scan(self, x, y, radius=10):
-        """Scan an area and return a grid showing terrain, water, and occupants."""
+        """Scan an area and return a colored grid showing terrain, water, and occupants."""
+        # ANSI colors
+        _R = "\033[0m"   # reset
+        DIM = "\033[2m"
+        RED = "\033[31m"
+        GRN = "\033[32m"
+        YEL = "\033[33m"
+        BLU = "\033[34m"
+        MAG = "\033[35m"
+        CYN = "\033[36m"
+        BGRN = "\033[92m"
+        BYEL = "\033[93m"
+        BBLU = "\033[94m"
+        BWHT = "\033[97m"
+        BOLD = "\033[1m"
+
+        # (char, color) per entity name match
         ICONS = {
-            "Path": "=", "Pine": "T", "Birch": "T", "Oak": "T", "Maple": "T",
-            "Bush": "b", "berry": "b", "Lumberjack": "L", "Gatherer": "G",
-            "DistrictCenter": "D", "Rowhouse": "H", "Barrack": "H", "Lodge": "H",
-            "Tank": "W", "Pump": "P", "PowerWheel": "E", "PowerShaft": "e",
-            "LumberMill": "M", "WoodWorkshop": "M", "IndustrialLumberMill": "M",
-            "FarmHouse": "F", "Hauling": "K", "Breeding": "R", "Inventor": "S",
-            "Kohlrabi": "k", "Carrot": "k", "Potato": "k", "Wheat": "k",
-            "Cassava": "k", "Sunflower": "k", "Corn": "k", "Eggplant": "k",
-            "Cattail": "k", "Spadderdock": "k", "Soybean": "k", "Canola": "k",
-            "Forester": "f", "Warehouse": "$", "Pile": "$", "Campfire": "C",
-            "Floodgate": "X", "Dam": "X", "Levee": "X",
+            # infrastructure
+            "Path": ("=", YEL),
+            "DistrictCenter": ("D", BOLD + BYEL),
+            "Rowhouse": ("H", YEL), "Barrack": ("H", YEL), "Lodge": ("H", YEL),
+            "Breeding": ("R", YEL),
+            # production
+            "LumberMill": ("M", BWHT), "WoodWorkshop": ("M", BWHT),
+            "IndustrialLumberMill": ("M", BWHT),
+            "FarmHouse": ("F", CYN), "Forester": ("F", GRN),
+            "PowerWheel": ("E", BYEL), "PowerShaft": ("E", BYEL),
+            "Inventor": ("S", BWHT), "Numbercruncher": ("S", BWHT),
+            # gathering
+            "Lumberjack": ("L", RED), "Gatherer": ("G", MAG),
+            "Hauling": ("K", RED), "Scavenger": ("G", RED),
+            # water
+            "Pump": ("P", BBLU), "Tank": ("W", BBLU),
+            "Floodgate": ("X", CYN), "Dam": ("X", CYN),
+            "Levee": ("X", CYN), "Sluice": ("X", CYN),
+            # storage
+            "Warehouse": ("$", YEL), "Pile": ("$", YEL),
+            # nature
+            "Pine": ("T", GRN), "Birch": ("T", GRN), "Oak": ("T", GRN),
+            "Maple": ("T", GRN), "Chestnut": ("T", GRN),
+            "Bush": ("B", MAG), "berry": ("B", MAG),
+            # crops -- each type gets its own letter
+            "Kohlrabi": ("k", BGRN), "Carrot": ("c", BGRN),
+            "Potato": ("p", BGRN), "Wheat": ("w", BGRN),
+            "Cassava": ("a", BGRN), "Sunflower": ("s", BGRN),
+            "Corn": ("n", BGRN), "Eggplant": ("e", BGRN),
+            "Cattail": ("l", BGRN), "Spadderdock": ("d", BGRN),
+            "Soybean": ("y", BGRN), "Canola": ("o", BGRN),
+            # misc
+            "Campfire": ("C", RED),
         }
+
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         lines = []
-        legend_items = set()
+        legend_used = {}  # char+color -> label
+
         for ty in range(y + radius, y - radius - 1, -1):
-            row = f"{ty:3d} "
+            row = f"{DIM}{ty:3d}{_R} "
             for tx in range(x - radius, x + radius + 1):
                 t = tiles.get((tx, ty))
                 if not t:
-                    row += "?"
+                    row += f"{DIM}?{_R}"
                 elif t.get("entrance") and not t.get("occupant"):
-                    row += "@"
-                    legend_items.add("@ Entrance")
+                    row += f"{BWHT}@{_R}"
+                    legend_used["@"] = (BWHT, "entrance")
                 elif t.get("occupant"):
-                    oname = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "")
-                    icon = None
-                    for key, sym in ICONS.items():
+                    oname = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
+                    char, color = None, None
+                    label = None
+                    for key, (ch, co) in ICONS.items():
                         if key.lower() in oname.lower():
-                            icon = sym
-                            legend_items.add(f"{sym} {key}")
+                            char, color, label = ch, co, key
                             break
-                    if icon == "T" and t.get("seedling"):
-                        icon = "t"
-                        legend_items.add("t Seedling")
-                    row += icon if icon else oname[0]
+                    if char == "T" and t.get("seedling"):
+                        char, color, label = "t", DIM + GRN, "seedling"
+                    if char:
+                        row += f"{color}{char}{_R}"
+                        legend_used[char] = (color, label)
+                    else:
+                        row += f"{DIM}{oname[0]}{_R}"
                 elif t["water"] > 0:
-                    row += "~"
-                    legend_items.add("~ Water")
+                    row += f"{BLU}~{_R}"
+                    legend_used["~"] = (BLU, "water")
                 elif t["terrain"] > 0:
-                    row += "."
-                    legend_items.add(". Empty")
+                    row += f"{DIM}.{_R}"
+                    legend_used["."] = (DIM, "empty")
                 else:
                     row += " "
             lines.append(row)
-        lines.append("    " + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)))
-        lines.append("  " + "  ".join(sorted(legend_items)))
+
+        # axis labels
+        axis = f"    {DIM}"
+        for i in range(x - radius, x + radius + 1):
+            axis += str(i % 10)
+        axis += _R
+        lines.append(axis)
+
+        # colored legend
+        leg = "  "
+        for char, (color, label) in sorted(legend_used.items(), key=lambda x: x[1][1]):
+            leg += f" {color}{char}{_R} {label}"
+        lines.append(leg)
+
         return "\n".join(lines)
 
     def find(self, source, name=None, x=None, y=None, radius=20):
