@@ -47,6 +47,18 @@ All write endpoints accept JSON bodies.
 - Good names match Timberborn internal names (e.g. `Log`, `Plank`, `Water`, `Berries`)
 - Priority values: `VeryLow`, `Normal`, `VeryHigh`
 - Orientation: 0-3 (0=default, rotates 90 degrees each step)
+- Crop names: `Kohlrabi`, `Cassava`, `Carrot`, `Potato`, `Wheat`, `Sunflower`, etc.
+
+## Python-only helpers
+
+These are convenience methods in `timberbot.py`, not HTTP endpoints:
+
+| Method | Description |
+|--------|-------------|
+| `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths (calls `place_building` per tile) |
+| `scan x:N y:N radius:10` | ASCII grid of terrain, water, buildings, trees |
+| `find source:buildings name:NAME x:N y:N radius:20` | find entities by name and/or proximity |
+| `watch` | live terminal dashboard (polls every 3s) |
 
 ## Vanilla API (port 8080)
 
