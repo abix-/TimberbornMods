@@ -105,6 +105,10 @@ class Timberbot:
         """All beavers with wellbeing and needs: [{id, name, wellbeing, needs, anyCritical}]."""
         return self._get("/api/beavers")
 
+    def distribution(self):
+        """Distribution settings per district: [{district, goods: [{good, importOption, exportThreshold}]}]."""
+        return self._get("/api/distribution")
+
     def prefabs(self):
         """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
         return self._get("/api/prefabs")

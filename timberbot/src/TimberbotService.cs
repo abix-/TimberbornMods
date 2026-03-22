@@ -332,6 +332,23 @@ namespace Timberbot
                 if (mechanical != null)
                     entry["powered"] = mechanical.ActiveAndPowered;
 
+                var node = ec.GetComponent<MechanicalNode>();
+                if (node != null)
+                {
+                    entry["isGenerator"] = node.IsGenerator;
+                    entry["isConsumer"] = node.IsConsumer;
+                    try
+                    {
+                        var graph = node.Graph;
+                        if (graph != null)
+                        {
+                            entry["powerDemand"] = graph.PowerDemand;
+                            entry["powerSupply"] = graph.PowerSupply;
+                        }
+                    }
+                    catch { }
+                }
+
                 results.Add(entry);
             }
             return results;
@@ -842,6 +859,38 @@ namespace Timberbot
         }
 
         // ================================================================
+        public object CollectDistribution()
+        {
+            var results = new List<object>();
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
+                if (distSetting == null) continue;
+
+                var goods = new List<object>();
+                try
+                {
+                    foreach (var gs in distSetting.GoodDistributionSettings)
+                    {
+                        goods.Add(new
+                        {
+                            good = gs.GoodId,
+                            importOption = gs.ImportOption.ToString(),
+                            exportThreshold = gs.ExportThreshold
+                        });
+                    }
+                }
+                catch { }
+
+                results.Add(new
+                {
+                    district = dc.DistrictName,
+                    goods
+                });
+            }
+            return results;
+        }
+
         // PLACEMENT VALIDATION
         // ================================================================
 

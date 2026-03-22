@@ -184,6 +184,10 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.GameDistrictsMigration" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.GameDistrictsMigration.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.BuildingsReachability" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BuildingsReachability.dll</HintPath>
