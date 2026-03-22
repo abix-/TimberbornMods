@@ -272,6 +272,9 @@ class Timberbot:
                             icon = sym
                             legend_items.add(f"{sym} {key}")
                             break
+                    if icon == "T" and t.get("seedling"):
+                        icon = "t"
+                        legend_items.add("t Seedling")
                     row += icon if icon else oname[0]
                 elif t["water"] > 0:
                     row += "~"

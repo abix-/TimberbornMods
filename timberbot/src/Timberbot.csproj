@@ -152,6 +152,10 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Gathering.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Growing" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Growing.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>

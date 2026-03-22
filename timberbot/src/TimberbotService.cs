@@ -336,6 +336,13 @@ namespace Timberbot
                     entry["alive"] = !living.IsDead;
                 }
 
+                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                if (growable != null)
+                {
+                    entry["grown"] = growable.IsGrown;
+                    entry["growth"] = growable.GrowthProgress;
+                }
+
                 results.Add(entry);
             }
             return results;
@@ -404,11 +411,20 @@ namespace Timberbot
             // build occupancy map from all entities -- use ALL occupied blocks, not just origin
             var occupants = new Dictionary<long, string>();
             var entrances = new HashSet<long>();
+            var seedlings = new HashSet<long>();
             foreach (var ec in _entityRegistry.Entities)
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
                 var name = ec.GameObject.name;
+
+                // track seedlings vs grown trees
+                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                if (growable != null && !growable.IsGrown)
+                {
+                    var c = bo.Coordinates;
+                    seedlings.Add((long)c.x * 100000 + c.y);
+                }
 
                 // record entrance tile
                 if (bo.HasEntrance)
@@ -470,22 +486,18 @@ namespace Timberbot
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occupant);
                     bool isEntrance = entrances.Contains(key);
+                    bool isSeedling = seedlings.Contains(key);
 
-                    if (occupant != null)
+                    var tile = new Dictionary<string, object>
                     {
-                        if (isEntrance)
-                            tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant, entrance = true });
-                        else
-                            tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant });
-                    }
-                    else if (isEntrance)
-                    {
-                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, entrance = true });
-                    }
-                    else
-                    {
-                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight });
-                    }
+                        ["x"] = x, ["y"] = y,
+                        ["terrain"] = terrainHeight,
+                        ["water"] = waterHeight
+                    };
+                    if (occupant != null) tile["occupant"] = occupant;
+                    if (isEntrance) tile["entrance"] = true;
+                    if (isSeedling) tile["seedling"] = true;
+                    tiles.Add(tile);
                 }
             }
 
