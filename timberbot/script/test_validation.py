@@ -133,51 +133,71 @@ def main():
 
     print("\n=== orientation (origin correction) ===\n")
 
-    # test area: east of DC at y=145 z=2, flat open ground
-    # place all 4 orientations for a 2x2 (FarmHouse) and 3x2 (Barrack)
-    for prefab, sx, sy in [("FarmHouse.IronTeeth", 2, 2),
-                               ("Barrack.IronTeeth", 3, 2),
-                               ("Rowhouse.IronTeeth", 1, 2),
-                               ("IndustrialLumberMill.IronTeeth", 2, 3),
-                               ("WoodWorkshop.IronTeeth", 2, 4),
-                               ("WeatherStation.IronTeeth", 3, 1)]:
-        for orient in ["south", "west", "north", "east"]:
-            bx, by = 130, 145
-            result = bot.place_building(prefab, bx, by, 2, orientation=orient)
-            if "id" not in result:
-                if check(f"{prefab} {orient} placement", result, expect_id=True):
-                    passed += 1
-                else:
-                    failed += 1
+    # find a clear test area by trying to place+demolish a path
+    test_spot = None
+    for cx in range(80, 120):
+        scan = bot.scan(cx, 135, 8)
+        if len(scan.get("occupied", [])) == 0 and len(scan.get("water", [])) == 0:
+            tiles = bot.map(cx, 135, cx, 135)
+            t = tiles.get("tiles", [{}])[0]
+            tz = t.get("terrain", 0)
+            if tz < 2:
                 continue
+            # verify placement actually works
+            test = bot.place_building("Path", cx, 135, tz, orientation="south")
+            if "id" in test:
+                bot.demolish_building(test["id"])
+                test_spot = (cx, 135, tz)
+                break
+    if not test_spot:
+        print("  SKIP  no clear test area found")
+    else:
+        bx, by, bz = test_spot
+        print(f"  using test area ({bx},{by},z={bz})\n")
 
-            # check footprint bottom-left matches user coords
-            tiles = bot.map(bx - 1, by - 1, bx + sx, by + sy)
-            occupied = [(t["x"], t["y"]) for t in tiles.get("tiles", [])
-                        if t.get("occupant") and prefab.split(".")[0] in t["occupant"]]
-            min_x = min(t[0] for t in occupied) if occupied else -1
-            min_y = min(t[1] for t in occupied) if occupied else -1
-            origin_ok = min_x == bx and min_y == by
-            if check(f"{prefab.split('.')[0]} {orient} origin=({min_x},{min_y})",
-                     result, expect_id=True):
-                if origin_ok:
-                    passed += 1
+    if test_spot:
+        for prefab, sx, sy in [("FarmHouse.IronTeeth", 2, 2),
+                                ("Barrack.IronTeeth", 3, 2),
+                                ("Rowhouse.IronTeeth", 1, 2),
+                                ("IndustrialLumberMill.IronTeeth", 2, 3),
+                                ("WoodWorkshop.IronTeeth", 2, 4),
+                                ("WeatherStation.IronTeeth", 3, 1)]:
+            for orient in ["south", "west", "north", "east"]:
+                result = bot.place_building(prefab, bx, by, bz, orientation=orient)
+                if "id" not in result:
+                    if check(f"{prefab} {orient} placement", result, expect_id=True):
+                        passed += 1
+                    else:
+                        failed += 1
+                    continue
+
+                tiles = bot.map(bx - 1, by - 1, bx + sx, by + sy)
+                occupied = [(t["x"], t["y"]) for t in tiles.get("tiles", [])
+                            if t.get("occupant") and prefab.split(".")[0] in t["occupant"]]
+                min_x = min(t[0] for t in occupied) if occupied else -1
+                min_y = min(t[1] for t in occupied) if occupied else -1
+                origin_ok = min_x == bx and min_y == by
+                if check(f"{prefab.split('.')[0]} {orient} origin=({min_x},{min_y})",
+                         result, expect_id=True):
+                    if origin_ok:
+                        passed += 1
+                    else:
+                        failed += 1
+                        print(f"         expected bottom-left ({bx},{by}), got ({min_x},{min_y})")
                 else:
                     failed += 1
-                    print(f"         expected bottom-left ({bx},{by}), got ({min_x},{min_y})")
-            else:
-                failed += 1
 
-            bot.demolish_building(result["id"])
+                bot.demolish_building(result["id"])
 
     # named orientation validation
-    result = bot.place_building("Path", 130, 145, 2, orientation="1")
+    ox, oy, oz = test_spot if test_spot else (130, 145, 2)
+    result = bot.place_building("Path", ox, oy, oz, orientation="1")
     if check("numeric orientation rejected", result, expect_error="invalid orientation"):
         passed += 1
     else:
         failed += 1
 
-    result = bot.place_building("Path", 130, 145, 2, orientation="bogus")
+    result = bot.place_building("Path", ox, oy, oz, orientation="bogus")
     if check("invalid orientation name rejected", result, expect_error="invalid orientation"):
         passed += 1
     else:
