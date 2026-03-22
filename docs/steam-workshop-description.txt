@@ -11,14 +11,12 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [*] Terrain map with water levels and building occupancy
 [*] Available building templates (prefabs)
 [/list]
-
 [b]Build and demolish:[/b]
 [list]
 [*] Place any building at specific coordinates with rotation
 [*] Demolish buildings
 [*] View full building footprints on the map
 [/list]
-
 [b]Manage the colony:[/b]
 [list]
 [*] Pause/unpause buildings
@@ -26,7 +24,6 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [*] Set building priority (VeryLow / Normal / VeryHigh)
 [*] Control game speed (pause, 1x, 2x, 3x)
 [/list]
-
 [b]Control resources:[/b]
 [list]
 [*] Mark and clear tree cutting areas
@@ -35,7 +32,6 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [*] Set stockpile capacity and allowed goods
 [*] Set water tank contents
 [/list]
-
 [b]Tools:[/b]
 [list]
 [*] ASCII map scanner -- see terrain, water, buildings, trees, entrances in your terminal
