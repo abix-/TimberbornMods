@@ -133,6 +133,33 @@ bot.clear_trees(100, 100, 110, 110, z=2)
 bot.set_floodgate(gate_id, 2.0)
 ```
 
+## Steam Workshop
+
+### Publish
+
+1. Build the mod: `cd mod/Timberbot && dotnet build`
+2. Create a `thumbnail.png` (max 1 MB) in the mod folder
+3. Copy to your mods folder:
+   ```
+   Documents/Timberborn/Mods/Timberbot/
+     manifest.json
+     Timberbot.dll
+     thumbnail.png
+   ```
+4. Launch Timberborn, open Mod Manager from main menu
+5. Use the upload panel to publish (accept Workshop ToS on first upload)
+6. A `workshop_data.json` is generated after upload -- keep it for future updates
+
+Do NOT ship game DLLs (Newtonsoft.Json, UnityEngine, Timberborn.*). Only your mod's DLL.
+
+### mod.io
+
+Create a mod entry at https://mod.io/g/timberborn and upload a ZIP of the 3 files above.
+
+### Updating
+
+With `workshop_data.json` present, re-uploading lets you selectively update description, visibility, and preview image via checkboxes. Check "Upload as new" to create a separate entry.
+
 ## Requirements
 
 - Timberborn (Steam)

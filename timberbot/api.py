@@ -284,7 +284,10 @@ class Timberbot:
             for tx in range(x - radius, x + radius + 1):
                 t = tiles.get((tx, ty))
                 if not t:
-                    row += "\u2591"  # light shade = unknown
+                    row += "?"
+                elif t.get("entrance") and not t.get("occupant"):
+                    row += "@"
+                    legend_items.add("@ Entrance")
                 elif t.get("occupant"):
                     name = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "")
                     icon = None

@@ -263,6 +263,15 @@ namespace Timberbot
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
+                    entry["orientation"] = (int)bo.Orientation;
+
+                    if (bo.HasEntrance)
+                    {
+                        var entrance = bo.PositionedEntrance;
+                        entry["entranceX"] = entrance.DoorstepCoordinates.x;
+                        entry["entranceY"] = entrance.DoorstepCoordinates.y;
+                        entry["entranceZ"] = entrance.DoorstepCoordinates.z;
+                    }
                 }
 
                 if (pausable != null)
@@ -394,11 +403,23 @@ namespace Timberbot
 
             // build occupancy map from all entities -- use ALL occupied blocks, not just origin
             var occupants = new Dictionary<long, string>();
+            var entrances = new HashSet<long>();
             foreach (var ec in _entityRegistry.Entities)
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
                 var name = ec.GameObject.name;
+
+                // record entrance tile
+                if (bo.HasEntrance)
+                {
+                    try
+                    {
+                        var ent = bo.PositionedEntrance.DoorstepCoordinates;
+                        entrances.Add((long)ent.x * 100000 + ent.y);
+                    }
+                    catch { }
+                }
                 try
                 {
                     var positioned = bo.PositionedBlocks;
@@ -448,10 +469,18 @@ namespace Timberbot
 
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occupant);
+                    bool isEntrance = entrances.Contains(key);
 
                     if (occupant != null)
                     {
-                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant });
+                        if (isEntrance)
+                            tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant, entrance = true });
+                        else
+                            tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant });
+                    }
+                    else if (isEntrance)
+                    {
+                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, entrance = true });
                     }
                     else
                     {
