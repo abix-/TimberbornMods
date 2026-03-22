@@ -46,7 +46,7 @@ namespace Timberbot
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
-        private readonly TemplateInstantiator _templateInstantiator;
+        private readonly PreviewFactory _previewFactory;
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
@@ -66,7 +66,7 @@ namespace Timberbot
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
             EntityService entityService,
-            TemplateInstantiator templateInstantiator,
+            PreviewFactory previewFactory,
             ITerrainService terrainService,
             IThreadSafeWaterMap waterMap,
             MapIndexService mapIndexService,
@@ -84,7 +84,7 @@ namespace Timberbot
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
-            _templateInstantiator = templateInstantiator;
+            _previewFactory = previewFactory;
             _terrainService = terrainService;
             _waterMap = waterMap;
             _mapIndexService = mapIndexService;
@@ -744,54 +744,26 @@ namespace Timberbot
             var placement = new Placement(new Vector3Int(x, y, z), orient,
                 FlipMode.Unflipped);
 
-            // validate before placing -- prevent ghost buildings
-            var templateSpec = buildingSpec.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
-            if (templateSpec?.Blueprint == null)
-                return new { error = "no blueprint for prefab", prefab = prefabName };
+            // validate before placing -- uses PreviewFactory (handles water buildings correctly)
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            if (placeableSpec == null)
+                return new { error = "no placeable spec", prefab = prefabName };
 
-            // validate before placing -- prevent ghost buildings
-            try
+            var preview = _previewFactory.Create(placeableSpec);
+            preview.Reposition(placement);
+            bool isValid = preview.BlockObject.IsValid();
+            UnityEngine.Object.Destroy(preview.GameObject);
+
+            if (!isValid)
             {
-                var previewGo = _templateInstantiator.Instantiate(templateSpec.Blueprint, null);
-                var previewBo = previewGo.GetComponentSlow<BlockObject>();
-                if (previewBo == null)
-                {
-                    UnityEngine.Object.Destroy(previewGo);
-                    return new
-                    {
-                        error = "validation failed: no BlockObject in preview",
-                        prefab = prefabName,
-                        blueprintName = templateSpec.Blueprint?.ToString() ?? "null",
-                        childCount = previewGo.transform.childCount
-                    };
-                }
-                previewBo.MarkAsPreviewAndInitialize();
-                previewBo.Reposition(placement);
-                bool isValid = previewBo.IsValid();
-                UnityEngine.Object.Destroy(previewGo);
-                if (!isValid)
-                {
-                    var size = blockObjectSpec.Size;
-                    return new
-                    {
-                        error = "invalid placement",
-                        prefab = prefabName,
-                        x, y, z, orientation,
-                        sizeX = size.x, sizeY = size.y, sizeZ = size.z,
-                        hint = "check terrain height, water, existing buildings, and building size"
-                    };
-                }
-            }
-            catch (System.Exception ex)
-            {
+                var size = blockObjectSpec.Size;
                 return new
                 {
-                    error = "validation exception",
+                    error = "invalid placement",
                     prefab = prefabName,
                     x, y, z, orientation,
-                    exception = ex.GetType().Name,
-                    message = ex.Message,
-                    stackTrace = ex.StackTrace?.Split('\n')[0] ?? ""
+                    sizeX = size.x, sizeY = size.y, sizeZ = size.z,
+                    hint = "check terrain height, water, existing buildings, and building size"
                 };
             }
 
