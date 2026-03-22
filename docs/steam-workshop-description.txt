@@ -10,7 +10,7 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [tr][td]Read[/td][td]Find berry bushes and other gatherables[/td][/tr]
 [tr][td]Read[/td][td]Terrain map with water levels and what's on every tile[/td][/tr]
 [tr][td]Read[/td][td]List all available building types[/td][/tr]
-[tr][td]Build[/td][td]Place any building at exact coordinates with rotation control[/td][/tr]
+[tr][td]Build[/td][td]Place any building with named orientation (south/west/north/east) -- validates all tiles before placing[/td][/tr]
 [tr][td]Build[/td][td]Demolish buildings[/td][/tr]
 [tr][td]Build[/td][td]Lay down paths[/td][/tr]
 [tr][td]Manage[/td][td]Pause and unpause buildings[/td][/tr]
@@ -18,7 +18,7 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [tr][td]Manage[/td][td]Set building construction priority[/td][/tr]
 [tr][td]Manage[/td][td]Control game speed -- pause, 1x, 2x, 3x[/td][/tr]
 [tr][td]Resources[/td][td]Mark and clear tree cutting areas[/td][/tr]
-[tr][td]Resources[/td][td]Plant crops -- Kohlrabi, Carrots, and more[/td][/tr]
+[tr][td]Resources[/td][td]Plant crops -- skips buildings, water, and invalid terrain automatically[/td][/tr]
 [tr][td]Resources[/td][td]Set floodgate heights[/td][/tr]
 [tr][td]Resources[/td][td]Configure stockpile capacity and allowed goods[/td][/tr]
 [tr][td]Tools[/td][td]ASCII map scanner -- see your colony layout in terminal[/td][/tr]
@@ -32,7 +32,7 @@ The mod runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
 python timberbot.py summary
 python timberbot.py buildings
-python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:3
+python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:south
 python timberbot.py plant_crop x1:123 y1:138 x2:128 y2:141 z:2 crop:Kohlrabi
 python timberbot.py scan x:120 y:140 radius:10    # compact TOON format for AI
 python timberbot.py visual x:120 y:140 radius:10  # colored ASCII map for humans
