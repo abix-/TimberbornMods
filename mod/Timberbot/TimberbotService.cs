@@ -13,6 +13,7 @@ using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
+using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
 using Timberborn.Goods;
@@ -318,6 +319,42 @@ namespace Timberbot
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
                     entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
+                }
+
+                if (living != null)
+                {
+                    entry["alive"] = !living.IsDead;
+                }
+
+                results.Add(entry);
+            }
+            return results;
+        }
+
+        public object CollectGatherables()
+        {
+            var results = new List<object>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var gatherable = ec.GetComponent<Gatherable>();
+                if (gatherable == null) continue;
+
+                var go = ec.GameObject;
+                var bo = ec.GetComponent<BlockObject>();
+                var living = ec.GetComponent<LivingNaturalResource>();
+
+                var entry = new Dictionary<string, object>
+                {
+                    ["id"] = go.GetInstanceID(),
+                    ["name"] = go.name
+                };
+
+                if (bo != null)
+                {
+                    var coords = bo.Coordinates;
+                    entry["x"] = coords.x;
+                    entry["y"] = coords.y;
+                    entry["z"] = coords.z;
                 }
 
                 if (living != null)

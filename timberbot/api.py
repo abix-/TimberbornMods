@@ -112,6 +112,10 @@ class Timberbot:
         """All cuttable trees: [{id, name, x, y, z, marked, alive}]."""
         return self._get("/api/trees")
 
+    def gatherables(self):
+        """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
+        return self._get("/api/gatherables")
+
     def prefabs(self):
         """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
         return self._get("/api/prefabs")

@@ -111,6 +111,9 @@
     <Reference Include="Timberborn.MapIndexSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.MapIndexSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Gathering" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Gathering.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
     </Reference>
