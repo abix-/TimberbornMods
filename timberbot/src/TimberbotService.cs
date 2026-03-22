@@ -633,12 +633,8 @@ namespace Timberbot
             if (speed < 0 || speed > 3)
                 return new { error = "speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)" };
 
-            var previousRaw = _speedManager.CurrentSpeed;
-            int previousLevel = System.Array.IndexOf(SpeedScale, previousRaw);
-            if (previousLevel < 0) previousLevel = 0;
-
             _speedManager.ChangeSpeed(SpeedScale[speed]);
-            return new { speed, previous = previousLevel };
+            return new { speed };
         }
 
         public object PauseBuilding(int buildingId, bool paused)
