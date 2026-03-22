@@ -1,50 +1,56 @@
 Let an AI play Timberborn. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can run a beaver colony.
 
+[h1]Timberbot vs Vanilla HTTP API[/h1]
+
+Timberborn has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything else. They work together:
+
+[table]
+[tr][th]What[/th][th]Vanilla HTTP (port 8080)[/th][th]Timberbot (port 8085)[/th][/tr]
+[tr][td]Floodgates[/td][td]Control via levers[/td][td]Set height directly[/td][/tr]
+[tr][td]Sensors (depth, flow, power)[/td][td]Read via adapters[/td][td]Read all game state directly, no sensors needed[/td][/tr]
+[tr][td]Real-time automation[/td][td]Sensor -> logic -> lever chains[/td][td]Not real-time, polled by AI[/td][/tr]
+[tr][td]Building placement[/td][td]No[/td][td]Yes, with validation[/td][/tr]
+[tr][td]Beaver wellbeing[/td][td]No[/td][td]Yes, per-beaver needs[/td][/tr]
+[tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science[/td][/tr]
+[tr][td]Map reading[/td][td]No[/td][td]Terrain, water, occupants, scan[/td][/tr]
+[/table]
+
+Use vanilla HTTP for real-time automation triggers (water rises -> open floodgate). Use Timberbot for strategic AI decisions (need food -> place farmhouse). The Python client wraps both APIs in one place.
+
 [h1]Features[/h1]
 
 [table]
 [tr][th]Category[/th][th]What you can do[/th][/tr]
 [tr][td]Read[/td][td]Colony snapshot. Population, resources, weather, drought countdown[/td][/tr]
-[tr][td]Read[/td][td]List all buildings with workers, priority, reachability, power status[/td][/tr]
-[tr][td]Read[/td][td]List all trees. Distinguishes grown from seedlings, shows cutting marks[/td][/tr]
-[tr][td]Read[/td][td]Find berry bushes and other gatherables[/td][/tr]
-[tr][td]Read[/td][td]Terrain map with water levels and what's on every tile[/td][/tr]
-[tr][td]Read[/td][td]List all available building types[/td][/tr]
-[tr][td]Read[/td][td]Beaver wellbeing. See each beaver's needs and what's critical[/td][/tr]
-[tr][td]Build[/td][td]Place any building with named orientation (south/west/north/east). Validates all tiles before placing[/td][/tr]
-[tr][td]Build[/td][td]Demolish buildings[/td][/tr]
-[tr][td]Build[/td][td]Lay down paths[/td][/tr]
-[tr][td]Manage[/td][td]Pause and unpause buildings[/td][/tr]
-[tr][td]Manage[/td][td]Set how many workers a building gets[/td][/tr]
-[tr][td]Manage[/td][td]Set building construction priority[/td][/tr]
-[tr][td]Manage[/td][td]Control game speed. Pause, 1x, 2x, 3x[/td][/tr]
-[tr][td]Resources[/td][td]Mark and clear tree cutting areas[/td][/tr]
-[tr][td]Resources[/td][td]Plant crops. Skips buildings, water, and invalid terrain automatically[/td][/tr]
-[tr][td]Resources[/td][td]Set floodgate heights[/td][/tr]
-[tr][td]Resources[/td][td]Configure stockpile capacity and allowed goods[/td][/tr]
-[tr][td]Read[/td][td]Distribution settings. Import/export options per good per district[/td][/tr]
+[tr][td]Read[/td][td]All buildings with workers, priority, reachability, power, construction progress, inventory[/td][/tr]
+[tr][td]Read[/td][td]All trees with growth status, cutting marks. Find densest clusters[/td][/tr]
+[tr][td]Read[/td][td]Berry bushes and gatherables[/td][/tr]
+[tr][td]Read[/td][td]Terrain map with water levels and occupants[/td][/tr]
+[tr][td]Read[/td][td]Beaver wellbeing, active needs, workplace assignment[/td][/tr]
 [tr][td]Read[/td][td]Science points and unlockable buildings[/td][/tr]
-[tr][td]Manage[/td][td]Unlock buildings with science points[/td][/tr]
-[tr][td]Manage[/td][td]Set district import/export for any good[/td][/tr]
-[tr][td]Tools[/td][td]Find densest tree clusters for optimal lumberjack placement[/td][/tr]
-[tr][td]Tools[/td][td]All output in TOON format. Compact and token-efficient for AI[/td][/tr]
-[tr][td]Tools[/td][td]ASCII map scanner. See your colony layout in terminal[/td][/tr]
-[tr][td]Tools[/td][td]Live dashboard. Auto-refreshing colony status[/td][/tr]
-[tr][td]Tools[/td][td]Search for nearby buildings, trees, berry bushes[/td][/tr]
+[tr][td]Read[/td][td]Distribution settings and game notifications[/td][/tr]
+[tr][td]Build[/td][td]Place any building with named orientation. Validates all tiles[/td][/tr]
+[tr][td]Build[/td][td]Demolish buildings, lay paths[/td][/tr]
+[tr][td]Manage[/td][td]Workers, priority, speed, pause/unpause[/td][/tr]
+[tr][td]Manage[/td][td]Unlock buildings, set import/export per good[/td][/tr]
+[tr][td]Resources[/td][td]Mark trees, plant crops, set floodgate heights, configure stockpiles[/td][/tr]
+[tr][td]Tools[/td][td]TOON output for AI, ASCII map scanner, live dashboard, search[/td][/tr]
 [/table]
 
 [h1]How it works[/h1]
-The mod runs an HTTP server (port 8085) inside the game. Python client included:
+Two APIs, one Python client:
 
 [code]
+# Timberbot API (port 8085) -- strategic control
 python timberbot.py summary
 python timberbot.py buildings
-python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:south
-python timberbot.py plant_crop x1:123 y1:138 x2:128 y2:141 z:2 crop:Kohlrabi
-python timberbot.py beavers                          # beaver wellbeing + critical needs
-python timberbot.py scan x:120 y:140 radius:10        # compact map for AI
-python timberbot.py visual x:120 y:140 radius:10  # colored ASCII map for humans
-python timberbot.py watch
+python timberbot.py beavers
+python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+python timberbot.py scan x:120 y:140 radius:10
+
+# Vanilla API (port 8080) -- real-time automation
+python timberbot.py levers
+python timberbot.py lever_on name:MyFloodgateLever
 [/code]
 
 [h1]Getting started[/h1]
