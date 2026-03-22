@@ -115,11 +115,31 @@ namespace Timberbot
 
         public object CollectSummary()
         {
+            int markedGrown = 0, markedSeedling = 0, unmarkedGrown = 0;
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var cuttable = ec.GetComponent<Cuttable>();
+                if (cuttable == null) continue;
+                var bo = ec.GetComponent<BlockObject>();
+                var living = ec.GetComponent<LivingNaturalResource>();
+                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                if (living == null || living.IsDead) continue;
+                if (bo == null) continue;
+
+                bool marked = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
+                bool grown = growable != null && growable.IsGrown;
+
+                if (marked && grown) markedGrown++;
+                else if (marked && !grown) markedSeedling++;
+                else if (!marked && grown) unmarkedGrown++;
+            }
+
             return new
             {
                 time = CollectTime(),
                 weather = CollectWeather(),
-                districts = CollectDistricts()
+                districts = CollectDistricts(),
+                trees = new { markedGrown, markedSeedling, unmarkedGrown }
             };
         }
 
