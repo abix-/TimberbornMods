@@ -240,110 +240,45 @@ class Timberbot:
         return [i for i in items if low in i.get("name", "").lower()]
 
     def scan(self, x, y, radius=10):
-        """Scan an area and return a colored grid showing terrain, water, and occupants."""
-        # ANSI colors
-        _R = "\033[0m"   # reset
-        DIM = "\033[2m"
-        RED = "\033[31m"
-        GRN = "\033[32m"
-        YEL = "\033[33m"
-        BLU = "\033[34m"
-        MAG = "\033[35m"
-        CYN = "\033[36m"
-        BGRN = "\033[92m"
-        BYEL = "\033[93m"
-        BBLU = "\033[94m"
-        BWHT = "\033[97m"
-        BOLD = "\033[1m"
-
-        # (char, color) per entity name match
-        ICONS = {
-            # infrastructure
-            "Path": ("=", YEL),
-            "DistrictCenter": ("D", BOLD + BYEL),
-            "Rowhouse": ("H", YEL), "Barrack": ("H", YEL), "Lodge": ("H", YEL),
-            "Breeding": ("R", YEL),
-            # production
-            "LumberMill": ("M", BWHT), "WoodWorkshop": ("M", BWHT),
-            "IndustrialLumberMill": ("M", BWHT),
-            "FarmHouse": ("F", CYN), "Forester": ("f", GRN),
-            "PowerWheel": ("E", BYEL), "PowerShaft": ("E", BYEL),
-            "Inventor": ("S", BWHT), "Numbercruncher": ("S", BWHT),
-            # gathering
-            "Lumberjack": ("L", RED), "Gatherer": ("G", MAG),
-            "Hauling": ("K", RED), "Scavenger": ("G", RED),
-            # water
-            "Pump": ("P", BBLU), "Tank": ("W", BBLU),
-            "Floodgate": ("X", CYN), "Dam": ("X", CYN),
-            "Levee": ("X", CYN), "Sluice": ("X", CYN),
-            # storage
-            "Warehouse": ("$", YEL), "Pile": ("$", YEL),
-            # nature
-            "Pine": ("T", GRN), "Birch": ("T", GRN), "Oak": ("T", GRN),
-            "Maple": ("T", GRN), "Chestnut": ("T", GRN),
-            "Bush": ("B", MAG), "berry": ("B", MAG),
-            # crops -- each type gets its own letter
-            "Kohlrabi": ("k", BGRN), "Carrot": ("c", BGRN),
-            "Potato": ("p", BGRN), "Wheat": ("w", BGRN),
-            "Cassava": ("a", BGRN), "Sunflower": ("s", BGRN),
-            "Corn": ("n", BGRN), "Eggplant": ("e", BGRN),
-            "Cattail": ("l", BGRN), "Spadderdock": ("d", BGRN),
-            "Soybean": ("y", BGRN), "Canola": ("o", BGRN),
-            # misc
-            "Campfire": ("C", RED),
-        }
-
+        """Scan an area. Returns TOON format: occupied tiles + water tiles, skipping empty ground."""
         data = self.map(x - radius, y - radius, x + radius, y + radius)
-        tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
-        lines = []
-        legend_used = {}  # char+color -> label
+        tiles = data.get("tiles", [])
 
-        for ty in range(y + radius, y - radius - 1, -1):
-            row = f"{DIM}{ty:3d}{_R} "
-            for tx in range(x - radius, x + radius + 1):
-                t = tiles.get((tx, ty))
-                if not t:
-                    row += f"{DIM}?{_R}"
-                elif t.get("entrance") and not t.get("occupant"):
-                    row += f"{BWHT}@{_R}"
-                    legend_used["@"] = (BWHT, "entrance")
-                elif t.get("occupant"):
-                    oname = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
-                    char, color = None, None
-                    label = None
-                    for key, (ch, co) in ICONS.items():
-                        if key.lower() in oname.lower():
-                            char, color, label = ch, co, key
-                            break
-                    if char == "T" and t.get("seedling"):
-                        char, color, label = "t", DIM + GRN, "seedling"
-                    if char:
-                        row += f"{color}{char}{_R}"
-                        legend_used[char] = (color, label)
-                    else:
-                        row += f"{DIM}{oname[0]}{_R}"
-                elif t["water"] > 0:
-                    row += f"{BLU}~{_R}"
-                    legend_used["~"] = (BLU, "water")
-                elif t["terrain"] > 0:
-                    row += f"{DIM}.{_R}"
-                    legend_used["."] = (DIM, "empty")
-                else:
-                    row += " "
-            lines.append(row)
+        occupied = []
+        water = []
 
-        # axis labels
-        axis = f"    {DIM}"
-        for i in range(x - radius, x + radius + 1):
-            axis += str(i % 10)
-        axis += _R
-        lines.append(axis)
+        for t in tiles:
+            tx, ty = t["x"], t["y"]
+            has_occupant = t.get("occupant")
+            has_water = t.get("water", 0) > 0
+            is_entrance = t.get("entrance", False)
+            is_seedling = t.get("seedling", False)
 
-        # colored legend
-        leg = "  "
-        for char, (color, label) in sorted(legend_used.items(), key=lambda x: x[1][1]):
-            leg += f" {color}{char}{_R} {label}"
-        lines.append(leg)
+            if has_occupant:
+                name = has_occupant.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
+                if is_seedling:
+                    name += ".seedling"
+                if is_entrance:
+                    name += ".entrance"
+                occupied.append(f"  {tx},{ty},{name}")
+            elif is_entrance:
+                occupied.append(f"  {tx},{ty},entrance")
+
+            if has_water and not has_occupant:
+                water.append(f"  {tx},{ty}")
+
+        lines = [
+            "scan:",
+            f"  center: {x},{y}",
+            f"  radius: {radius}",
+            f"  default: ground",
+        ]
+
+        lines.append(f"occupied[{len(occupied)}]" + "{x,y,what}:")
+        lines.extend(occupied)
+
+        lines.append(f"water[{len(water)}]" + "{x,y}:")
+        lines.extend(water)
 
         return "\n".join(lines)
 
