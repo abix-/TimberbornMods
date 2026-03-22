@@ -196,6 +196,21 @@ namespace Timberbot
                         return _service.SetWorkers(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<int>("count") ?? 0);
+                    case "/api/planting/mark":
+                        return _service.MarkPlanting(
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0,
+                            body?.Value<int>("z") ?? 0,
+                            body?.Value<string>("crop") ?? "");
+                    case "/api/planting/clear":
+                        return _service.UnmarkPlanting(
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0,
+                            body?.Value<int>("z") ?? 0);
                     case "/api/cutting/area":
                         return _service.MarkCuttingArea(
                             body?.Value<int>("x1") ?? 0,

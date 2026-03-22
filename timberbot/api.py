@@ -172,6 +172,18 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": True
         })
 
+    def plant_crop(self, x1, y1, x2, y2, z, crop):
+        """Mark a rectangular area for planting a crop. Crop names: Kohlrabi, Cassava, Carrot, Potato, Wheat, etc."""
+        return self._post("/api/planting/mark", {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "crop": crop
+        })
+
+    def clear_planting(self, x1, y1, x2, y2, z):
+        """Clear planting marks from a rectangular area."""
+        return self._post("/api/planting/clear", {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z
+        })
+
     def clear_trees(self, x1, y1, x2, y2, z):
         """Clear tree cutting marks from a rectangular area."""
         return self._post("/api/cutting/area", {

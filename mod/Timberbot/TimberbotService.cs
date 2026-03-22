@@ -13,6 +13,7 @@ using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
+using Timberborn.PlantingUI;
 using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
@@ -41,6 +42,7 @@ namespace Timberbot
         private readonly SpeedManager _speedManager;
         private readonly EntityRegistry _entityRegistry;
         private readonly TreeCuttingArea _treeCuttingArea;
+        private readonly PlantingSelectionService _plantingSelectionService;
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
@@ -60,6 +62,7 @@ namespace Timberbot
             SpeedManager speedManager,
             EntityRegistry entityRegistry,
             TreeCuttingArea treeCuttingArea,
+            PlantingSelectionService plantingSelectionService,
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
             EntityService entityService,
@@ -77,6 +80,7 @@ namespace Timberbot
             _speedManager = speedManager;
             _entityRegistry = entityRegistry;
             _treeCuttingArea = treeCuttingArea;
+            _plantingSelectionService = plantingSelectionService;
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
@@ -628,6 +632,60 @@ namespace Timberbot
                 id = buildingId,
                 name = ec.GameObject.name,
                 good = sga.AllowedGood
+            };
+        }
+
+        public object MarkPlanting(int x1, int y1, int x2, int y2, int z, string crop)
+        {
+            var minX = Mathf.Min(x1, x2);
+            var maxX = Mathf.Max(x1, x2);
+            var minY = Mathf.Min(y1, y2);
+            var maxY = Mathf.Max(y1, y2);
+
+            var coords = new List<Vector3Int>();
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    coords.Add(new Vector3Int(x, y, z));
+                }
+            }
+
+            var ray = new Ray(Vector3.up * 100, Vector3.down);
+            _plantingSelectionService.MarkArea(coords, ray, crop);
+
+            return new
+            {
+                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                crop,
+                tiles = coords.Count
+            };
+        }
+
+        public object UnmarkPlanting(int x1, int y1, int x2, int y2, int z)
+        {
+            var minX = Mathf.Min(x1, x2);
+            var maxX = Mathf.Max(x1, x2);
+            var minY = Mathf.Min(y1, y2);
+            var maxY = Mathf.Max(y1, y2);
+
+            var coords = new List<Vector3Int>();
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    coords.Add(new Vector3Int(x, y, z));
+                }
+            }
+
+            var ray = new Ray(Vector3.up * 100, Vector3.down);
+            _plantingSelectionService.UnmarkArea(coords, ray);
+
+            return new
+            {
+                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                cleared = true,
+                tiles = coords.Count
             };
         }
 
