@@ -176,6 +176,76 @@ def main():
         failed += 1
     bot.set_workhours(old)  # restore
 
+    # distribution import option write
+    result = bot.set_distribution("District 1", "Plank", import_option="Auto")
+    if check("distribution import write", "error" not in result):
+        passed += 1
+    else:
+        failed += 1
+    bot.set_distribution("District 1", "Plank", import_option="Forced")  # restore
+
+    # priority write (find a building, set + restore)
+    buildings = bot.buildings(limit=5)
+    prio_bldg = next((b for b in buildings if "priority" in b and b.get("priority") == "Normal"), None)
+    if prio_bldg:
+        result = bot.set_priority(prio_bldg["id"], "VeryHigh")
+        if check("priority write", result.get("priority") == "VeryHigh"):
+            passed += 1
+        else:
+            failed += 1
+        bot.set_priority(prio_bldg["id"], "Normal")  # restore
+    else:
+        if check("priority write (no building found)", False):
+            passed += 1
+        else:
+            failed += 1
+
+    # workers write (find a workplace, set + restore)
+    workplaces = [b for b in bot.buildings() if b.get("maxWorkers", 0) > 0]
+    if workplaces:
+        wp = workplaces[0]
+        old_workers = wp.get("desiredWorkers", 0)
+        result = bot.set_workers(wp["id"], 0)
+        if check("workers write", result.get("desiredWorkers") == 0):
+            passed += 1
+        else:
+            failed += 1
+        bot.set_workers(wp["id"], old_workers)  # restore
+    else:
+        if check("workers write (no workplace found)", False):
+            passed += 1
+        else:
+            failed += 1
+
+    # pause/unpause write
+    pausable = next((b for b in bot.buildings() if b.get("pausable") and not b.get("paused")), None)
+    if pausable:
+        result = bot.pause_building(pausable["id"])
+        if check("pause write", result.get("paused") == True):
+            passed += 1
+        else:
+            failed += 1
+        bot.unpause_building(pausable["id"])  # restore
+    else:
+        if check("pause write (no pausable found)", False):
+            passed += 1
+        else:
+            failed += 1
+
+    # stockpile good write (find a tank)
+    tanks = [b for b in bot.buildings() if "Tank" in b.get("name", "")]
+    if tanks:
+        result = bot.set_good(tanks[0]["id"], "Water")
+        if check("stockpile good write", result.get("good") == "Water"):
+            passed += 1
+        else:
+            failed += 1
+    else:
+        if check("stockpile good write (no tank found)", False):
+            passed += 1
+        else:
+            failed += 1
+
     print("\n=== pagination ===\n")
 
     all_buildings = bot.buildings()
