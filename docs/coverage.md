@@ -41,6 +41,10 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Decorations | YES | YES | `place_building` |
 | Map/terrain | YES | NO | `map`, `scan`, `visual` |
 | Game speed | YES | YES | `speed`, `set_speed` (0-3) |
+| Soil contamination | YES | NO | `contaminated` field on map tiles |
+| District migration | YES | YES | `migrate from:X to:Y count:N` |
+| Clutch status | YES | NO | `isClutch`, `clutchEngaged` on buildings |
+| Per-building power | YES | NO | `nominalPowerInput`, `nominalPowerOutput` on buildings |
 | Automation levers | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Automation adapters | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Pagination | YES | N/A | `limit`/`offset` on buildings, trees, gatherables, beavers |
@@ -49,14 +53,14 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 
 | Gap | Severity | Notes |
 |---|---|---|
-| Bot condition/fuel/energy | Medium | Bots have Condition instead of wellbeing. Can't see fuel/charge status |
-| District migration | Medium | Can't move beavers between districts via API |
+| Bot condition/fuel/energy | Likely closed | Bots use same NeedManager as beavers, needs show via `beavers` endpoint. Needs in-game testing with bots |
+| District migration | Closed | `migrate from:X to:Y count:N` moves adult beavers between districts |
 | Forestry tree planting | Untested | `plant_crop crop:Pine` should work but not confirmed |
-| Badwater contamination per tile | Minor | Map shows water height but not contamination level |
-| Per-building power input/output | Minor | Only graph-level demand/supply, not per-building |
+| Badwater contamination per tile | Closed | `contaminated` field on map tiles via `ISoilContaminationService` |
+| Per-building power input/output | Closed | `nominalPowerInput`, `nominalPowerOutput` on each power building |
 | Clutch status | Closed | `isClutch`, `clutchEngaged` on buildings (read only, toggle via lever) |
 | Dwelling occupant count | Minor | `hasHome` on beavers but no occupant count on buildings |
-| Wellbeing tiers | Minor | No tier labels (just numeric score) |
+| Wellbeing tiers | Closed | `tier` field in TOON output (miserable/unhappy/okay/happy/ecstatic) |
 
 ## By design (not gaps)
 

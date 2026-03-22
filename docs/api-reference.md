@@ -15,10 +15,10 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/population` | tabular | `[N]{district,adults,children,bots}` |
 | `/api/resources` | tabular | `[N]{district,good,available,all}` |
 | `/api/districts` | tabular | `[N]{name,adults,children,bots,Water,Log,...}` |
-| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers,reachable,powered,isGenerator,isConsumer,powerDemand,powerSupply,buildProgress,materialProgress,hasMaterials,inventory,statuses,isWonder,wonderActive}` |
+| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers,reachable,powered,isGenerator,isConsumer,nominalPowerInput,nominalPowerOutput,powerDemand,powerSupply,buildProgress,materialProgress,hasMaterials,inventory,statuses,isWonder,wonderActive,dwellers,isClutch,clutchEngaged}` |
 | `/api/trees` | tabular | `[N]{id,name,x,y,z,marked,alive,grown,growth}` |
 | `/api/gatherables` | tabular | `[N]{id,name,x,y,z,alive}` |
-| `/api/beavers` | tabular | `[N]{id,name,wellbeing,needs,anyCritical,lifeProgress,workplace,isBot,contaminated}` |
+| `/api/beavers` | tabular | `[N]{id,name,wellbeing,needs,anyCritical,lifeProgress,workplace,isBot,contaminated,hasHome}` |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
 | `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
 | `/api/science` | nested | `{points, unlockables[N]{name,unlocked}}` |
@@ -37,6 +37,7 @@ All write endpoints accept JSON bodies.
 | `/api/science/unlock` | `{"building": "Name"}` | unlock a building using science points |
 | `/api/distribution` | `{"district": "Name", "good": "Log", "import": "Forced", "exportThreshold": 50}` | set import/export per good |
 | `/api/workhours` | `{"endHours": 14}` | set when work ends (1-24) |
+| `/api/district/migrate` | `{"from": "District 1", "to": "District 2", "count": 3}` | move adult beavers between districts |
 | `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
 | `/api/building/demolish` | `{"id": N}` | demolish a building |
 | `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles, origin-corrected) |
