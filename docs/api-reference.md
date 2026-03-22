@@ -13,8 +13,8 @@ Base URL: `http://localhost:8085`
 | `/api/time` | day number, progress |
 | `/api/weather` | cycle, drought countdown |
 | `/api/districts` | districts with resources + population |
-| `/api/buildings` | all buildings: id, name, coords, pause, priority, workers |
-| `/api/trees` | all cuttable trees: id, name, coords, marked status |
+| `/api/buildings` | all buildings: id, name, coords, orientation, entrance, pause, priority, workers |
+| `/api/trees` | all cuttable trees: id, name, coords, marked, alive, grown, growth progress |
 | `/api/gatherables` | gatherable resources (berry bushes etc) |
 | `/api/prefabs` | available building templates for placement |
 | `/api/speed` | current game speed `{speed: 0-3}` |
@@ -38,7 +38,7 @@ All write endpoints accept JSON bodies.
 | `/api/planting/clear` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N}` | clear planting marks |
 | `/api/stockpile/capacity` | `{"id": N, "capacity": 100}` | set stockpile capacity |
 | `/api/stockpile/good` | `{"id": N, "good": "Log"}` | set allowed good |
-| `/api/map` | `{"x1": N, "y1": N, "x2": N, "y2": N}` | terrain + water for a region |
+| `/api/map` | `{"x1": N, "y1": N, "x2": N, "y2": N}` | terrain + water + occupants + entrances + seedlings for a region |
 
 ## IDs and names
 
@@ -55,9 +55,13 @@ These are convenience methods in `timberbot.py`, not HTTP endpoints:
 
 | Method | Description |
 |--------|-------------|
-| `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths (calls `place_building` per tile) |
-| `scan x:N y:N radius:10` | ASCII grid of terrain, water, buildings, trees |
+| `unpause_building building_id:N` | unpause a building (convenience wrapper) |
+| `clear_trees x1:N y1:N x2:N y2:N z:N` | clear tree cutting marks (convenience wrapper) |
+| `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths |
+| `scan x:N y:N radius:10` | ASCII grid showing terrain, water, buildings (full footprint), trees (T=grown, t=seedling), entrances (@), bushes |
 | `find source:buildings name:NAME x:N y:N radius:20` | find entities by name and/or proximity |
+| `near items x:N y:N radius:20` | filter items by distance (static helper) |
+| `named items name:NAME` | filter items by name substring (static helper) |
 | `watch` | live terminal dashboard (polls every 3s) |
 
 ## Vanilla API (port 8080)
