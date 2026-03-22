@@ -34,7 +34,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Resources[/td][td]Plant crops, configure stockpiles[/td][td]Tested[/td][/tr]
 [tr][td]Resources[/td][td]Mark trees for cutting[/td][td]Tested[/td][/tr]
 [tr][td]Resources[/td][td]Set floodgate heights[/td][td]Tested[/td][/tr]
-[tr][td]Resources[/td][td]Soil contamination per tile[/td][td]Implemented[/td][/tr]
+[tr][td]Resources[/td][td]Water contamination (badwater) and soil contamination per tile[/td][td]Tested[/td][/tr]
 [tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]Implemented[/td][/tr]
 [tr][td]Tools[/td][td]TOON output for AI, ASCII map scanner, live dashboard, search[/td][td]Tested[/td][/tr]
 [/table]
