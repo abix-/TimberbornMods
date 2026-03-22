@@ -298,29 +298,37 @@ class Timberbot:
         Usage: bot.scan(120, 140, 8)
         """
         ICONS = {
-            "Path": "\u2550",           # path
-            "Pine": "\u2663",           # tree
-            "Birch": "\u2663",
-            "Oak": "\u2663",
-            "Maple": "\u2663",
-            "Bush": "\u2766",           # bush/berry
-            "berry": "\u2766",
-            "Lumberjack": "\u2692",     # lumberjack
-            "Gatherer": "\u2619",       # gatherer
-            "DistrictCenter": "\u2302", # district center
-            "Rowhouse": "\u2302",       # housing
-            "Barrack": "\u2302",
-            "Tank": "\u2588",           # tank (solid block)
-            "Pump": "\u2588",           # pump
-            "PowerWheel": "\u26A1",     # power
-            "PowerShaft": "\u26A1",
-            "LumberMill": "\u2699",     # mill/gear
-            "WoodWorkshop": "\u2699",
-            "FarmHouse": "\u2618",      # farm
-            "Hauling": "\u2637",        # hauling
-            "Breeding": "\u2665",       # breeding
-            "Inventor": "\u2605",       # science
-            "Forester": "\u2663",
+            "Path": "=",
+            "Pine": "T",
+            "Birch": "T",
+            "Oak": "T",
+            "Maple": "T",
+            "Bush": "b",
+            "berry": "b",
+            "Lumberjack": "L",
+            "Gatherer": "G",
+            "DistrictCenter": "D",
+            "Rowhouse": "H",
+            "Barrack": "H",
+            "Lodge": "H",
+            "Tank": "W",
+            "Pump": "P",
+            "PowerWheel": "E",
+            "PowerShaft": "e",
+            "LumberMill": "M",
+            "WoodWorkshop": "M",
+            "IndustrialLumberMill": "M",
+            "FarmHouse": "F",
+            "Hauling": "K",
+            "Breeding": "R",
+            "Inventor": "S",
+            "Forester": "f",
+            "Warehouse": "$",
+            "Pile": "$",
+            "Campfire": "C",
+            "Floodgate": "X",
+            "Dam": "X",
+            "Levee": "X",
         }
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
@@ -342,11 +350,11 @@ class Timberbot:
                             break
                     row += icon if icon else name[0]
                 elif t["water"] > 0:
-                    row += "\u2248"  # water waves
-                    legend_items.add("\u2248 Water")
+                    row += "~"
+                    legend_items.add("~ Water")
                 elif t["terrain"] > 0:
-                    row += "\u00B7"  # middle dot = empty ground
-                    legend_items.add("\u00B7 Empty")
+                    row += "."
+                    legend_items.add(". Empty")
                 else:
                     row += " "
             lines.append(row)
