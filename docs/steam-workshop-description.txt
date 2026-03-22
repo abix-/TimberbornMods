@@ -1,7 +1,6 @@
 Let an AI play Timberborn. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can run a beaver colony.
 
 [h1]What can it do?[/h1]
-
 [b]Read:[/b] Colony snapshot, all buildings with workers and entrances, trees (seedling vs mature), berry bushes, terrain map with water levels, available prefabs
 
 [b]Build:[/b] Place and demolish any building with rotation control
@@ -13,8 +12,7 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [b]Tools:[/b] ASCII map scanner, live dashboard, find-nearby search
 
 [h1]How it works[/h1]
-
-The mod runs an HTTP server (port 8085) inside the game. The included Python client makes it easy:
+The mod runs an HTTP server (port 8085) inside the game. Python client included:
 
 [code]
 python timberbot.py summary
@@ -26,7 +24,6 @@ python timberbot.py watch
 [/code]
 
 [h1]Getting started[/h1]
-
 1. Subscribe and enable in Mod Manager
 2. Start a game -- API starts automatically on port 8085
 3. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
@@ -34,7 +31,6 @@ python timberbot.py watch
 5. Run: python timberbot.py -- lists all commands
 
 [h1]Docs[/h1]
-
 [url=https://github.com/abix-/TimberbornMods/blob/master/docs/api-reference.md]API Reference[/url] -- all endpoints and commands
 [url=https://github.com/abix-/TimberbornMods/blob/master/docs/getting-started.md]Getting Started[/url] -- examples and walkthrough
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
