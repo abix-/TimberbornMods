@@ -29,12 +29,12 @@ All write endpoints accept JSON bodies.
 | `/api/speed` | `{"speed": 0}` | 0=pause, 1/2/3=speed |
 | `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
 | `/api/building/demolish` | `{"id": N}` | demolish a building |
-| `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles: occupancy, water, terrain) |
+| `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles, origin-corrected) |
 | `/api/floodgate` | `{"id": N, "height": 1.5}` | set floodgate height |
 | `/api/priority` | `{"id": N, "priority": "VeryHigh"}` | VeryLow / Normal / VeryHigh |
 | `/api/workers` | `{"id": N, "count": 2}` | set desired worker count |
 | `/api/cutting/area` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N, "marked": true}` | mark/clear tree cutting area |
-| `/api/planting/mark` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N, "crop": "Carrot"}` | mark area for planting |
+| `/api/planting/mark` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N, "crop": "Carrot"}` | mark area for planting (skips occupied/water/invalid tiles) |
 | `/api/planting/clear` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N}` | clear planting marks |
 | `/api/stockpile/capacity` | `{"id": N, "capacity": 100}` | set stockpile capacity |
 | `/api/stockpile/good` | `{"id": N, "good": "Log"}` | set allowed good |
@@ -46,7 +46,8 @@ All write endpoints accept JSON bodies.
 - Prefab names come from `GET /api/prefabs`
 - Good names match Timberborn internal names (e.g. `Log`, `Plank`, `Water`, `Berries`)
 - Priority values: `VeryLow`, `Normal`, `VeryHigh`
-- Orientation: 0-3 (0=default, rotates 90 degrees each step)
+- Orientation: south, west, north, east (Python client only accepts names, C# API accepts 0-3)
+  - Coords always refer to the bottom-left corner of the footprint regardless of orientation
 - Crop names: `Kohlrabi`, `Cassava`, `Carrot`, `Potato`, `Wheat`, `Sunflower`, etc.
 
 ## Python-only helpers
