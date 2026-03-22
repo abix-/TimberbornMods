@@ -293,38 +293,65 @@ class Timberbot:
         return {"free": free, "occupied": occupied}
 
     def scan(self, x, y, radius=10):
-        """Scan an area and return a readable grid showing terrain, water, and occupants.
+        """Scan an area and return a Unicode grid showing terrain, water, and occupants.
 
         Usage: bot.scan(120, 140, 8)
-        Legend: .=empty ~=water P=path T=tree B=bush #=building
         """
+        ICONS = {
+            "Path": "\u2550",           # path
+            "Pine": "\u2663",           # tree
+            "Birch": "\u2663",
+            "Oak": "\u2663",
+            "Maple": "\u2663",
+            "Bush": "\u2766",           # bush/berry
+            "berry": "\u2766",
+            "Lumberjack": "\u2692",     # lumberjack
+            "Gatherer": "\u2619",       # gatherer
+            "DistrictCenter": "\u2302", # district center
+            "Rowhouse": "\u2302",       # housing
+            "Barrack": "\u2302",
+            "Tank": "\u2588",           # tank (solid block)
+            "Pump": "\u2588",           # pump
+            "PowerWheel": "\u26A1",     # power
+            "PowerShaft": "\u26A1",
+            "LumberMill": "\u2699",     # mill/gear
+            "WoodWorkshop": "\u2699",
+            "FarmHouse": "\u2618",      # farm
+            "Hauling": "\u2637",        # hauling
+            "Breeding": "\u2665",       # breeding
+            "Inventor": "\u2605",       # science
+            "Forester": "\u2663",
+        }
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         lines = []
+        legend_items = set()
         for ty in range(y + radius, y - radius - 1, -1):
             row = f"{ty:3d} "
             for tx in range(x - radius, x + radius + 1):
                 t = tiles.get((tx, ty))
                 if not t:
-                    row += "?"
+                    row += "\u2591"  # light shade = unknown
                 elif t.get("occupant"):
-                    name = t["occupant"]
-                    if "Path" in name:
-                        row += "="
-                    elif "Pine" in name or "Birch" in name or "Oak" in name or "Maple" in name:
-                        row += "T"
-                    elif "Bush" in name or "berry" in name.lower():
-                        row += "B"
-                    else:
-                        row += "#"
+                    name = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "")
+                    icon = None
+                    for key, sym in ICONS.items():
+                        if key.lower() in name.lower():
+                            icon = sym
+                            legend_items.add(f"{sym} {key}")
+                            break
+                    row += icon if icon else name[0]
                 elif t["water"] > 0:
-                    row += "~"
+                    row += "\u2248"  # water waves
+                    legend_items.add("\u2248 Water")
                 elif t["terrain"] > 0:
-                    row += "."
+                    row += "\u00B7"  # middle dot = empty ground
+                    legend_items.add("\u00B7 Empty")
                 else:
                     row += " "
             lines.append(row)
         lines.append("    " + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)))
+        lines.append("  " + "  ".join(sorted(legend_items)))
         return "\n".join(lines)
 
     def find(self, source, name=None, x=None, y=None, radius=20):

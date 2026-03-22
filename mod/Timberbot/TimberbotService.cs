@@ -391,17 +391,35 @@ namespace Timberbot
             x2 = Mathf.Clamp(x2, 0, size.x - 1);
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
-            // build occupancy map from all entities with BlockObject
+            // build occupancy map from all entities -- use ALL occupied blocks, not just origin
             var occupants = new Dictionary<long, string>();
             foreach (var ec in _entityRegistry.Entities)
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
-                var c = bo.Coordinates;
-                if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                var name = ec.GameObject.name;
+                try
                 {
-                    long key = (long)c.x * 100000 + c.y;
-                    occupants[key] = ec.GameObject.name;
+                    var positioned = bo.PositionedBlocks;
+                    foreach (var block in positioned.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                        {
+                            long key = (long)c.x * 100000 + c.y;
+                            occupants[key] = name;
+                        }
+                    }
+                }
+                catch
+                {
+                    // fallback to origin coordinate
+                    var c = bo.Coordinates;
+                    if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                    {
+                        long key = (long)c.x * 100000 + c.y;
+                        occupants[key] = name;
+                    }
                 }
             }
 

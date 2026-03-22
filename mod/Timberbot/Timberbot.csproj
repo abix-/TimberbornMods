@@ -136,6 +136,10 @@
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
 
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>$(GameManagedDir)\System.Collections.Immutable.dll</HintPath>
+    </Reference>
+
     <!-- Non-publicized -->
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
