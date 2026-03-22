@@ -121,6 +121,12 @@ class Timberbot:
         """Work schedule: {endHours, areWorkingHours, hoursPassedToday}."""
         return self._get("/api/workhours")
 
+    def migrate(self, from_district, to_district, count=1):
+        """Move beavers between districts."""
+        return self._post("/api/district/migrate", {
+            "from": from_district, "to": to_district, "count": count
+        })
+
     def set_workhours(self, end_hours):
         """Set when work ends (1-24). Beavers work from dawn until endHours."""
         return self._post("/api/workhours", {"endHours": end_hours})
@@ -704,9 +710,18 @@ def _flatten_for_toon(method, data):
         flat = []
         for b in data:
             critical = [k for k, v in b.get("needs", {}).items() if v.get("isCritical")]
+            wb = round(b.get("wellbeing", 0), 2)
+            # wellbeing tiers: 0-3=miserable, 4-7=unhappy, 8-11=okay, 12-15=happy, 16+=ecstatic
+            if wb >= 16: tier = "ecstatic"
+            elif wb >= 12: tier = "happy"
+            elif wb >= 8: tier = "okay"
+            elif wb >= 4: tier = "unhappy"
+            else: tier = "miserable"
             flat.append({"id": b["id"],
                          "name": b.get("name", "").replace("(Clone)", ""),
-                         "wellbeing": round(b.get("wellbeing", 0), 2),
+                         "wellbeing": wb,
+                         "tier": tier,
+                         "isBot": b.get("isBot", False),
                          "critical": "+".join(critical) if critical else ""})
         return flat or data
 

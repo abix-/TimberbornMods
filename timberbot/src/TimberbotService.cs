@@ -42,6 +42,8 @@ using Timberborn.NotificationSystem;
 using Timberborn.StatusSystem;
 using Timberborn.DwellingSystem;
 using Timberborn.PowerManagement;
+using Timberborn.SoilContaminationSystem;
+using Timberborn.GameDistrictsMigration;
 using UnityEngine;
 
 namespace Timberbot
@@ -68,6 +70,8 @@ namespace Timberbot
         private readonly BuildingUnlockingService _buildingUnlockingService;
         private readonly NotificationSaver _notificationSaver;
         private readonly WorkingHoursManager _workingHoursManager;
+        private readonly ISoilContaminationService _soilContaminationService;
+        private readonly PopulationDistributorRetriever _populationDistributorRetriever;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -90,7 +94,9 @@ namespace Timberbot
             ScienceService scienceService,
             BuildingUnlockingService buildingUnlockingService,
             NotificationSaver notificationSaver,
-            WorkingHoursManager workingHoursManager)
+            WorkingHoursManager workingHoursManager,
+            ISoilContaminationService soilContaminationService,
+            PopulationDistributorRetriever populationDistributorRetriever)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -112,6 +118,8 @@ namespace Timberbot
             _buildingUnlockingService = buildingUnlockingService;
             _notificationSaver = notificationSaver;
             _workingHoursManager = workingHoursManager;
+            _soilContaminationService = soilContaminationService;
+            _populationDistributorRetriever = populationDistributorRetriever;
         }
 
         public void Load()
@@ -372,6 +380,8 @@ namespace Timberbot
                 {
                     entry["isGenerator"] = node.IsGenerator;
                     entry["isConsumer"] = node.IsConsumer;
+                    entry["nominalPowerInput"] = node._nominalPowerInput;
+                    entry["nominalPowerOutput"] = node._nominalPowerOutput;
                     try
                     {
                         var graph = node.Graph;
@@ -613,6 +623,37 @@ namespace Timberbot
             return new { endHours = _workingHoursManager.EndHours };
         }
 
+        public object MigratePopulation(string fromDistrict, string toDistrict, int count)
+        {
+            Timberborn.GameDistricts.DistrictCenter fromDc = null, toDc = null;
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                if (dc.DistrictName == fromDistrict) fromDc = dc;
+                if (dc.DistrictName == toDistrict) toDc = dc;
+            }
+            if (fromDc == null) return new { error = "from district not found", from = fromDistrict };
+            if (toDc == null) return new { error = "to district not found", to = toDistrict };
+
+            try
+            {
+                var distributor = _populationDistributorRetriever.GetPopulationDistributor<AdultsDistributorTemplate>(fromDc);
+                if (distributor == null)
+                    return new { error = "no population distributor", from = fromDistrict };
+
+                var available = distributor.Current;
+                var toMove = System.Math.Min(count, available);
+                if (toMove <= 0)
+                    return new { error = "no population to migrate", from = fromDistrict, available };
+
+                distributor.MigrateTo(toDc, toMove);
+                return new { from = fromDistrict, to = toDistrict, migrated = toMove };
+            }
+            catch (System.Exception ex)
+            {
+                return new { error = ex.Message, from = fromDistrict, to = toDistrict };
+            }
+        }
+
         public object CollectMap(int x1, int y1, int x2, int y2)
         {
             var size = _terrainService.Size;
@@ -721,6 +762,12 @@ namespace Timberbot
                     if (occupant != null) tile["occupant"] = occupant;
                     if (isEntrance) tile["entrance"] = true;
                     if (isSeedling) tile["seedling"] = true;
+                    try
+                    {
+                        if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)))
+                            tile["contaminated"] = true;
+                    }
+                    catch { }
                     tiles.Add(tile);
                 }
             }

@@ -38,16 +38,12 @@ Use vanilla HTTP for real-time automation triggers (water rises -> open floodgat
 [h1]How it works[/h1]
 Two APIs, one Python client:
 [code]
-# Timberbot API (port 8085) -- strategic control
 python timberbot.py summary
 python timberbot.py buildings
 python timberbot.py beavers
 python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 python timberbot.py scan x:120 y:140 radius:10
-
-# Vanilla API (port 8080) -- real-time automation
-python timberbot.py levers
-python timberbot.py lever_on name:MyFloodgateLever
+python timberbot.py alerts
 [/code]
 
 [h1]Getting started[/h1]

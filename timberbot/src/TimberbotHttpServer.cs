@@ -241,6 +241,11 @@ namespace Timberbot
                     case "/api/workhours":
                         return _service.SetWorkHours(
                             body?.Value<int>("endHours") ?? 16);
+                    case "/api/district/migrate":
+                        return _service.MigratePopulation(
+                            body?.Value<string>("from") ?? "",
+                            body?.Value<string>("to") ?? "",
+                            body?.Value<int>("count") ?? 1);
                     case "/api/science/unlock":
                         return _service.UnlockBuilding(
                             body?.Value<string>("building") ?? "");
