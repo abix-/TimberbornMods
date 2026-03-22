@@ -34,7 +34,8 @@ python timberbot.py summary
 python timberbot.py buildings
 python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:3
 python timberbot.py plant_crop x1:123 y1:138 x2:128 y2:141 z:2 crop:Kohlrabi
-python timberbot.py scan x:120 y:140 radius:10
+python timberbot.py scan x:120 y:140 radius:10    # compact TOON format for AI
+python timberbot.py visual x:120 y:140 radius:10  # colored ASCII map for humans
 python timberbot.py watch
 [/code]
 
