@@ -15,11 +15,12 @@ Python client
 
 ```bash
 # with Timberborn running + mod loaded
-python timberbot.py summary           # full colony snapshot
-python timberbot.py buildings         # list all buildings
-python timberbot.py set_speed 3       # fast forward
-python timberbot.py watch             # live dashboard
-python timberbot.py                   # list all methods
+python timberbot.py summary                              # full colony snapshot
+python timberbot.py buildings                            # list all buildings
+python timberbot.py set_speed speed:3                    # fast forward
+python timberbot.py place_building prefab:Path x:100 y:130 z:2
+python timberbot.py watch                                # live dashboard
+python timberbot.py                                      # list all methods
 ```
 
 Or use raw HTTP -- no Python needed:
