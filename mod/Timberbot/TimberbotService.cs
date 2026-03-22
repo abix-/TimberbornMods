@@ -613,11 +613,18 @@ namespace Timberbot
                 FlipMode.Unflipped);
 
             // validate before placing -- prevent ghost buildings
-            var previewGo = _templateInstantiator.Instantiate(
-                buildingSpec.GetSpec<Timberborn.TemplateSystem.TemplateSpec>().Blueprint,
-                null);
+            var templateSpec = buildingSpec.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+            if (templateSpec?.Blueprint == null)
+                return new { error = "no blueprint for prefab", prefab = prefabName };
+
+            var previewGo = _templateInstantiator.Instantiate(templateSpec.Blueprint, null);
             previewGo.SetActive(false);
             var previewBo = previewGo.GetComponentInChildren<BlockObject>();
+            if (previewBo == null)
+            {
+                UnityEngine.Object.Destroy(previewGo);
+                return new { error = "no block object in preview", prefab = prefabName };
+            }
             previewBo.MarkAsPreviewAndInitialize();
             previewBo.Reposition(placement);
             bool isValid = previewBo.IsValid();
