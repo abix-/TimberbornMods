@@ -53,14 +53,9 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 
 | Gap | Severity | Notes |
 |---|---|---|
-| Bot condition/fuel/energy | Likely closed | Bots use same NeedManager as beavers, needs show via `beavers` endpoint. Needs in-game testing with bots |
-| District migration | Closed | `migrate from:X to:Y count:N` moves adult beavers between districts |
-| Forestry tree planting | Untested | `plant_crop crop:Pine` should work but not confirmed |
-| Badwater contamination per tile | Closed | `contaminated` field on map tiles via `ISoilContaminationService` |
-| Per-building power input/output | Closed | `nominalPowerInput`, `nominalPowerOutput` on each power building |
-| Clutch status | Closed | `isClutch`, `clutchEngaged` on buildings (read only, toggle via lever) |
 | Dwelling occupant count | Minor | `hasHome` on beavers but no occupant count on buildings |
-| Wellbeing tiers | Closed | `tier` field in TOON output (miserable/unhappy/okay/happy/ecstatic) |
+| Forestry tree planting | Untested | `plant_crop crop:Pine` should work but not confirmed |
+| Bot condition/fuel | Untested | Bots use same NeedManager, needs should show via `beavers` endpoint |
 
 ## By design (not gaps)
 
@@ -68,5 +63,3 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 |---|---|
 | Automation (levers, adapters, sensors) | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Logic gates | In-game only, no external control needed |
-| Reproduction | Happens naturally when needs are met |
-| Water physics/flow | Game engine handles this, not controllable |
