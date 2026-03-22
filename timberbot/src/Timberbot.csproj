@@ -184,6 +184,18 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.SoilContaminationSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.SoilContaminationSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.DwellingSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.DwellingSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.PowerManagement" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.PowerManagement.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.BeaverContaminationSystem" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BeaverContaminationSystem.dll</HintPath>

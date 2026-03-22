@@ -40,6 +40,8 @@ using Timberborn.Bots;
 using Timberborn.Wonders;
 using Timberborn.NotificationSystem;
 using Timberborn.StatusSystem;
+using Timberborn.DwellingSystem;
+using Timberborn.PowerManagement;
 using UnityEngine;
 
 namespace Timberbot
@@ -426,6 +428,13 @@ namespace Timberbot
                     entry["wonderActive"] = wonder.IsActive;
                 }
 
+                var clutch = ec.GetComponent<Clutch>();
+                if (clutch != null)
+                {
+                    entry["isClutch"] = true;
+                    entry["clutchEngaged"] = clutch.IsEngaged;
+                }
+
                 results.Add(entry);
             }
             return results;
@@ -569,6 +578,10 @@ namespace Timberbot
                 var contaminable = ec.GetComponent<Contaminable>();
                 if (contaminable != null)
                     entry["contaminated"] = contaminable.IsContaminated;
+
+                var dweller = ec.GetComponent<Dweller>();
+                if (dweller != null)
+                    entry["hasHome"] = dweller.HasHome;
 
                 results.Add(entry);
             }
