@@ -752,6 +752,93 @@ namespace Timberbot
         }
 
         // ================================================================
+        // PLACEMENT VALIDATION
+        // ================================================================
+
+        private HashSet<long> GetOccupiedTiles()
+        {
+            var occupied = new HashSet<long>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                // skip temporary debris from demolished buildings
+                var name = ec.GameObject.name;
+                if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
+                try
+                {
+                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        occupied.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+                catch
+                {
+                    var c = bo.Coordinates;
+                    occupied.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                }
+            }
+            return occupied;
+        }
+
+        private struct FootprintTile
+        {
+            public Vector3Int coords;
+            public bool isGroundFloor;
+        }
+
+        private List<FootprintTile> ComputeFootprint(BlockObjectSpec spec, int x, int y, int z, int orientation)
+        {
+            var size = spec.Size;
+            var tiles = new List<FootprintTile>();
+            for (int lx = 0; lx < size.x; lx++)
+            {
+                for (int ly = 0; ly < size.y; ly++)
+                {
+                    for (int lz = 0; lz < size.z; lz++)
+                    {
+                        // rotate local (lx, ly) by orientation
+                        int rx, ry;
+                        switch (orientation)
+                        {
+                            case 1: // Cw90
+                                rx = ly; ry = -lx;
+                                break;
+                            case 2: // Cw180
+                                rx = -lx; ry = -ly;
+                                break;
+                            case 3: // Cw270
+                                rx = -ly; ry = lx;
+                                break;
+                            default: // Cw0
+                                rx = lx; ry = ly;
+                                break;
+                        }
+                        tiles.Add(new FootprintTile
+                        {
+                            coords = new Vector3Int(x + rx, y + ry, z + lz),
+                            isGroundFloor = lz == 0
+                        });
+                    }
+                }
+            }
+            return tiles;
+        }
+
+        private int GetTerrainHeight(int x, int y)
+        {
+            var size = _terrainService.Size;
+            if (x < 0 || x >= size.x || y < 0 || y >= size.y) return 0;
+            var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+            var stride = _mapIndexService.VerticalStride;
+            var columnCount = _terrainMap.ColumnCounts[index2D];
+            if (columnCount <= 0) return 0;
+            var topIndex = index2D + (columnCount - 1) * stride;
+            return _terrainMap.GetColumnCeiling(topIndex);
+        }
+
+        // ================================================================
         // WRITE ENDPOINTS -- Tier 3
         // ================================================================
 
@@ -792,6 +879,11 @@ namespace Timberbot
             return new { id = buildingId, name, demolished = true };
         }
 
+        private static readonly HashSet<string> WaterBuildingNames = new HashSet<string>
+        {
+            "Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"
+        };
+
         public object PlaceBuilding(string prefabName, int x, int y, int z, int orientation)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
@@ -802,11 +894,57 @@ namespace Timberbot
             if (blockObjectSpec == null)
                 return new { error = "no block object spec", prefab = prefabName };
 
+            // pre-validate: check all tiles the building would occupy
+            var footprint = ComputeFootprint(blockObjectSpec, x, y, z, orientation);
+            var occupied = GetOccupiedTiles();
+            bool isWaterBuilding = false;
+            foreach (var w in WaterBuildingNames)
+            {
+                if (prefabName.IndexOf(w, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    isWaterBuilding = true;
+                    break;
+                }
+            }
+
+            foreach (var ft in footprint)
+            {
+                var tile = ft.coords;
+
+                // only check terrain/water for ground floor tiles
+                if (ft.isGroundFloor)
+                {
+                    int terrainHeight = GetTerrainHeight(tile.x, tile.y);
+
+                    // check water
+                    if (!isWaterBuilding)
+                    {
+                        float waterHeight = 0f;
+                        try { waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(tile.x, tile.y, terrainHeight)); }
+                        catch { }
+                        if (waterHeight > 0)
+                            return new { error = $"tile ({tile.x},{tile.y}) is water", prefab = prefabName, x, y, z, orientation };
+                    }
+
+                    // check terrain supports the building
+                    if (terrainHeight == 0 && !isWaterBuilding)
+                        return new { error = $"no terrain at ({tile.x},{tile.y})", prefab = prefabName, x, y, z, orientation };
+
+                    if (terrainHeight < tile.z && !isWaterBuilding)
+                        return new { error = $"terrain too low at ({tile.x},{tile.y}): height {terrainHeight} < {tile.z}", prefab = prefabName, x, y, z, orientation };
+                }
+
+                // check occupancy (all floors)
+                long key = (long)tile.x * 1000000 + (long)tile.y * 1000 + tile.z;
+                if (occupied.Contains(key))
+                    return new { error = $"tile ({tile.x},{tile.y},{tile.z}) already occupied", prefab = prefabName, x, y, z, orientation };
+            }
+
+            // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
             var placement = new Placement(new Vector3Int(x, y, z), orient,
                 FlipMode.Unflipped);
 
-            // Place() is the ground truth -- callback fires only for valid placements
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
             string placedName = "";
@@ -821,11 +959,11 @@ namespace Timberbot
                 var size = blockObjectSpec.Size;
                 return new
                 {
-                    error = "invalid placement",
+                    error = "placement rejected by game engine",
                     prefab = prefabName,
                     x, y, z, orientation,
                     sizeX = size.x, sizeY = size.y, sizeZ = size.z,
-                    hint = "check terrain height, water, existing buildings, and building size"
+                    hint = "passed pre-validation but game rejected it"
                 };
             }
 
