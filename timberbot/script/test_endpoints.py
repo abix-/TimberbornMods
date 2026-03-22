@@ -45,6 +45,8 @@ def main():
         ("map (size)", lambda: bot.map(), lambda r: "mapSize" in r),
         ("map (region)", lambda: bot.map(120, 130, 125, 135), lambda r: "tiles" in r),
         ("scan", lambda: bot.scan(120, 135, 5), lambda r: isinstance(r, dict) and "occupied" in r),
+        ("distribution", lambda: bot.distribution(), lambda r: isinstance(r, list)),
+        ("tree_clusters", lambda: bot.tree_clusters(), lambda r: isinstance(r, list)),
     ]
 
     for name, fn, validate in tests:
@@ -69,6 +71,68 @@ def main():
         passed += 1
     else:
         failed += 1
+
+    print("\n=== buildings enrichment ===\n")
+
+    buildings = bot.buildings()
+    # find a building with power fields
+    power_bldgs = [b for b in buildings if "isGenerator" in b or "isConsumer" in b]
+    if power_bldgs:
+        pb = power_bldgs[0]
+        for field in ["isGenerator", "isConsumer"]:
+            if check(f"power building has {field}", field in pb):
+                passed += 1
+            else:
+                failed += 1
+    else:
+        if check("any power buildings found", False):
+            passed += 1
+        else:
+            failed += 1
+
+    # find a building with reachable field
+    reach_bldgs = [b for b in buildings if "reachable" in b]
+    if check(f"buildings have reachable ({len(reach_bldgs)} of {len(buildings)})", len(reach_bldgs) > 0):
+        passed += 1
+    else:
+        failed += 1
+
+    print("\n=== distribution detail ===\n")
+
+    dist = bot.distribution()
+    if dist and isinstance(dist, list) and len(dist) > 0:
+        d = dist[0]
+        if check("has district name", "district" in d):
+            passed += 1
+        else:
+            failed += 1
+        goods = d.get("goods", [])
+        if check(f"has goods ({len(goods)})", len(goods) > 0):
+            passed += 1
+        else:
+            failed += 1
+        if goods:
+            g = goods[0]
+            for field in ["good", "importOption", "exportThreshold"]:
+                if check(f"good has {field}", field in g):
+                    passed += 1
+                else:
+                    failed += 1
+
+    print("\n=== tree clusters ===\n")
+
+    clusters = bot.tree_clusters()
+    if check(f"tree_clusters returns list ({len(clusters)})", isinstance(clusters, list) and len(clusters) > 0):
+        passed += 1
+    else:
+        failed += 1
+    if clusters:
+        c = clusters[0]
+        for field in ["x", "y", "z", "grown", "total"]:
+            if check(f"cluster has {field}", field in c):
+                passed += 1
+            else:
+                failed += 1
 
     print("\n=== TOON CLI output ===\n")
 
