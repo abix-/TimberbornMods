@@ -52,7 +52,7 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 1. Add a `Collect*` or action method to `TimberbotService.cs`
 2. Add the route to `RouteRequest()` in `TimberbotHttpServer.cs`
 3. If you need new game services, inject them via the constructor and add the DLL reference to `Timberbot.csproj` with `Publicize="true"` and `<Private>false</Private>`
-4. Add a matching method to the `Timberbot` class in `timberbot/script/timberbot.py`
+4. Add a matching method to the `Timberbot` class in `timberbot/script/timberbot.py` (distributed as `timberbot.py`)
 
 ## Adding new game DLL references
 

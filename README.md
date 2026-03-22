@@ -8,7 +8,7 @@ Timberborn (Unity)
   |-- Vanilla HTTP API (port 8080)   levers + adapters (built-in)
 
 Python client
-  |-- timberbot/script/timberbot.py  single-file API client + CLI + dashboard
+  |-- timberbot.py                   single-file API client + CLI + dashboard
 ```
 
 ## Quick start
@@ -28,7 +28,7 @@ As a library:
 from timberbot import Timberbot
 bot = Timberbot()
 bot.summary()
-bot.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
+bot.place_building("LumberjackFlag.IronTeeth", 120, 130, 2)
 ```
 
 ## Docs
