@@ -59,5 +59,11 @@ python timberbot.py watch                # live dashboard
 3. Start a game -- the API starts automatically on port 8085
 4. Find timberbot.py in your Timberborn mods folder (Documents\Timberborn\Mods\Timberbot\)
 5. Run: python timberbot.py ping
+6. Run: python timberbot.py -- lists all available commands
 
-Full docs and source: https://github.com/abix-/TimberbornMods
+[h1]Documentation[/h1]
+
+[url=https://github.com/abix-/TimberbornMods/blob/master/docs/api-reference.md]API Reference[/url] -- all HTTP endpoints and Python commands
+[url=https://github.com/abix-/TimberbornMods/blob/master/docs/getting-started.md]Getting Started Guide[/url] -- install, first steps, examples
+[url=https://github.com/abix-/TimberbornMods/blob/master/docs/developing.md]Developer Guide[/url] -- add new endpoints, build from source
+[url=https://github.com/abix-/TimberbornMods]Source Code[/url]
