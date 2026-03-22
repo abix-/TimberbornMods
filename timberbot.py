@@ -1,45 +1,30 @@
-"""Timberbot API client for controlling Timberborn.
+"""Timberbot -- control Timberborn over HTTP.
 
 Usage:
-    from timberborn.api import Timberbot
+    python timberbot.py                     list all methods
+    python timberbot.py summary             full colony snapshot
+    python timberbot.py buildings           list all buildings
+    python timberbot.py set_speed 3         fast forward
+    python timberbot.py watch               live dashboard
+    python timberbot.py place_building LumberjackFlag.IronTeeth 120 130 2
+    python timberbot.py demolish_building -- -12345
+
+As a library:
+    from timberbot import Timberbot
     bot = Timberbot()
-
-Read state (noun methods):
-    bot.summary()          -> {time, weather, districts}
-    bot.time()             -> {dayNumber, dayProgress, partialDayNumber}
-    bot.weather()          -> {cycle, cycleDay, isHazardous, ...}
-    bot.population()       -> [{district, adults, children, bots}]
-    bot.resources()        -> {districtName: {goodName: {available, all}}}
-    bot.districts()        -> [{name, population, resources}]
-    bot.buildings()        -> [{id, name, x, y, z, finished, paused, priority, maxWorkers, ...}]
-    bot.trees()            -> [{id, name, x, y, z, marked, alive}]
-    bot.prefabs()          -> [{name, sizeX, sizeY, sizeZ}]
-    bot.speed()            -> {speed}
-
-Write actions (verb_noun methods):
-    bot.set_speed(0-3)
-    bot.pause_building(id)
-    bot.unpause_building(id)
-    bot.set_priority(id, "VeryLow"|"Normal"|"VeryHigh")
-    bot.set_workers(id, count)
-    bot.set_floodgate(id, height)
-    bot.place_building(prefab, x, y, z, orientation=0)
-    bot.demolish_building(id)
-    bot.mark_trees(x1, y1, x2, y2, z)
-    bot.clear_trees(x1, y1, x2, y2, z)
-    bot.set_capacity(id, capacity)
-    bot.set_good(id, good_name)
-
-Vanilla API:
-    bot.levers()
-    bot.adapters()
-    bot.lever_on(name)
-    bot.lever_off(name)
+    bot.summary()
 """
+import json
+import sys
+import time
 import urllib.parse
 
 import requests
 
+
+# ---------------------------------------------------------------------------
+# API client
+# ---------------------------------------------------------------------------
 
 class Timberbot:
     """Client for Timberbot mod (port 8085) + vanilla API (port 8080)."""
@@ -125,7 +110,7 @@ class Timberbot:
         return self._get("/api/speed")
 
     def map(self, x1=0, y1=0, x2=0, y2=0):
-        """Terrain + water for a region. No args = map size only. Returns {mapSize, region, tiles: [{x,y,terrain,water}]}."""
+        """Terrain + water for a region. No args = map size only."""
         if x1 == 0 and y1 == 0 and x2 == 0 and y2 == 0:
             return self._get("/api/map")
         return self._post("/api/map", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
@@ -173,7 +158,7 @@ class Timberbot:
         })
 
     def plant_crop(self, x1, y1, x2, y2, z, crop):
-        """Mark a rectangular area for planting a crop. Crop names: Kohlrabi, Cassava, Carrot, Potato, Wheat, etc."""
+        """Mark area for planting. Crops: Kohlrabi, Cassava, Carrot, Potato, Wheat, etc."""
         return self._post("/api/planting/mark", {
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "crop": crop
         })
@@ -238,42 +223,16 @@ class Timberbot:
         return [i for i in items if low in i.get("name", "").lower()]
 
     def scan(self, x, y, radius=10):
-        """Scan an area and return a Unicode grid showing terrain, water, and occupants.
-
-        Usage: bot.scan(120, 140, 8)
-        """
+        """Scan an area and return a grid showing terrain, water, and occupants."""
         ICONS = {
-            "Path": "=",
-            "Pine": "T",
-            "Birch": "T",
-            "Oak": "T",
-            "Maple": "T",
-            "Bush": "b",
-            "berry": "b",
-            "Lumberjack": "L",
-            "Gatherer": "G",
-            "DistrictCenter": "D",
-            "Rowhouse": "H",
-            "Barrack": "H",
-            "Lodge": "H",
-            "Tank": "W",
-            "Pump": "P",
-            "PowerWheel": "E",
-            "PowerShaft": "e",
-            "LumberMill": "M",
-            "WoodWorkshop": "M",
-            "IndustrialLumberMill": "M",
-            "FarmHouse": "F",
-            "Hauling": "K",
-            "Breeding": "R",
-            "Inventor": "S",
-            "Forester": "f",
-            "Warehouse": "$",
-            "Pile": "$",
-            "Campfire": "C",
-            "Floodgate": "X",
-            "Dam": "X",
-            "Levee": "X",
+            "Path": "=", "Pine": "T", "Birch": "T", "Oak": "T", "Maple": "T",
+            "Bush": "b", "berry": "b", "Lumberjack": "L", "Gatherer": "G",
+            "DistrictCenter": "D", "Rowhouse": "H", "Barrack": "H", "Lodge": "H",
+            "Tank": "W", "Pump": "P", "PowerWheel": "E", "PowerShaft": "e",
+            "LumberMill": "M", "WoodWorkshop": "M", "IndustrialLumberMill": "M",
+            "FarmHouse": "F", "Hauling": "K", "Breeding": "R", "Inventor": "S",
+            "Forester": "f", "Warehouse": "$", "Pile": "$", "Campfire": "C",
+            "Floodgate": "X", "Dam": "X", "Levee": "X",
         }
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
@@ -289,14 +248,14 @@ class Timberbot:
                     row += "@"
                     legend_items.add("@ Entrance")
                 elif t.get("occupant"):
-                    name = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "")
+                    oname = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "")
                     icon = None
                     for key, sym in ICONS.items():
-                        if key.lower() in name.lower():
+                        if key.lower() in oname.lower():
                             icon = sym
                             legend_items.add(f"{sym} {key}")
                             break
-                    row += icon if icon else name[0]
+                    row += icon if icon else oname[0]
                 elif t["water"] > 0:
                     row += "~"
                     legend_items.add("~ Water")
@@ -311,16 +270,188 @@ class Timberbot:
         return "\n".join(lines)
 
     def find(self, source, name=None, x=None, y=None, radius=20):
-        """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity.
-
-        Usage:
-            bot.find("gatherables", name="Blueberry", x=120, y=140)
-            bot.find("buildings", name="Lumberjack")
-            bot.find("trees", x=119, y=126, radius=10)
-        """
+        """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity."""
         items = getattr(self, source)()
         if name:
             items = self.named(items, name)
         if x is not None and y is not None:
             items = self.near(items, x, y, radius)
         return items
+
+
+# ---------------------------------------------------------------------------
+# Live dashboard (watch subcommand)
+# ---------------------------------------------------------------------------
+
+_RST = "\033[0m"
+_BOLD = "\033[1m"
+_DIM = "\033[2m"
+_RED = "\033[31m"
+_WHT = "\033[37m"
+_BRED = "\033[91m"
+_BGRN = "\033[92m"
+_BYEL = "\033[93m"
+_BBLU = "\033[94m"
+_BMAG = "\033[95m"
+_BCYN = "\033[96m"
+
+
+def _bar(pct, width=20):
+    filled = int(pct * width)
+    return f"{_BGRN}{'#' * filled}{_DIM}{'.' * (width - filled)}{_RST}"
+
+
+def _render(data):
+    if not data:
+        print(f"  {_RED}-- game not reachable --{_RST}")
+        return
+
+    t = data.get("time", {})
+    w = data.get("weather", {})
+
+    day = t.get("dayNumber", 0)
+    progress = t.get("dayProgress", 0)
+    cycle = w.get("cycle", 0)
+    cday = w.get("cycleDay", 0)
+    hazardous = w.get("isHazardous", False)
+    temperate_len = w.get("temperateWeatherDuration", 0)
+    hazard_len = w.get("hazardousWeatherDuration", 0)
+    days_left = temperate_len - cday + 1 if not hazardous else 0
+
+    season_color = _BRED if hazardous else _BGRN
+    season_label = "DROUGHT" if hazardous else "temperate"
+    print(f"  {_BOLD}{_BCYN}day {day}{_RST} {_bar(progress)} {_DIM}{progress:.0%}{_RST}")
+    print(f"  {season_color}{season_label}{_RST} {_DIM}cycle {cycle} day {cday}/{temperate_len}+{hazard_len}{_RST}", end="")
+    if not hazardous:
+        if days_left <= 3:
+            print(f"  {_BRED}{_BOLD}{days_left}d to drought!{_RST}")
+        else:
+            print(f"  {_DIM}{days_left}d to drought{_RST}")
+    else:
+        remaining = temperate_len + hazard_len - cday + 1
+        print(f"  {_BRED}{remaining}d remaining{_RST}")
+    print()
+
+    for d in data.get("districts", []):
+        dname = d.get("name", "?")
+        pop = d.get("population", {})
+        adults = pop.get("adults", 0)
+        children = pop.get("children", 0)
+        bots = pop.get("bots", 0)
+        resources = d.get("resources", {})
+
+        total = adults + children + bots
+        print(f"  {_BOLD}{_BYEL}{dname}{_RST}  {_BCYN}{total}{_RST} pop {_DIM}({adults}a {children}c{f' {bots}b' if bots else ''}){_RST}")
+
+        if resources:
+            items = sorted(resources.items(), key=lambda x: -(x[1]["all"] if isinstance(x[1], dict) else x[1]))
+            for good, val in items:
+                if isinstance(val, dict):
+                    avail = val.get("available", 0)
+                    total_stock = val.get("all", 0)
+                else:
+                    avail = total_stock = val
+
+                if "water" in good.lower():
+                    color = _BBLU
+                elif "berr" in good.lower() or "bread" in good.lower() or "carrot" in good.lower():
+                    color = _BGRN
+                elif "log" in good.lower() or "plank" in good.lower() or "wood" in good.lower():
+                    color = _BYEL
+                elif "metal" in good.lower() or "gear" in good.lower() or "scrap" in good.lower():
+                    color = _BMAG
+                else:
+                    color = _WHT
+
+                carried = total_stock - avail
+                carried_str = f" {_DIM}(+{carried} in transit){_RST}" if carried > 0 else ""
+                print(f"    {color}{good:22s}{_RST} {_BOLD}{avail:>5}{_RST}{carried_str}")
+        else:
+            print(f"    {_DIM}(no resources){_RST}")
+        print()
+
+
+def _watch():
+    bot = Timberbot()
+    print(f"\n  {_BOLD}{_BMAG}=== Timberborn Live ==={_RST}\n")
+
+    if not bot.ping():
+        print(f"  {_RED}cannot reach Timberbot on port 8085{_RST}")
+        print(f"  {_DIM}start Timberborn with the mod loaded{_RST}\n")
+        sys.exit(1)
+
+    print(f"  {_BGRN}connected{_RST}  {_DIM}polling every 3s -- ctrl+c to stop{_RST}\n")
+
+    try:
+        while True:
+            try:
+                data = bot.summary()
+            except Exception:
+                data = None
+            print("\033[2J\033[H", end="")
+            print(f"\n  {_BOLD}{_BMAG}=== Timberborn Live ==={_RST}\n")
+            _render(data)
+            time.sleep(3)
+    except KeyboardInterrupt:
+        print(f"\n  {_DIM}bye!{_RST}\n")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _cast(a):
+    if a.lower() == "true":
+        return True
+    if a.lower() == "false":
+        return False
+    try:
+        return int(a)
+    except ValueError:
+        try:
+            return float(a)
+        except ValueError:
+            return a
+
+
+def main():
+    if len(sys.argv) < 2:
+        bot = Timberbot()
+        print("usage: python timberbot.py <method> [args...]")
+        print()
+        print("methods:")
+        for name in sorted(dir(bot)):
+            if name.startswith("_"):
+                continue
+            method = getattr(bot, name)
+            if callable(method):
+                doc = (method.__doc__ or "").split("\n")[0].strip()
+                print(f"  {name:30s} {doc}")
+        print(f"\n  {'watch':30s} live terminal dashboard")
+        sys.exit(1)
+
+    raw_args = [a for a in sys.argv[1:] if a != "--"]
+    method_name = raw_args[0]
+    args = raw_args[1:]
+
+    if method_name == "watch":
+        _watch()
+        return
+
+    bot = Timberbot()
+
+    if not hasattr(bot, method_name):
+        print(f"error: unknown method '{method_name}'", file=sys.stderr)
+        sys.exit(1)
+
+    method = getattr(bot, method_name)
+    if not callable(method):
+        print(json.dumps(method, indent=2))
+        sys.exit(0)
+
+    result = method(*[_cast(a) for a in args])
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

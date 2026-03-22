@@ -28,44 +28,36 @@ You should see `{"status": "ok", "ready": true}`.
 
 ## Install the Python client (optional)
 
-```bash
-pip install ./timberbot_cli
-```
+Download `timberbot.py` from the latest release, or just use it from the repo. Requires `requests`:
 
-This gives you a `timberbot` command and a Python library.
+```bash
+pip install requests
+```
 
 ## First steps
 
 ### CLI
 
 ```bash
-timberbot summary              # full colony snapshot
-timberbot buildings            # list all buildings with IDs
-timberbot speed                # check game speed
-timberbot set_speed 3          # fast forward
-timberbot                      # list all available methods
+python timberbot.py summary            # full colony snapshot
+python timberbot.py buildings          # list all buildings with IDs
+python timberbot.py speed              # check game speed
+python timberbot.py set_speed 3        # fast forward
+python timberbot.py                    # list all available methods
 ```
 
 ### Live dashboard
 
 ```bash
-timberbot watch
+python timberbot.py watch
 ```
 
 Polls every 3 seconds. Shows day progress, drought countdown, per-district population and resources with color coding.
 
-### Interactive REPL
-
-```bash
-python -m timberbot_cli.cli
-```
-
-Gives you a `tb>` prompt with tab-friendly commands like `summary`, `buildings`, `speed 3`, `pause <id>`.
-
 ### Python API
 
 ```python
-from timberbot_cli.api import Timberbot
+from timberbot import Timberbot
 
 bot = Timberbot()
 

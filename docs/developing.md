@@ -11,12 +11,8 @@ TimberbornMods/
     Timberbot.csproj        build config, game DLL references
     manifest.json           mod metadata
     thumbnail.png           Steam Workshop image
-  timberbot_cli/          Python client
-    api.py                  Timberbot class (all HTTP calls)
-    cli.py                  interactive REPL (tb> prompt)
-    watch.py                live terminal dashboard
-    __main__.py             CLI entry point
-    pyproject.toml          Python package config
+  timberbot.py            Python client (API + CLI + dashboard, single file)
+  release.py              build + package + GitHub release script
   docs/                   documentation
   README.md
   .gitignore
@@ -54,8 +50,7 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 1. Add a `Collect*` or action method to `TimberbotService.cs`
 2. Add the route to `RouteRequest()` in `TimberbotHttpServer.cs`
 3. If you need new game services, inject them via the constructor and add the DLL reference to `Timberbot.csproj` with `Publicize="true"` and `<Private>false</Private>`
-4. Add a matching method to `timberbot_cli/api.py`
-5. Add the command to `timberbot_cli/cli.py` if it should be in the REPL
+4. Add a matching method to the `Timberbot` class in `timberbot.py`
 
 ## Adding new game DLL references
 

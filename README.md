@@ -8,27 +8,27 @@ Timberborn (Unity)
   |-- Vanilla HTTP API (port 8080)   levers + adapters (built-in)
 
 Python client
-  |-- timberbot_cli/api.py           Timberbot API wrapper
-  |-- timberbot_cli/cli.py           interactive REPL
-  |-- timberbot_cli/watch.py         live terminal dashboard
+  |-- timberbot.py                   single-file API client + CLI + dashboard
 ```
 
 ## Quick start
 
 ```bash
-# install the Python client
-pip install ./timberbot_cli
+# with Timberborn running + mod loaded
+python timberbot.py summary
+python timberbot.py buildings
+python timberbot.py set_speed 3
+python timberbot.py watch              # live dashboard
+python timberbot.py                    # list all methods
+```
 
-# check connection (with Timberborn running + mod loaded)
-timberbot summary
+As a library:
 
-# live dashboard
-timberbot watch
-
-# control the game
-timberbot set_speed 3
-timberbot buildings
-timberbot pause_building 12345
+```python
+from timberbot import Timberbot
+bot = Timberbot()
+bot.summary()
+bot.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
 ```
 
 ## Docs
@@ -41,7 +41,7 @@ timberbot pause_building 12345
 
 - Timberborn (Steam)
 - .NET SDK 6+ (to build the mod)
-- Python 3.8+ (for the client, optional)
+- Python 3.8+ with `requests` (for the client, optional)
 
 ## Credits
 
