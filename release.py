@@ -12,11 +12,11 @@ import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-MOD_DIR = os.path.join(ROOT, "timberbot")
+SRC_DIR = os.path.join(ROOT, "timberbot", "src")
 DIST_DIR = os.path.join(ROOT, "dist")
-MANIFEST = os.path.join(MOD_DIR, "manifest.json")
-DLL_PATH = os.path.join(MOD_DIR, "bin", "Release", "netstandard2.1", "Timberbot.dll")
-SCRIPT = os.path.join(ROOT, "timberbot.py")
+MANIFEST = os.path.join(SRC_DIR, "manifest.json")
+DLL_PATH = os.path.join(SRC_DIR, "bin", "Release", "netstandard2.1", "Timberbot.dll")
+SCRIPT = os.path.join(ROOT, "timberbot", "script", "timberbot.py")
 
 
 def run(cmd, **kwargs):
@@ -33,7 +33,7 @@ def main():
     print(f"building timberbot v{version}")
 
     # build
-    run("dotnet build -c Release", cwd=MOD_DIR)
+    run("dotnet build -c Release", cwd=SRC_DIR)
 
     # package
     if os.path.exists(DIST_DIR):
@@ -46,7 +46,7 @@ def main():
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(DLL_PATH, "Timberbot.dll")
         zf.write(MANIFEST, "manifest.json")
-        thumb = os.path.join(MOD_DIR, "thumbnail.png")
+        thumb = os.path.join(SRC_DIR, "thumbnail.png")
         if os.path.exists(thumb):
             zf.write(thumb, "thumbnail.png")
 

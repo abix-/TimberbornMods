@@ -8,18 +8,18 @@ Timberborn (Unity)
   |-- Vanilla HTTP API (port 8080)   levers + adapters (built-in)
 
 Python client
-  |-- timberbot.py                   single-file API client + CLI + dashboard
+  |-- timberbot/script/timberbot.py  single-file API client + CLI + dashboard
 ```
 
 ## Quick start
 
 ```bash
 # with Timberborn running + mod loaded
-python timberbot.py summary
-python timberbot.py buildings
-python timberbot.py set_speed 3
-python timberbot.py watch              # live dashboard
-python timberbot.py                    # list all methods
+python timberbot/script/timberbot.py summary
+python timberbot/script/timberbot.py buildings
+python timberbot/script/timberbot.py set_speed 3
+python timberbot/script/timberbot.py watch              # live dashboard
+python timberbot/script/timberbot.py                    # list all methods
 ```
 
 As a library:

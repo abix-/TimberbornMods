@@ -39,17 +39,17 @@ pip install requests
 ### CLI
 
 ```bash
-python timberbot.py summary            # full colony snapshot
-python timberbot.py buildings          # list all buildings with IDs
-python timberbot.py speed              # check game speed
-python timberbot.py set_speed 3        # fast forward
-python timberbot.py                    # list all available methods
+python timberbot/script/timberbot.py summary            # full colony snapshot
+python timberbot/script/timberbot.py buildings          # list all buildings with IDs
+python timberbot/script/timberbot.py speed              # check game speed
+python timberbot/script/timberbot.py set_speed 3        # fast forward
+python timberbot/script/timberbot.py                    # list all available methods
 ```
 
 ### Live dashboard
 
 ```bash
-python timberbot.py watch
+python timberbot/script/timberbot.py watch
 ```
 
 Polls every 3 seconds. Shows day progress, drought countdown, per-district population and resources with color coding.

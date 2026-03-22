@@ -4,14 +4,16 @@
 
 ```
 TimberbornMods/
-  timberbot/              C# mod (runs inside the game)
-    TimberbotService.cs     game state collection + write actions
-    TimberbotHttpServer.cs  background HTTP listener, request queue
-    TimberbotConfigurator.cs  Bindito DI registration
-    Timberbot.csproj        build config, game DLL references
-    manifest.json           mod metadata
-    thumbnail.png           Steam Workshop image
-  timberbot.py            Python client (API + CLI + dashboard, single file)
+  timberbot/
+    src/                    C# mod (runs inside the game)
+      TimberbotService.cs     game state collection + write actions
+      TimberbotHttpServer.cs  background HTTP listener, request queue
+      TimberbotConfigurator.cs  Bindito DI registration
+      Timberbot.csproj        build config, game DLL references
+      manifest.json           mod metadata
+      thumbnail.png           Steam Workshop image
+    script/
+      timberbot.py            Python client (API + CLI + dashboard)
   release.py              build + package + GitHub release script
   docs/                   documentation
   README.md
@@ -23,7 +25,7 @@ TimberbornMods/
 Requires .NET SDK 6+ and Timberborn installed.
 
 ```bash
-cd timberbot
+cd timberbot/src
 dotnet build
 ```
 
@@ -50,7 +52,7 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 1. Add a `Collect*` or action method to `TimberbotService.cs`
 2. Add the route to `RouteRequest()` in `TimberbotHttpServer.cs`
 3. If you need new game services, inject them via the constructor and add the DLL reference to `Timberbot.csproj` with `Publicize="true"` and `<Private>false</Private>`
-4. Add a matching method to the `Timberbot` class in `timberbot.py`
+4. Add a matching method to the `Timberbot` class in `timberbot/script/timberbot.py`
 
 ## Adding new game DLL references
 
