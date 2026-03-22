@@ -496,7 +496,10 @@ namespace Timberbot
 
         public object CollectSpeed()
         {
-            return new { speed = _speedManager.CurrentSpeed };
+            var raw = _speedManager.CurrentSpeed;
+            int level = System.Array.IndexOf(SpeedScale, raw);
+            if (level < 0) level = 0;
+            return new { speed = level };
         }
 
         public object CollectMap(int x1, int y1, int x2, int y2)
@@ -623,14 +626,19 @@ namespace Timberbot
         // WRITE ENDPOINTS -- Tier 1
         // ================================================================
 
+        private static readonly int[] SpeedScale = { 0, 1, 3, 7 };
+
         public object SetSpeed(int speed)
         {
             if (speed < 0 || speed > 3)
-                return new { error = "speed must be 0-3" };
+                return new { error = "speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)" };
 
-            var previous = _speedManager.CurrentSpeed;
-            _speedManager.ChangeSpeed(speed);
-            return new { speed, previous };
+            var previousRaw = _speedManager.CurrentSpeed;
+            int previousLevel = System.Array.IndexOf(SpeedScale, previousRaw);
+            if (previousLevel < 0) previousLevel = 0;
+
+            _speedManager.ChangeSpeed(SpeedScale[speed]);
+            return new { speed, previous = previousLevel };
         }
 
         public object PauseBuilding(int buildingId, bool paused)
