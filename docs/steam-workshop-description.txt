@@ -56,16 +56,6 @@ python timberbot.py scan x:120 y:140 radius:10   # ASCII map
 python timberbot.py watch                # live dashboard
 [/code]
 
-Or use it as a Python library:
-
-[code]
-from timberbot import Timberbot
-bot = Timberbot()
-bot.set_speed(3)
-bot.place_building("FarmHouse.IronTeeth", x=121, y=140, z=2, orientation=1)
-bot.plant_crop(123, 138, 128, 141, 2, "Kohlrabi")
-[/code]
-
 [h1]Getting started[/h1]
 
 1. Subscribe to this mod
