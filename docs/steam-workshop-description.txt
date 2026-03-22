@@ -55,10 +55,10 @@ python timberbot.py alerts
 5. Run: python timberbot.py (lists all commands)
 
 [h1]Let AI play for you[/h1]
-The mod includes an AI playbook (docs/timberbot.md) that teaches Claude, ChatGPT, or any LLM how to run your colony. With Claude Code:
+The mod includes an AI prompt (docs/timberbot.md) that teaches Claude, ChatGPT, or any LLM how to run your colony. With Claude Code:
 
 [code]
-# copy the playbook as a skill
+# copy the prompt as a skill
 cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 
 # let Claude play on a loop

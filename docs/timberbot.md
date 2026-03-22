@@ -3,7 +3,7 @@ name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
 version: "3.0"
 ---
-# AI Playbook - Playing Timberborn via API
+# AI Prompt - Playing Timberborn via API
 
 How to play Timberborn autonomously using `timberbot.py`. Copy this file to `~/.claude/skills/timberbot/SKILL.md` to use as a Claude Code skill.
 
