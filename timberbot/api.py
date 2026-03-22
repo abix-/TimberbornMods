@@ -203,3 +203,39 @@ class Timberbot:
     def lever_off(self, name):
         """Turn a lever OFF."""
         return self._game_post(f"/api/switch-off/{urllib.parse.quote(name, safe='')}")
+
+    # -- helpers --
+
+    @staticmethod
+    def near(items, x, y, radius=20):
+        """Filter items to those within radius of (x,y). Sorted by distance."""
+        result = []
+        for i in items:
+            if "x" not in i:
+                continue
+            d = abs(i["x"] - x) + abs(i["y"] - y)
+            if d <= radius:
+                result.append(i)
+        result.sort(key=lambda i: abs(i["x"] - x) + abs(i["y"] - y))
+        return result
+
+    @staticmethod
+    def named(items, name):
+        """Filter items whose name contains the given string (case-insensitive)."""
+        low = name.lower()
+        return [i for i in items if low in i.get("name", "").lower()]
+
+    def find(self, source, name=None, x=None, y=None, radius=20):
+        """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity.
+
+        Usage:
+            bot.find("gatherables", name="Blueberry", x=120, y=140)
+            bot.find("buildings", name="Lumberjack")
+            bot.find("trees", x=119, y=126, radius=10)
+        """
+        items = getattr(self, source)()
+        if name:
+            items = self.named(items, name)
+        if x is not None and y is not None:
+            items = self.near(items, x, y, radius)
+        return items
