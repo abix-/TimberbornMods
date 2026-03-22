@@ -617,29 +617,51 @@ namespace Timberbot
             if (templateSpec?.Blueprint == null)
                 return new { error = "no blueprint for prefab", prefab = prefabName };
 
-            var previewGo = _templateInstantiator.Instantiate(templateSpec.Blueprint, null);
-            previewGo.SetActive(false);
-            var previewBo = previewGo.GetComponentInChildren<BlockObject>();
-            if (previewBo == null)
+            // validate before placing -- prevent ghost buildings
+            try
             {
+                var previewGo = _templateInstantiator.Instantiate(templateSpec.Blueprint, null);
+                var previewBo = previewGo.GetComponentSlow<BlockObject>();
+                if (previewBo == null)
+                {
+                    UnityEngine.Object.Destroy(previewGo);
+                    return new
+                    {
+                        error = "validation failed: no BlockObject in preview",
+                        prefab = prefabName,
+                        blueprintName = templateSpec.Blueprint?.ToString() ?? "null",
+                        childCount = previewGo.transform.childCount
+                    };
+                }
+                previewBo.MarkAsPreviewAndInitialize();
+                previewBo.Reposition(placement);
+                bool isValid = previewBo.IsValid();
                 UnityEngine.Object.Destroy(previewGo);
-                return new { error = "no block object in preview", prefab = prefabName };
+                if (!isValid)
+                {
+                    var size = blockObjectSpec.Size;
+                    return new
+                    {
+                        error = "invalid placement",
+                        prefab = prefabName,
+                        x, y, z, orientation,
+                        sizeX = size.x, sizeY = size.y, sizeZ = size.z,
+                        hint = "check terrain height, water, existing buildings, and building size"
+                    };
+                }
             }
-            previewBo.MarkAsPreviewAndInitialize();
-            previewBo.Reposition(placement);
-            bool isValid = previewBo.IsValid();
-            var size = blockObjectSpec.Size;
-            UnityEngine.Object.Destroy(previewGo);
-
-            if (!isValid)
+            catch (System.Exception ex)
+            {
                 return new
                 {
-                    error = "invalid placement",
+                    error = "validation exception",
                     prefab = prefabName,
                     x, y, z, orientation,
-                    sizeX = size.x, sizeY = size.y, sizeZ = size.z,
-                    hint = "check terrain height, water, existing buildings, and building size"
+                    exception = ex.GetType().Name,
+                    message = ex.Message,
+                    stackTrace = ex.StackTrace?.Split('\n')[0] ?? ""
                 };
+            }
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
