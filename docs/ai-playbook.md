@@ -1,7 +1,6 @@
 ---
 name: bot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-disable-model-invocation: true
 version: "2.0"
 ---
 # AI Playbook - Playing Timberborn via API

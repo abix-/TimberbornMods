@@ -164,6 +164,8 @@ namespace Timberbot
                         return _service.CollectTrees();
                     case "/api/gatherables":
                         return _service.CollectGatherables();
+                    case "/api/beavers":
+                        return _service.CollectBeavers();
                     case "/api/map":
                         return _service.CollectMap(0, 0, 0, 0);
                     case "/api/speed":

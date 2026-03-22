@@ -18,7 +18,9 @@ Python client
 python timberbot.py summary                              # full colony snapshot
 python timberbot.py buildings                            # list all buildings
 python timberbot.py set_speed speed:3                    # fast forward
-python timberbot.py place_building prefab:Path x:100 y:130 z:2
+python timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
+python timberbot.py beavers                              # beaver wellbeing + critical needs
+python timberbot.py scan x:120 y:140 radius:10           # compact map for AI
 python timberbot.py watch                                # live dashboard
 python timberbot.py                                      # list all methods
 ```
@@ -32,15 +34,17 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 
 ## Docs
 
-- [Getting Started](docs/getting-started.md) -- install, first steps, examples
-- [API Reference](docs/api-reference.md) -- all HTTP endpoints
-- [Developing](docs/developing.md) -- build from source, add endpoints, Workshop publishing
+- [Getting Started](docs/getting-started.md). Install, first steps, examples
+- [API Reference](docs/api-reference.md). All HTTP endpoints
+- [AI Playbook](docs/ai-playbook.md). Strategy guide for AI agents playing Timberborn. Works as a Claude Code skill
+- [Developing](docs/developing.md). Build from source, add endpoints, Workshop publishing
 
 ## Requirements
 
 - Timberborn (Steam)
 - .NET SDK 6+ (to build the mod)
 - Python 3.8+ with `requests` (for the client, optional)
+- `pip install toons` for compact TOON output (optional, falls back to JSON)
 
 ## Credits
 
