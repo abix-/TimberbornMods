@@ -15,10 +15,10 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/population` | tabular | `[N]{district,adults,children,bots}` |
 | `/api/resources` | tabular | `[N]{district,good,available,all}` |
 | `/api/districts` | tabular | `[N]{name,adults,children,bots,Water,Log,...}` |
-| `/api/buildings` | tabular | id, name, coords, workers, reachable, powered, power, construction progress, inventory, statuses, wonder |
+| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers,reachable,powered,isGenerator,isConsumer,powerDemand,powerSupply,buildProgress,materialProgress,hasMaterials,inventory,statuses,isWonder,wonderActive}` |
 | `/api/trees` | tabular | `[N]{id,name,x,y,z,marked,alive,grown,growth}` |
 | `/api/gatherables` | tabular | `[N]{id,name,x,y,z,alive}` |
-| `/api/beavers` | tabular | id, name, wellbeing, needs, workplace, isBot, contaminated |
+| `/api/beavers` | tabular | `[N]{id,name,wellbeing,needs,anyCritical,lifeProgress,workplace,isBot,contaminated}` |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
 | `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
 | `/api/science` | nested | `{points, unlockables[N]{name,unlocked}}` |
