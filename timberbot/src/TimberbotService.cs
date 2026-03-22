@@ -33,6 +33,7 @@ using Timberborn.LifeSystem;
 using Timberborn.Wellbeing;
 using Timberborn.BuildingsReachability;
 using Timberborn.MechanicalSystem;
+using Timberborn.ScienceSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -55,6 +56,8 @@ namespace Timberbot
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
         private readonly IThreadSafeColumnTerrainMap _terrainMap;
+        private readonly ScienceService _scienceService;
+        private readonly BuildingUnlockingService _buildingUnlockingService;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -73,7 +76,9 @@ namespace Timberbot
             ITerrainService terrainService,
             IThreadSafeWaterMap waterMap,
             MapIndexService mapIndexService,
-            IThreadSafeColumnTerrainMap terrainMap)
+            IThreadSafeColumnTerrainMap terrainMap,
+            ScienceService scienceService,
+            BuildingUnlockingService buildingUnlockingService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -91,6 +96,8 @@ namespace Timberbot
             _waterMap = waterMap;
             _mapIndexService = mapIndexService;
             _terrainMap = terrainMap;
+            _scienceService = scienceService;
+            _buildingUnlockingService = buildingUnlockingService;
         }
 
         public void Load()
@@ -463,8 +470,7 @@ namespace Timberbot
                     {
                         var id = needSpec.Id;
                         var need = needMgr.GetNeed(id);
-                        // skip needs with zero points and not critical
-                        if (need.Points == 0 && !need.IsCritical) continue;
+                        if (!need.IsActive) continue;
                         needs[id] = new
                         {
                             points = need.Points,
@@ -859,6 +865,47 @@ namespace Timberbot
         }
 
         // ================================================================
+        public object CollectScience()
+        {
+            var unlockables = new List<object>();
+            try
+            {
+                foreach (var building in _buildingService.Buildings)
+                {
+                    if (!building.HasSpec<ScienceNeedingBuilding>()) continue;
+                    var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                    var name = templateSpec?.TemplateName ?? "unknown";
+                    var unlocked = _buildingUnlockingService.Unlocked(building);
+                    unlockables.Add(new { name, unlocked });
+                }
+            }
+            catch { }
+
+            return new
+            {
+                points = _scienceService.SciencePoints,
+                unlockables
+            };
+        }
+
+        public object UnlockBuilding(string buildingName)
+        {
+            try
+            {
+                var buildingSpec = _buildingService.GetBuildingTemplate(buildingName);
+                if (buildingSpec == null)
+                    return new { error = "building not found", building = buildingName };
+
+                _buildingUnlockingService.Unlock(buildingSpec);
+                return new { building = buildingName, unlocked = true,
+                             remaining = _scienceService.SciencePoints };
+            }
+            catch (System.Exception ex)
+            {
+                return new { error = ex.Message, building = buildingName };
+            }
+        }
+
         public object CollectDistribution()
         {
             var results = new List<object>();
@@ -889,6 +936,38 @@ namespace Timberbot
                 });
             }
             return results;
+        }
+
+        public object SetDistribution(string districtName, string goodId, string importOption, int exportThreshold)
+        {
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                if (dc.DistrictName != districtName) continue;
+
+                var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
+                if (distSetting == null)
+                    return new { error = "no distribution settings", district = districtName };
+
+                try
+                {
+                    var gs = distSetting.GetGoodDistributionSetting(goodId);
+                    if (gs != null)
+                    {
+                        if (!string.IsNullOrEmpty(importOption) &&
+                            Enum.TryParse<Timberborn.DistributionSystem.ImportOption>(importOption, true, out var parsed))
+                            gs.SetImportOption(parsed);
+                        if (exportThreshold >= 0)
+                            gs.SetExportThreshold(exportThreshold);
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    return new { error = ex.Message, district = districtName, good = goodId };
+                }
+
+                return new { district = districtName, good = goodId, importOption, exportThreshold };
+            }
+            return new { error = "district not found", district = districtName };
         }
 
         // PLACEMENT VALIDATION

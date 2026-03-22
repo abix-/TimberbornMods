@@ -168,6 +168,8 @@ namespace Timberbot
                         return _service.CollectBeavers();
                     case "/api/distribution":
                         return _service.CollectDistribution();
+                    case "/api/science":
+                        return _service.CollectScience();
                     case "/api/map":
                         return _service.CollectMap(0, 0, 0, 0);
                     case "/api/speed":
@@ -231,6 +233,15 @@ namespace Timberbot
                         return _service.SetStockpileGood(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
+                    case "/api/science/unlock":
+                        return _service.UnlockBuilding(
+                            body?.Value<string>("building") ?? "");
+                    case "/api/distribution":
+                        return _service.SetDistribution(
+                            body?.Value<string>("district") ?? "",
+                            body?.Value<string>("good") ?? "",
+                            body?.Value<string>("import") ?? "",
+                            body?.Value<int>("exportThreshold") ?? -1);
                     case "/api/map":
                         return _service.CollectMap(
                             body?.Value<int>("x1") ?? 0,

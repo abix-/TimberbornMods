@@ -184,6 +184,14 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.BuildingAvailability" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.BuildingAvailability.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ScienceSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ScienceSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.GameDistrictsMigration" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.GameDistrictsMigration.dll</HintPath>

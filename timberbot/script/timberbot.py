@@ -105,9 +105,24 @@ class Timberbot:
         """All beavers with wellbeing and needs: [{id, name, wellbeing, needs, anyCritical}]."""
         return self._get("/api/beavers")
 
+    def science(self):
+        """Science points and unlockable buildings: {points, unlockables: [{name, cost, unlocked}]}."""
+        return self._get("/api/science")
+
+    def unlock_building(self, building):
+        """Unlock a building using science points."""
+        return self._post("/api/science/unlock", {"building": building})
+
     def distribution(self):
         """Distribution settings per district: [{district, goods: [{good, importOption, exportThreshold}]}]."""
         return self._get("/api/distribution")
+
+    def set_distribution(self, district, good, import_option="", export_threshold=-1):
+        """Set import/export for a good in a district. import_option: Forced, Auto, None."""
+        return self._post("/api/distribution", {
+            "district": district, "good": good,
+            "import": import_option, "exportThreshold": export_threshold
+        })
 
     def prefabs(self):
         """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
