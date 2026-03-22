@@ -101,6 +101,10 @@ class Timberbot:
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
         return self._get("/api/gatherables")
 
+    def beavers(self):
+        """All beavers with wellbeing and needs: [{id, name, wellbeing, needs, anyCritical}]."""
+        return self._get("/api/beavers")
+
     def prefabs(self):
         """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
         return self._get("/api/prefabs")
@@ -247,7 +251,7 @@ class Timberbot:
         return [i for i in items if low in i.get("name", "").lower()]
 
     def scan(self, x, y, radius=10):
-        """Scan an area. Returns TOON format: occupied tiles + water tiles, skipping empty ground."""
+        """Scan an area. Returns structured data: occupied tiles + water tiles, skipping empty ground."""
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = data.get("tiles", [])
 
@@ -267,27 +271,20 @@ class Timberbot:
                     name += ".seedling"
                 if is_entrance:
                     name += ".entrance"
-                occupied.append(f"  {tx},{ty},{name}")
+                occupied.append({"x": tx, "y": ty, "what": name})
             elif is_entrance:
-                occupied.append(f"  {tx},{ty},entrance")
+                occupied.append({"x": tx, "y": ty, "what": "entrance"})
 
             if has_water and not has_occupant:
-                water.append(f"  {tx},{ty}")
+                water.append({"x": tx, "y": ty})
 
-        lines = [
-            "scan:",
-            f"  center: {x},{y}",
-            f"  radius: {radius}",
-            f"  default: ground",
-        ]
-
-        lines.append(f"occupied[{len(occupied)}]" + "{x,y,what}:")
-        lines.extend(occupied)
-
-        lines.append(f"water[{len(water)}]" + "{x,y}:")
-        lines.extend(water)
-
-        return "\n".join(lines)
+        return {
+            "center": f"{x},{y}",
+            "radius": radius,
+            "default": "ground",
+            "occupied": occupied,
+            "water": water,
+        }
 
     def visual(self, x, y, radius=10):
         """Colored ASCII map for humans. Same data as scan() but rendered as a roguelike grid."""
@@ -517,6 +514,113 @@ def _watch():
 import inspect
 
 
+def _flatten_for_toon(method, data):
+    """Flatten nested structures so TOON renders them as tables."""
+    if method == "summary" and isinstance(data, dict):
+        t = data.get("time", {})
+        w = data.get("weather", {})
+        tr = data.get("trees", {})
+        flat = {
+            "day": t.get("dayNumber", 0),
+            "dayProgress": round(t.get("dayProgress", 0), 2),
+            "cycle": w.get("cycle", 0),
+            "cycleDay": w.get("cycleDay", 0),
+            "isHazardous": w.get("isHazardous", False),
+            "tempDays": w.get("temperateWeatherDuration", 0),
+            "hazardDays": w.get("hazardousWeatherDuration", 0),
+            "markedGrown": tr.get("markedGrown", 0),
+            "markedSeedling": tr.get("markedSeedling", 0),
+            "unmarkedGrown": tr.get("unmarkedGrown", 0),
+        }
+        for d in data.get("districts", []):
+            pop = d.get("population", {})
+            flat["adults"] = pop.get("adults", 0)
+            flat["children"] = pop.get("children", 0)
+            flat["bots"] = pop.get("bots", 0)
+            for good, val in d.get("resources", {}).items():
+                flat[good] = val.get("available", 0) if isinstance(val, dict) else val
+        return flat
+
+    if method == "map" and isinstance(data, dict) and "tiles" in data:
+        tiles = data.get("tiles", [])
+        flat = []
+        for t in tiles:
+            row = {"x": t["x"], "y": t["y"],
+                   "terrain": t.get("terrain", 0),
+                   "water": t.get("water", 0)}
+            occ = t.get("occupant", "")
+            if occ:
+                occ = occ.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
+            row["occupant"] = occ
+            if t.get("entrance"):
+                row["entrance"] = True
+            if t.get("seedling"):
+                row["seedling"] = True
+            flat.append(row)
+        if flat:
+            # make uniform -- add missing keys
+            all_keys = set()
+            for r in flat:
+                all_keys.update(r.keys())
+            for r in flat:
+                for k in all_keys:
+                    if k not in r:
+                        r[k] = False if k in ("entrance", "seedling") else ""
+        return {"mapSize": data.get("mapSize", {}), "region": data.get("region", {}), "tiles": flat} if not flat else flat
+
+    if method == "resources" and isinstance(data, dict):
+        flat = []
+        for district, goods in data.items():
+            if isinstance(goods, dict):
+                for good, val in goods.items():
+                    if isinstance(val, dict):
+                        flat.append({"district": district, "good": good,
+                                     "available": val.get("available", 0),
+                                     "all": val.get("all", 0)})
+        return flat or data
+
+    if method == "districts" and isinstance(data, list):
+        flat = []
+        for d in data:
+            row = {"name": d.get("name", "?")}
+            pop = d.get("population", {})
+            row["adults"] = pop.get("adults", 0)
+            row["children"] = pop.get("children", 0)
+            row["bots"] = pop.get("bots", 0)
+            for good, val in d.get("resources", {}).items():
+                row[good] = val.get("available", 0) if isinstance(val, dict) else val
+            flat.append(row)
+        return flat or data
+
+    if method == "buildings" and isinstance(data, list):
+        flat = []
+        for b in data:
+            row = {"id": b["id"], "name": b.get("name", "").replace("(Clone)", ""),
+                   "x": b.get("x", 0), "y": b.get("y", 0), "z": b.get("z", 0),
+                   "orientation": b.get("orientation", 0),
+                   "finished": b.get("finished", False),
+                   "paused": b.get("paused", False),
+                   "priority": b.get("priority", "")}
+            if "desiredWorkers" in b:
+                row["workers"] = f"{b.get('assignedWorkers', 0)}/{b.get('desiredWorkers', 0)}"
+            else:
+                row["workers"] = ""
+            flat.append(row)
+        return flat or data
+
+    if method == "beavers" and isinstance(data, list):
+        flat = []
+        for b in data:
+            critical = [k for k, v in b.get("needs", {}).items() if v.get("isCritical")]
+            flat.append({"id": b["id"],
+                         "name": b.get("name", "").replace("(Clone)", ""),
+                         "wellbeing": round(b.get("wellbeing", 0), 2),
+                         "critical": "+".join(critical) if critical else ""})
+        return flat or data
+
+    return data
+
+
 def _cast(a):
     if a.lower() == "true":
         return True
@@ -601,7 +705,17 @@ def main():
             sys.exit(1)
 
     result = method(**kwargs)
-    print(json.dumps(result, indent=2))
+    if isinstance(result, str):
+        print(result)
+    elif isinstance(result, dict) and result.get("rendered"):
+        pass  # visual() already printed
+    else:
+        result = _flatten_for_toon(method_name, result)
+        try:
+            import toons
+            print(toons.dumps(result))
+        except ImportError:
+            print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

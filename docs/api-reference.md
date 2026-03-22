@@ -2,23 +2,26 @@
 
 Base URL: `http://localhost:8085`
 
+CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Oriented Object Notation) for compact, token-efficient output. Requires `pip install toons`. Falls back to JSON if not installed.
+
 ## Read (GET)
 
-| Endpoint | Returns |
-|----------|---------|
-| `/api/ping` | `{status, ready}` -- health check |
-| `/api/summary` | full snapshot: time + weather + all districts |
-| `/api/resources` | resource stocks per district |
-| `/api/population` | beaver/bot counts per district |
-| `/api/time` | day number, progress |
-| `/api/weather` | cycle, drought countdown |
-| `/api/districts` | districts with resources + population |
-| `/api/buildings` | all buildings: id, name, coords, orientation, entrance, pause, priority, workers |
-| `/api/trees` | all cuttable trees: id, name, coords, marked, alive, grown, growth progress |
-| `/api/gatherables` | gatherable resources (berry bushes etc) |
-| `/api/prefabs` | available building templates for placement |
-| `/api/speed` | current game speed `{speed: 0-3}` |
-| `/api/map` | map size info (no args) |
+| Endpoint | CLI format | Returns |
+|----------|-----------|---------|
+| `/api/ping` | flat kv | `{status, ready}` -- health check |
+| `/api/summary` | flat kv | day, weather, population, resources (flattened) |
+| `/api/time` | flat kv | day number, progress |
+| `/api/weather` | flat kv | cycle, drought countdown |
+| `/api/population` | tabular | `[N]{district,adults,children,bots}` |
+| `/api/resources` | tabular | `[N]{district,good,available,all}` |
+| `/api/districts` | tabular | `[N]{name,adults,children,bots,Water,Log,...}` |
+| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers}` |
+| `/api/trees` | tabular | `[N]{id,name,x,y,z,marked,alive,grown,growth}` |
+| `/api/gatherables` | tabular | `[N]{id,name,x,y,z,alive}` |
+| `/api/beavers` | tabular | `[N]{id,name,wellbeing,critical}` |
+| `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
+| `/api/speed` | flat kv | `speed: 0-3` |
+| `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance}` |
 
 ## Write (POST)
 
@@ -38,7 +41,7 @@ All write endpoints accept JSON bodies.
 | `/api/planting/clear` | `{"x1": N, "y1": N, "x2": N, "y2": N, "z": N}` | clear planting marks |
 | `/api/stockpile/capacity` | `{"id": N, "capacity": 100}` | set stockpile capacity |
 | `/api/stockpile/good` | `{"id": N, "good": "Log"}` | set allowed good |
-| `/api/map` | `{"x1": N, "y1": N, "x2": N, "y2": N}` | terrain + water + occupants + entrances + seedlings for a region |
+| `/api/map` | `{"x1": N, "y1": N, "x2": N, "y2": N}` | terrain + water + occupants for a region |
 
 ## IDs and names
 
@@ -56,32 +59,26 @@ These are convenience methods in `timberbot.py`, not HTTP endpoints:
 
 | Method | Description |
 |--------|-------------|
-| `unpause_building building_id:N` | unpause a building (convenience wrapper) |
-| `clear_trees x1:N y1:N x2:N y2:N z:N` | clear tree cutting marks (convenience wrapper) |
-| `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths |
-| `scan x:N y:N radius:10` | TOON format map -- occupied tiles + water, skipping empty ground. Token-efficient for AI |
+| `beavers` | beaver wellbeing + critical needs (flattened to tabular TOON) |
+| `scan x:N y:N radius:10` | occupied tiles + water, skipping empty ground (tabular TOON) |
 | `visual x:N y:N radius:10` | colored ASCII grid for humans -- roguelike style with ANSI colors |
 | `find source:buildings name:NAME x:N y:N radius:20` | find entities by name and/or proximity |
-| `near items x:N y:N radius:20` | filter items by distance (static helper) |
-| `named items name:NAME` | filter items by name substring (static helper) |
+| `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths |
 | `watch` | live terminal dashboard (polls every 3s) |
 
-### scan TOON format
+### scan output
 
-`scan` returns a compact TOON format optimized for AI consumption. Only non-empty tiles are listed:
+`scan` returns occupied and water tiles in tabular TOON, skipping empty ground:
 
 ```
-scan:
-  center: 122,136
-  radius: 10
-  default: ground
+center: "122,136"
+radius: 10
+default: ground
 occupied[47]{x,y,what}:
   119,131,SmallTank.entrance
   120,133,Path
   121,133,DeepWaterPump
-  121,140,FarmHouse
   123,138,Kohlrabi.seedling
-  124,143,DistrictCenter
 water[89]{x,y}:
   122,131
   123,131

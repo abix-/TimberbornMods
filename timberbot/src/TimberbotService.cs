@@ -28,6 +28,9 @@ using Timberborn.TimeSystem;
 using Timberborn.WaterBuildings;
 using Timberborn.WeatherSystem;
 using Timberborn.WorkSystem;
+using Timberborn.NeedSystem;
+using Timberborn.LifeSystem;
+using Timberborn.Wellbeing;
 using UnityEngine;
 
 namespace Timberbot
@@ -398,6 +401,60 @@ namespace Timberbot
                 {
                     entry["alive"] = !living.IsDead;
                 }
+
+                results.Add(entry);
+            }
+            return results;
+        }
+
+        public object CollectBeavers()
+        {
+            var results = new List<object>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var needMgr = ec.GetComponent<NeedManager>();
+                if (needMgr == null) continue;
+
+                var go = ec.GameObject;
+                var entry = new Dictionary<string, object>
+                {
+                    ["id"] = go.GetInstanceID(),
+                    ["name"] = go.name
+                };
+
+                // overall wellbeing
+                var tracker = ec.GetComponent<WellbeingTracker>();
+                if (tracker != null)
+                    entry["wellbeing"] = tracker.Wellbeing;
+
+                // per-need breakdown using NeedManager internals
+                var needs = new Dictionary<string, object>();
+                bool anyCritical = false;
+                try
+                {
+                    foreach (var needSpec in needMgr.GetNeeds())
+                    {
+                        var id = needSpec.Id;
+                        var need = needMgr.GetNeed(id);
+                        // skip needs with zero points and not critical
+                        if (need.Points == 0 && !need.IsCritical) continue;
+                        needs[id] = new
+                        {
+                            points = need.Points,
+                            isCritical = need.IsCritical,
+                            isBelowWarning = need.IsBelowWarningThreshold
+                        };
+                        if (need.IsCritical) anyCritical = true;
+                    }
+                }
+                catch { }
+                entry["needs"] = needs;
+                entry["anyCritical"] = anyCritical;
+
+                // life progress
+                var life = ec.GetComponent<LifeProgressor>();
+                if (life != null)
+                    entry["lifeProgress"] = life.LifeProgress;
 
                 results.Add(entry);
             }
