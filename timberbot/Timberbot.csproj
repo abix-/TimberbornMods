@@ -6,10 +6,12 @@
     <Version>0.2.0</Version>
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <PropertyGroup>
     <GameManagedDir>C:\Games\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed</GameManagedDir>
+    <ModDir>$(USERPROFILE)\Documents\Timberborn\Mods\Timberbot</ModDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,138 +21,182 @@
   <ItemGroup>
     <!-- Publicized game DLLs (internal types made accessible) -->
     <Reference Include="Bindito.Core" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Bindito.Core.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BaseComponentSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BaseComponentSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Common" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Common.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.EntitySystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.EntitySystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.GameCycleSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.GameCycleSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.GameDistricts" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.GameDistricts.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Goods" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Goods.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.HazardousWeatherSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.ResourceCountingSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.ResourceCountingSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.SingletonSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.SingletonSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.TickSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.TickSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.TimeSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.TimeSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.WeatherSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.WeatherSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.WorldPersistence" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.WorldPersistence.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Persistence" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Persistence.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Buildings" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Buildings.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.WaterBuildings" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.WaterBuildings.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.PrioritySystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.PrioritySystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BlockSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BlockSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Coordinates" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Coordinates.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BuilderPrioritySystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BuilderPrioritySystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Demolishing" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Demolishing.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BlueprintSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BlueprintSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BlueprintPrefabSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BlueprintPrefabSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BlockObjectTools" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BlockObjectTools.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BuildingTools" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BuildingTools.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.TemplateInstantiation" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.TemplateInstantiation.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.TemplateSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.TemplateSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.TerrainSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.TerrainSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.WaterSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.WaterSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.MapIndexSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.MapIndexSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.PlantingUI" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.PlantingUI.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Gathering" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Gathering.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Forestry" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Forestry.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.NaturalResourcesLifecycle" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NaturalResourcesLifecycle.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.WorkSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.WorkSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.InventorySystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.InventorySystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.Stockpiles" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Stockpiles.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.DistributionSystem" Publicize="true">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
 
     <Reference Include="System.Collections.Immutable">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\System.Collections.Immutable.dll</HintPath>
     </Reference>
 
     <!-- Non-publicized -->
     <Reference Include="Newtonsoft.Json">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
+      <Private>false</Private>
       <HintPath>$(GameManagedDir)\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
   </ItemGroup>
@@ -158,5 +204,13 @@
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'netstandard'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all"/>
   </ItemGroup>
+
+  <Target Name="Deploy" AfterTargets="Build">
+    <MakeDir Directories="$(ModDir)" />
+    <Copy SourceFiles="$(OutputPath)Timberbot.dll" DestinationFolder="$(ModDir)" />
+    <Copy SourceFiles="manifest.json" DestinationFolder="$(ModDir)" />
+    <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
+    <Message Text="Deployed to $(ModDir)" Importance="high" />
+  </Target>
 
 </Project>

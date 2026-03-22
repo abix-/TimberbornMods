@@ -1,21 +1,21 @@
 """CLI for Timberbot API. Run any method directly:
 
-    python -m timberbot buildings
-    python -m timberbot set_speed 3
-    python -m timberbot place_building LumberjackFlag.IronTeeth 120 130 2
-    python -m timberbot mark_trees 100 100 110 110 2
-    python -m timberbot demolish_building 12345
+    python -m timberbot_cli buildings
+    python -m timberbot_cli set_speed 3
+    python -m timberbot_cli place_building LumberjackFlag.IronTeeth 120 130 2
+    python -m timberbot_cli mark_trees 100 100 110 110 2
+    python -m timberbot_cli demolish_building 12345
 """
 import json
 import sys
 
-from timberbot.api import Timberbot
+from timberbot_cli.api import Timberbot
 
 
 def main():
     if len(sys.argv) < 2:
         bot = Timberbot()
-        print("usage: python -m timberbot <method> [args...]")
+        print("usage: python -m timberbot_cli <method> [args...]")
         print()
         print("methods:")
         for name in sorted(dir(bot)):
