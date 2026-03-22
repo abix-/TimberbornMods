@@ -29,7 +29,7 @@ All write endpoints accept JSON bodies.
 | `/api/speed` | `{"speed": 0}` | 0=pause, 1/2/3=speed |
 | `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
 | `/api/building/demolish` | `{"id": N}` | demolish a building |
-| `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a new building |
+| `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles: occupancy, water, terrain) |
 | `/api/floodgate` | `{"id": N, "height": 1.5}` | set floodgate height |
 | `/api/priority` | `{"id": N, "priority": "VeryHigh"}` | VeryLow / Normal / VeryHigh |
 | `/api/workers` | `{"id": N, "count": 2}` | set desired worker count |
