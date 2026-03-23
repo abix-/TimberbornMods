@@ -629,6 +629,18 @@ def _flatten_for_toon(method, data):
             flat["bots"] = pop.get("bots", 0)
             for good, val in d.get("resources", {}).items():
                 flat[good] = val.get("available", 0) if isinstance(val, dict) else val
+        h = data.get("housing", {})
+        if h:
+            flat["beds"] = f"{h.get('occupiedBeds', 0)}/{h.get('totalBeds', 0)}"
+            flat["homeless"] = h.get("homeless", 0)
+        e = data.get("employment", {})
+        if e:
+            flat["workers"] = f"{e.get('assigned', 0)}/{e.get('vacancies', 0)}"
+            flat["unemployed"] = e.get("unemployed", 0)
+        if "wellbeing" in data:
+            flat["wellbeing"] = data["wellbeing"]
+        if "science" in data:
+            flat["science"] = data["science"]
         return flat
 
     if method == "map" and isinstance(data, dict) and "tiles" in data:

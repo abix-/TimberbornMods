@@ -183,12 +183,52 @@ namespace Timberbot
                 else if (!marked && grown) unmarkedGrown++;
             }
 
+            // housing stats
+            int occupiedBeds = 0, totalBeds = 0;
+            // employment stats
+            int totalWorkers = 0, totalVacancies = 0, assignedWorkers = 0;
+            // wellbeing
+            float totalWellbeing = 0f;
+            int beaverCount = 0;
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var dwelling = ec.GetComponent<Dwelling>();
+                if (dwelling != null)
+                {
+                    occupiedBeds += dwelling.NumberOfDwellers;
+                    totalBeds += dwelling.MaxBeavers;
+                }
+                var workplace = ec.GetComponent<WorkplacePriority>();
+                if (workplace != null)
+                {
+                    var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
+                    if (wp != null)
+                    {
+                        assignedWorkers += wp.AssignedWorkers.Count;
+                        totalVacancies += wp.DesiredWorkers;
+                    }
+                }
+                var wb = ec.GetComponent<WellbeingTracker>();
+                if (wb != null)
+                {
+                    totalWellbeing += wb.Wellbeing;
+                    beaverCount++;
+                }
+            }
+            int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
+            int unemployed = System.Math.Max(0, beaverCount - assignedWorkers);
+            float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
+
             return new
             {
                 time = CollectTime(),
                 weather = CollectWeather(),
                 districts = CollectDistricts(),
-                trees = new { markedGrown, markedSeedling, unmarkedGrown }
+                trees = new { markedGrown, markedSeedling, unmarkedGrown },
+                housing = new { occupiedBeds, totalBeds, homeless },
+                employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
+                wellbeing = System.Math.Round(avgWellbeing, 1),
+                science = _scienceService.SciencePoints
             };
         }
 
