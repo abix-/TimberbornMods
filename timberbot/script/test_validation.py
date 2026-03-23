@@ -78,6 +78,7 @@ class TestRunner:
         self.test_stockpile()
         self.test_orientation()
         self.test_find_placement()
+        self.test_path_routing()
         self.test_summary_projection()
         self.test_map_moisture()
         self.test_unlock()
@@ -150,6 +151,9 @@ class TestRunner:
             ("off map", lambda: self.bot.place_building("Path", 999, 999, 2), "no terrain"),
             ("unknown prefab", lambda: self.bot.place_building("Fake", 120, 130, 2), "not found"),
             ("invalid orientation", lambda: self.bot.place_building("Path", 120, 127, 2, orientation="bogus"), "invalid orientation"),
+            ("z too high", lambda: self.bot.place_building("Path", 119, 127, 4), "terrain too"),
+            ("z too low", lambda: self.bot.place_building("Path", 119, 127, 1), "terrain too"),
+            ("locked building", lambda: self.bot.place_building("Rowhouse.IronTeeth", 119, 127, 2), "not unlocked"),
         ]
         for name, fn, expect_err in tests:
             result = fn()
@@ -178,6 +182,26 @@ class TestRunner:
             tiles2 = tile2.get("tiles", [])
             no_path = not any(t.get("occupant") == "Path" for t in tiles2)
             self.check("verify demolish via map", no_path)
+
+        # multi-tile z mismatch: find a spot where terrain changes within a footprint
+        found_mismatch = False
+        for tx in range(80, 140):
+            region = self.bot.map(tx, 135, tx + 2, 136)
+            tiles = region.get("tiles", [])
+            if len(tiles) < 6:
+                continue
+            heights = set(t.get("terrain", 0) for t in tiles)
+            occupied = any(t.get("occupant") for t in tiles)
+            if len(heights) > 1 and not occupied and all(h >= 2 for h in heights):
+                z = min(heights)
+                result = self.bot.place_building("Barrack.IronTeeth", tx, 135, z)
+                self.check("multi-tile z mismatch rejected",
+                           self.err(result) and "terrain" in str(result.get("error", "")),
+                           json.dumps(result)[:100])
+                found_mismatch = True
+                break
+        if not found_mismatch:
+            self.skip("multi-tile z mismatch", "no height transition found")
 
     def test_priority(self):
         print("\n=== priority ===\n")
@@ -378,34 +402,145 @@ class TestRunner:
         print("\n=== find_placement ===\n")
 
         result = self.bot.find_placement("Inventor.IronTeeth", 120, 135, 155, 155)
-        self.check("find_placement returns results",
+        self.check("returns results",
                    self.has(result, "placements") and len(result.get("placements", [])) > 0)
 
         placements = result.get("placements", [])
-        if placements:
-            # first reachable result should be placeable
-            reachable = [p for p in placements if p.get("reachable")]
-            self.check("has reachable placements", len(reachable) > 0,
-                       f"got {len(reachable)} reachable of {len(placements)}")
+        if not placements:
+            return
 
-            if reachable:
-                p = reachable[0]
-                self.check("reachable has pathAccess", p.get("pathAccess") == True)
+        # check result fields
+        p0 = placements[0]
+        for field in ["x", "y", "z", "orientation", "pathAccess", "reachable", "nearPower"]:
+            self.check(f"result has {field}", field in p0, f"keys: {list(p0.keys())}")
 
-                # actually place it and verify no disconnect alert
-                placed = self.bot.place_building("Inventor.IronTeeth",
-                    p["x"], p["y"], p["z"], orientation=p["orientation"])
-                if self.has(placed, "id"):
-                    alerts = self.bot.alerts()
-                    disconnected = False
-                    if isinstance(alerts, list):
-                        disconnected = any(
-                            a.get("id") == placed["id"] and "not connected" in str(a.get("status", ""))
-                            for a in alerts)
-                    self.check("reachable spot is connected", not disconnected)
-                    self.bot.demolish_building(placed["id"])
-                else:
-                    self.check("place at reachable spot", False, json.dumps(placed)[:100])
+        # reachable spots
+        reachable = [p for p in placements if p.get("reachable")]
+        unreachable = [p for p in placements if not p.get("reachable")]
+        self.check("has reachable placements", len(reachable) > 0,
+                   f"got {len(reachable)} reachable of {len(placements)}")
+
+        # verify reachable spot is actually placeable and connected
+        if reachable:
+            p = reachable[0]
+            self.check("reachable has pathAccess", p.get("pathAccess") == True)
+
+            placed = self.bot.place_building("Inventor.IronTeeth",
+                p["x"], p["y"], p["z"], orientation=p["orientation"])
+            if self.has(placed, "id"):
+                alerts = self.bot.alerts()
+                disconnected = False
+                if isinstance(alerts, list):
+                    disconnected = any(
+                        a.get("id") == placed["id"] and "not connected" in str(a.get("status", ""))
+                        for a in alerts)
+                self.check("reachable spot is connected", not disconnected)
+                self.bot.demolish_building(placed["id"])
+            else:
+                self.check("place at reachable spot", False, json.dumps(placed)[:100])
+
+        # verify unreachable spot is actually disconnected (if we have one with pathAccess)
+        unreachable_with_path = [p for p in unreachable if p.get("pathAccess")]
+        if unreachable_with_path:
+            p = unreachable_with_path[0]
+            placed = self.bot.place_building("Inventor.IronTeeth",
+                p["x"], p["y"], p["z"], orientation=p["orientation"])
+            if self.has(placed, "id"):
+                alerts = self.bot.alerts()
+                disconnected = any(
+                    a.get("id") == placed["id"] and "not connected" in str(a.get("status", ""))
+                    for a in alerts) if isinstance(alerts, list) else False
+                self.check("unreachable spot IS disconnected", disconnected,
+                           f"expected disconnect alert for ({p['x']},{p['y']})")
+                self.bot.demolish_building(placed["id"])
+            else:
+                # placement rejected = also proves unreachable
+                self.check("unreachable spot rejected by game", True)
+        else:
+            self.skip("unreachable verification", "no unreachable+pathAccess spots")
+
+        # verify sort order: reachable before unreachable
+        if reachable and unreachable:
+            first_unreachable_idx = next((i for i, p in enumerate(placements) if not p.get("reachable")), len(placements))
+            last_reachable_idx = max(i for i, p in enumerate(placements) if p.get("reachable"))
+            self.check("reachable sorted before unreachable", last_reachable_idx < first_unreachable_idx)
+
+        # nearPower check: find a spot near power and verify
+        powered = [p for p in placements if p.get("nearPower")]
+        if powered:
+            self.check("nearPower spots exist", True)
+        else:
+            self.skip("nearPower verification", "no powered spots in results")
+
+        # bounds check: no results should have coords outside map
+        map_info = self.bot.map()
+        if isinstance(map_info, dict) and "mapSize" in map_info:
+            mx = map_info["mapSize"]["x"]
+            my = map_info["mapSize"]["y"]
+            oob = [p for p in placements if p["x"] < 0 or p["x"] >= mx or p["y"] < 0 or p["y"] >= my]
+            self.check("no out-of-bounds results", len(oob) == 0,
+                       f"found {len(oob)} OOB placements")
+
+        # unknown prefab
+        bad = self.bot.find_placement("FakeBuilding", 100, 100, 110, 110)
+        self.check("find_placement unknown prefab", self.err(bad))
+
+    def test_path_routing(self):
+        print("\n=== path routing ===\n")
+
+        # find a flat open area for path tests
+        test_spot = None
+        for cy in range(125, 140):
+            for cx in range(70, 100):
+                region = self.bot.map(cx, cy, cx + 4, cy)
+                tiles = region.get("tiles", [])
+                if len(tiles) < 5:
+                    continue
+                heights = set(t.get("terrain", 0) for t in tiles)
+                if len(heights) != 1:
+                    continue
+                tz = heights.pop()
+                if tz < 2:
+                    continue
+                occupants = [t for t in tiles if t.get("occupant") or t.get("water", 0) > 0]
+                if occupants:
+                    continue
+                test_spot = (cx, cy, tz)
+                break
+            if test_spot:
+                break
+
+        if not test_spot:
+            self.skip("path routing tests", "no flat open area")
+            return
+
+        sx, sy, sz = test_spot
+
+        # flat path
+        result = self.bot.place_path(sx, sy, sx + 3, sy)
+        self.check("flat path placement",
+                   self.has(result, "placed") and result["placed"] > 0,
+                   json.dumps(result)[:100])
+
+        # verify tiles are occupied
+        region = self.bot.map(sx, sy, sx + 3, sy)
+        paths = [t for t in region.get("tiles", []) if t.get("occupant") == "Path"]
+        self.check("verify paths on map", len(paths) >= 3, f"found {len(paths)} paths")
+
+        # cleanup: demolish placed paths
+        for t in paths:
+            buildings = self.bot._get("/api/buildings")
+            if isinstance(buildings, list):
+                for b in buildings:
+                    if b.get("x") == t["x"] and b.get("y") == t["y"] and "Path" in str(b.get("name", "")):
+                        self.bot.demolish_building(b["id"])
+                        break
+
+        # non-straight path rejected
+        result2 = self.bot.place_path(100, 100, 105, 105)
+        self.check("diagonal path rejected",
+                   self.err(result2) and "straight" in str(result2.get("error", "")),
+                   json.dumps(result2)[:100])
 
     def test_summary_projection(self):
         print("\n=== summary projection ===\n")
