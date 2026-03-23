@@ -1,8 +1,0 @@
-[7]{district,good,available,all}:
-  District 1,Water,165,165
-  District 1,Log,32,35
-  District 1,Plank,5,8
-  District 1,ScrapMetal,20,20
-  District 1,MetalPart,12,12
-  District 1,Berries,226,226
-  District 1,Kohlrabi,110,110

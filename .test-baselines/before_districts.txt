@@ -1,2 +1,0 @@
-[1]{name,adults,children,bots,Water,Log,Plank,ScrapMetal,MetalPart,Berries,Kohlrabi}:
-  District 1,30,5,0,165,32,5,20,12,226,110

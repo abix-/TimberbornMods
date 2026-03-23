@@ -1403,6 +1403,59 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 
 ---
 
+## Debug
+
+### POST /api/debug
+
+Reflection-based inspector for game internals. Navigates object graphs, lists fields/properties/methods, and calls methods with arguments. Results can be chained with `$`.
+
+**CLI:** `python timberbot.py debug target:help`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| target | string | yes | `"help"`, `"get"`, `"fields"`, or `"call"` |
+| path | string | varies | Dot-separated path from TimberbotService (e.g. `"_scienceService.SciencePoints"`) |
+| filter | string | no | (fields only) Filter members by name substring |
+| method | string | varies | (call only) Method name to invoke |
+| arg0..argN | string | no | (call only) Method arguments. Vector3Int as `"x,y,z"`. `"$"` = last result |
+
+#### Targets
+
+| Target | Description | Required args |
+|--------|-------------|---------------|
+| `help` | List available targets, roots, and examples | none |
+| `get` | Navigate an object chain and dump the result | `path` |
+| `fields` | List fields, properties, and methods on an object | `path` (optional), `filter` (optional) |
+| `call` | Call a method on an object with typed arguments | `path`, `method`, `arg0`..`argN` |
+
+#### Response (help)
+
+```json
+{
+  "targets": ["help -- this message", "get -- navigate object chain", "fields -- list members", "call -- call method"],
+  "roots": ["_buildingService", "_entityRegistry", "_districtCenterRegistry", "_navMeshService", "..."],
+  "examples": [
+    "debug target:fields path:_navMeshService filter:Road",
+    "debug target:get path:_scienceService.SciencePoints",
+    "debug target:call path:_navMeshService method:AreConnectedRoadInstant arg0:120,142,2 arg1:130,142,2"
+  ]
+}
+```
+
+#### Path syntax
+
+- Dot-separated: `_fieldName.PropertyName.NestedField`
+- List indexing: `_entityRegistry.Entities.[0]`
+- GetComponent: `~TypeName` (e.g. `~MechanicalNode`)
+- Chain from last result: `$.PropertyName`
+
+!!! warning "Debug only"
+    This endpoint uses reflection on game internals. It may break on Timberborn updates. Not intended for production automation.
+
+---
+
 ## Python CLI Helpers
 
 These are convenience methods in `timberbot.py` that have no direct HTTP equivalent.
