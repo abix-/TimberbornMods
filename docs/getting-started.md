@@ -28,7 +28,11 @@ You should see `{"status": "ok", "ready": true}`. The API is only active while a
 
 ## Install the Python client
 
-The Python client is not included in the Steam Workshop download. Get `timberbot.py` from the [latest GitHub release](https://github.com/abix-/TimberbornMods/releases) or clone the repo.
+`timberbot.py` is in your mods folder alongside the DLL:
+
+```
+Documents\Timberborn\Mods\Timberbot\timberbot.py
+```
 
 Install dependencies:
 
