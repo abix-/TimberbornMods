@@ -29,9 +29,9 @@ Every turn:
 
 ## Placement workflow (MANDATORY every time)
 
-1. `visual` the area -- see the map with colored tiles. Find a clear rectangle that fits the building footprint (e.g. 3x2 for Barrack)
-2. Check terrain height with `map` -- z MUST match terrain height or building clips underground
-3. Verify every tile in the footprint is open (ground dots or .dead stumps). Count the tiles against building size
+1. `visual` the area -- see the map with colored tiles and terrain height. Background shading shows z-level; empty ground shows height digit (2, 3, 4). Find a clear rectangle that fits the building footprint
+2. Verify z from visual (height digits). Use `map` only if you need exact terrain data for ambiguous tiles
+3. Verify every tile in the footprint is open (height digits or .dead stumps). Count the tiles against building size
 4. Pick orientation so entrance FACES the path
 5. `place_building` with correct coords, z, and orientation
 6. `visual` again -- confirm entrance faces the path. If not, demolish and redo
@@ -41,7 +41,7 @@ Every turn:
 
 ## Z-level rules
 
-- ALWAYS check terrain height before placing. Use `map x1:X y1:Y x2:X2 y2:Y2` to read terrain
+- `visual` shows terrain height: empty ground shows z % 10 digit, background shading encodes height (dark=z0-9, medium=z10-19, bright=z20-22). Height legend at bottom shows exact z values. Use `map` for raw data when needed
 - z MUST equal the terrain height at the placement location
 - If terrain is 2, place at z:2. If terrain is 4, place at z:4
 - Placing at wrong z causes underground clipping (building invisible/broken)

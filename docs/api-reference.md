@@ -78,7 +78,7 @@ These are convenience methods in `timberbot.py`, not HTTP endpoints:
 | `beavers` | beaver wellbeing + critical needs (flattened to tabular TOON) |
 | `tree_clusters` | top 5 clusters of grown trees with coords and counts |
 | `scan x:N y:N radius:10` | occupied tiles + water, skipping empty ground (tabular TOON) |
-| `visual x:N y:N radius:10` | colored ASCII grid for humans, roguelike style with ANSI colors |
+| `visual x:N y:N radius:10` | colored ASCII grid with terrain height (background shading per z-level, height digits for empty ground) |
 | `find source:buildings name:NAME x:N y:N radius:20` | find entities by name and/or proximity |
 | `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths |
 | `watch` | live terminal dashboard (polls every 3s) |
@@ -109,7 +109,7 @@ Water tiles with `badwater` > 0 are contaminated water (0-1 scale). Land tiles w
 
 | Char | Color | Meaning |
 |------|-------|---------|
-| `.` | dim | empty ground |
+| `0`-`9` | dim (ones digit of z) | empty ground (digit = z % 10, background band = tens) |
 | `~` | blue | water |
 | `@` | white | entrance |
 | `=` | yellow | path |
@@ -129,4 +129,6 @@ Water tiles with `badwater` > 0 are contaminated water (0-1 scale). Land tiles w
 | `B` | magenta | berry bush |
 | `k` | bright green | kohlrabi |
 | `c` | bright green | carrot |
+
+Background shading indicates terrain height on ALL tiles. Three bands: z=0-9 (dark grays), z=10-19 (medium grays), z=20-22 (bright). Within each band, higher z = lighter shade. The digit shows z % 10 (ones place); the background band encodes the tens. A height legend appears when multiple z-levels are in view, showing exact z values.
 

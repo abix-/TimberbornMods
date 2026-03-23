@@ -354,9 +354,20 @@ class Timberbot:
             "Campfire": ("C", RED),
         }
 
+        def _zbg(z):
+            # gradient within tens bands: 0-9 dark(234-242), 10-19 bright(244-252), 20-22 brightest(254+)
+            if z < 10:
+                shade = 234 + z
+            elif z < 20:
+                shade = 244 + (z - 10)
+            else:
+                shade = 254 + min(z - 20, 1)
+            return f"\033[48;5;{min(shade, 255)}m"
+
         data = self.map(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         legend = {}
+        z_levels = set()
 
         lines = []
         for ty in range(y + radius, y - radius - 1, -1):
@@ -366,10 +377,14 @@ class Timberbot:
                 if not t:
                     row += f"{DIM}?{R}"
                 elif t.get("entrance") and not t.get("occupant"):
-                    row += f"{BWHT}@{R}"
+                    bg = _zbg(t["terrain"])
+                    z_levels.add(t["terrain"])
+                    row += f"{bg}{BWHT}@{R}"
                     legend["@"] = (BWHT, "entrance")
                 elif t.get("occupant"):
                     oname = t["occupant"]
+                    bg = _zbg(t["terrain"])
+                    z_levels.add(t["terrain"])
                     ch, co = None, None
                     for key, (c, s) in STYLE.items():
                         if key.lower() in oname.lower():
@@ -380,14 +395,19 @@ class Timberbot:
                         ch, co = "t", DIM + GRN
                         legend["t"] = (co, "seedling")
                     if ch:
-                        row += f"{co}{ch}{R}"
+                        row += f"{bg}{co}{ch}{R}"
                     else:
-                        row += f"{DIM}{oname[0]}{R}"
+                        row += f"{bg}{DIM}{oname[0]}{R}"
                 elif t["water"] > 0:
-                    row += f"{BLU}~{R}"
+                    bg = _zbg(t["terrain"])
+                    z_levels.add(t["terrain"])
+                    row += f"{bg}{BLU}~{R}"
                     legend["~"] = (BLU, "water")
                 elif t["terrain"] > 0:
-                    row += f"{DIM}.{R}"
+                    bg = _zbg(t["terrain"])
+                    z_levels.add(t["terrain"])
+                    zch = str(t["terrain"] % 10)
+                    row += f"{bg}{DIM}{zch}{R}"
                 else:
                     row += " "
             lines.append(row)
@@ -399,6 +419,12 @@ class Timberbot:
         for ch, (co, label) in sorted(legend.items(), key=lambda x: x[1][1]):
             leg += f" {co}{ch}{R} {label}"
         lines.append(leg)
+
+        if len(z_levels) > 1:
+            zleg = "   height:"
+            for z in sorted(z_levels):
+                zleg += f" {_zbg(z)} z={z} {R}"
+            lines.append(zleg)
 
         # print directly to terminal instead of returning as JSON
         print("\n".join(lines))
