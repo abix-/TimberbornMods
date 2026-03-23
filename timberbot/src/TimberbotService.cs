@@ -164,42 +164,42 @@ namespace Timberbot
 
         public object CollectSummary()
         {
+            // single pass over all entities
             int markedGrown = 0, markedSeedling = 0, unmarkedGrown = 0;
-            foreach (var ec in _entityRegistry.Entities)
-            {
-                var cuttable = ec.GetComponent<Cuttable>();
-                if (cuttable == null) continue;
-                var bo = ec.GetComponent<BlockObject>();
-                var living = ec.GetComponent<LivingNaturalResource>();
-                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
-                if (living == null || living.IsDead) continue;
-                if (bo == null) continue;
-
-                bool marked = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
-                bool grown = growable != null && growable.IsGrown;
-
-                if (marked && grown) markedGrown++;
-                else if (marked && !grown) markedSeedling++;
-                else if (!marked && grown) unmarkedGrown++;
-            }
-
-            // housing stats
             int occupiedBeds = 0, totalBeds = 0;
-            // employment stats
-            int totalWorkers = 0, totalVacancies = 0, assignedWorkers = 0;
-            // wellbeing
+            int totalVacancies = 0, assignedWorkers = 0;
             float totalWellbeing = 0f;
             int beaverCount = 0;
-            // alerts
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
+
             foreach (var ec in _entityRegistry.Entities)
             {
+                // trees
+                var cuttable = ec.GetComponent<Cuttable>();
+                if (cuttable != null)
+                {
+                    var living = ec.GetComponent<LivingNaturalResource>();
+                    var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                    var bo = ec.GetComponent<BlockObject>();
+                    if (living != null && !living.IsDead && bo != null)
+                    {
+                        bool marked = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
+                        bool grown = growable != null && growable.IsGrown;
+                        if (marked && grown) markedGrown++;
+                        else if (marked && !grown) markedSeedling++;
+                        else if (!marked && grown) unmarkedGrown++;
+                    }
+                }
+
+                // housing
                 var dwelling = ec.GetComponent<Dwelling>();
                 if (dwelling != null)
                 {
                     occupiedBeds += dwelling.NumberOfDwellers;
                     totalBeds += dwelling.MaxBeavers;
                 }
+
+                // employment + unstaffed alert
                 var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
                 if (wp != null)
                 {
@@ -208,15 +208,21 @@ namespace Timberbot
                     if (wp.DesiredWorkers > 0 && wp.AssignedWorkers.Count < wp.DesiredWorkers)
                         alertUnstaffed++;
                 }
+
+                // wellbeing
                 var wb = ec.GetComponent<WellbeingTracker>();
                 if (wb != null)
                 {
                     totalWellbeing += wb.Wellbeing;
                     beaverCount++;
                 }
+
+                // power alert
                 var mech = ec.GetComponent<MechanicalNode>();
                 if (mech != null && mech.IsConsumer && !mech.Active)
                     alertUnpowered++;
+
+                // reachability alert
                 var reach = ec.GetComponent<EntityReachabilityStatus>();
                 if (reach != null && reach.IsAnyUnreachable())
                     alertUnreachable++;
