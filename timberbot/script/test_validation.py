@@ -83,6 +83,14 @@ class TestRunner:
         self.test_summary_projection()
         self.test_map_moisture()
         self.test_unlock()
+        self.test_floodgate()
+        self.test_haul_priority()
+        self.test_recipe()
+        self.test_farmhouse_action()
+        self.test_plantable_priority()
+        self.test_stockpile_capacity()
+        self.test_workhours()
+        self.test_distribution()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
         if self.skipped:
@@ -117,6 +125,7 @@ class TestRunner:
             ("map", lambda: self.bot.map(120, 142, 122, 144)),
             ("tree_clusters", lambda: self.bot.tree_clusters()),
             ("wellbeing", lambda: self.bot.wellbeing()),
+            ("scan", lambda: self.bot.scan(120, 140, 5)),
         ]
         for name, fn in reads:
             result = fn()
@@ -730,6 +739,148 @@ class TestRunner:
         self.check("no points deducted on re-unlock",
                    result2.get("remaining") == points_after,
                    f"expected {points_after}, got {result2.get('remaining')}")
+
+
+    def test_floodgate(self):
+        print("\n=== floodgate ===\n")
+
+        fid = self.find_building("Floodgate")
+        if not fid:
+            self.skip("floodgate", "no floodgate found")
+            return
+
+        result = self.bot.set_floodgate(fid, 1.5)
+        self.check("set floodgate height",
+                   self.has(result, "height"),
+                   json.dumps(result)[:100])
+
+    def test_haul_priority(self):
+        print("\n=== haul priority ===\n")
+
+        # find a breeding pod or stockpile
+        bid = self.find_building("BreedingPod") or self.find_building("SmallTank")
+        if not bid:
+            self.skip("haul priority", "no suitable building found")
+            return
+
+        result = self.bot.set_haul_priority(bid, True)
+        self.check("set haul priority",
+                   self.has(result, "haulPrioritized") and result["haulPrioritized"] == True,
+                   json.dumps(result)[:100])
+
+        # reset
+        self.bot.set_haul_priority(bid, False)
+
+    def test_recipe(self):
+        print("\n=== recipe ===\n")
+
+        mid = self.find_building("IndustrialLumberMill")
+        if not mid:
+            self.skip("recipe", "no lumber mill found")
+            return
+
+        # set recipe -- use invalid name first to see what's available
+        result = self.bot.set_recipe(mid, "InvalidRecipe")
+        self.check("invalid recipe returns error",
+                   self.err(result),
+                   json.dumps(result)[:100])
+
+    def test_farmhouse_action(self):
+        print("\n=== farmhouse action ===\n")
+
+        fid = self.find_building("FarmHouse")
+        if not fid:
+            self.skip("farmhouse action", "no farmhouse found")
+            return
+
+        result = self.bot.set_farmhouse_action(fid, "planting")
+        self.check("set farmhouse planting",
+                   self.has(result, "action") and result["action"] == "planting",
+                   json.dumps(result)[:100])
+
+        # reset
+        self.bot.set_farmhouse_action(fid, "harvesting")
+
+    def test_plantable_priority(self):
+        print("\n=== plantable priority ===\n")
+
+        fid = self.find_building("Forester")
+        if not fid:
+            self.skip("plantable priority", "no forester found")
+            return
+
+        result = self.bot.set_plantable_priority(fid, "Pine")
+        self.check("set plantable priority",
+                   self.has(result, "prioritized") and result["prioritized"] == "Pine",
+                   json.dumps(result)[:100])
+
+        # clear
+        self.bot.set_plantable_priority(fid, "none")
+
+    def test_stockpile_capacity(self):
+        print("\n=== stockpile capacity ===\n")
+
+        sid = self.find_building("SmallTank") or self.find_building("MediumTank")
+        if not sid:
+            self.skip("stockpile capacity", "no tank found")
+            return
+
+        # get current capacity via debug
+        self.bot.debug(target="call", method="FindEntity", arg0=str(sid))
+        orig = self.bot.debug(target="get", path="$~Inventories")
+
+        result = self.bot.set_capacity(sid, 50)
+        self.check("set stockpile capacity",
+                   self.has(result, "capacity"),
+                   json.dumps(result)[:100])
+
+    def test_workhours(self):
+        print("\n=== workhours ===\n")
+
+        # get current
+        orig = self.bot.workhours()
+        orig_hours = orig.get("endHours", 18) if isinstance(orig, dict) else 18
+
+        result = self.bot.set_workhours(20)
+        self.check("set workhours",
+                   not self.err(result),
+                   json.dumps(result)[:100])
+
+        # verify via debug
+        verify = self.debug_get("_workingHoursManager.EndHours")
+        self.check("verify workhours via debug",
+                   str(verify.get("value", "")) == "20",
+                   f"got: {verify.get('value')}")
+
+        # restore
+        self.bot.set_workhours(orig_hours)
+
+    def test_distribution(self):
+        print("\n=== distribution ===\n")
+
+        # get current distribution
+        dist = self.bot.distribution()
+        if not isinstance(dist, list) or len(dist) == 0:
+            self.skip("distribution", "no distribution data")
+            return
+
+        # find a district with a good
+        district = None
+        good = None
+        for d in dist:
+            goods = d.get("goods", [])
+            if goods and d.get("district"):
+                district = d["district"]
+                good = goods[0].get("good")
+                break
+        if not district or not good:
+            self.skip("distribution", "no district/good pair found")
+            return
+
+        result = self.bot.set_distribution(district, good, "ImportDisabled", 0)
+        self.check("set distribution",
+                   not self.err(result),
+                   json.dumps(result)[:100])
 
 
 def main():
