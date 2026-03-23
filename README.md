@@ -53,7 +53,7 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 Learned from these Timberborn modding projects:
 
 - [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding) -- official modding tools, wiki, and examples
-- [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies) -- `BlockObjectPlacerService.Place()` for building placement, `BuildingUnlockingService.Unlock()` for science, `WorkingHoursManager` for work schedules
+- [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies) -- `BlockObjectPlacerService.Place()` for building placement, `TemplateInstantiator` + `MarkAsPreviewAndInitialize` + `IsValid()` for game-native placement validation, `BuildingUnlockingService.Unlock()` for science, `WorkingHoursManager` for work schedules
 - [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- `TreeCuttingArea.AddCoordinates()` for tree marking, `IAlertFragment` patterns for building alerts
 - [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods) -- `Inventories.AllInventories` for building inventory, `BuildingUnlockingService.Unlocked()` for science checks
 - [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- `PlantingService.SetPlantingCoordinates()` for crop planting

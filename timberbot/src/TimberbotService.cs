@@ -101,6 +101,7 @@ namespace Timberbot
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
         private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
+        private readonly TemplateInstantiator _templateInstantiator;         // instantiate preview entities for validation
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -135,7 +136,8 @@ namespace Timberbot
             ISoilMoistureService soilMoistureService,
             StackableBlockService stackableBlockService,
             FactionNeedService factionNeedService,
-            NeedGroupSpecService needGroupSpecService)
+            NeedGroupSpecService needGroupSpecService,
+            TemplateInstantiator templateInstantiator)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -169,6 +171,7 @@ namespace Timberbot
             _stackableBlockService = stackableBlockService;
             _factionNeedService = factionNeedService;
             _needGroupSpecService = needGroupSpecService;
+            _templateInstantiator = templateInstantiator;
         }
 
         public void Load()
@@ -195,7 +198,7 @@ namespace Timberbot
         private int _entityCacheFrame = -1;
 
         // PERF: per-frame occupied tiles cache. O(n) build once, O(1) contains-check after.
-        // Used by PlaceBuilding + ValidateFootprint (called 100s of times in FindPlacement)
+        // Used by find_placement scoring (path adjacency) and map occupant lookup
         private HashSet<long> _occupiedCache;
         private int _occupiedCacheFrame = -1;
 
@@ -2426,15 +2429,9 @@ namespace Timberbot
             return info;
         }
 
-        private static readonly HashSet<string> WaterBuildingNames = new HashSet<string>
-        {
-            "Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"
-        };
-
-        // check if a building footprint is valid at (x, y, z, orientation)
-        // returns null if valid, error string if invalid
-        private string ValidateFootprint(BlockObjectSpec blockObjectSpec, string prefabName,
-            int x, int y, int z, int orientation, HashSet<long> occupied, bool isWaterBuilding)
+        // validate placement using the game's own validation system (same as player UI)
+        // creates a temporary preview entity, runs all 9 game validators, then deletes it
+        private bool ValidatePlacement(BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
         {
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
@@ -2447,36 +2444,26 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            var footprint = ComputeFootprint(blockObjectSpec, gx, gy, z, orientation);
-            var mapSize = _terrainService.Size;
-            foreach (var ft in footprint)
+            try
             {
-                var tile = ft.coords;
-                if (tile.x < 0 || tile.x >= mapSize.x || tile.y < 0 || tile.y >= mapSize.y)
-                    return "out of bounds";
-                if (ft.isGroundFloor)
-                {
-                    int terrainHeight = GetTerrainHeight(tile.x, tile.y);
-                    if (!isWaterBuilding)
-                    {
-                        float waterHeight = 0f;
-                        try { waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(tile.x, tile.y, terrainHeight)); }
-                        catch { }
-                        if (waterHeight > 0) return "water";
-                    }
-                    if (terrainHeight == 0 && !isWaterBuilding) return "no terrain";
-                    if (terrainHeight < tile.z && !isWaterBuilding)
-                    {
-                        // check if a stackable block (platform) supports this z-level
-                        if (!_stackableBlockService.IsStackableBlockAt(new Vector3Int(tile.x, tile.y, tile.z - 1)))
-                            return "terrain too low";
-                    }
-                    if (terrainHeight > tile.z && !isWaterBuilding) return "terrain too high";
-                }
-                long key = (long)tile.x * 1000000 + (long)tile.y * 1000 + tile.z;
-                if (occupied.Contains(key)) return "occupied";
+                var placement = new Placement(new Vector3Int(gx, gy, z),
+                    (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
+                // same pattern as BeaverBuddies: instantiate, mark as preview, reposition, check IsValid
+                var tempParent = new GameObject("_timberbotPreview");
+                var go = _templateInstantiator.Instantiate(blockObjectSpec.Blueprint, tempParent.transform);
+                go.SetActive(false);
+                var bo = go.GetComponent<BlockObject>();
+                bo.MarkAsPreviewAndInitialize();
+                bo.Reposition(placement);
+                bool valid = bo.IsValid();
+                UnityEngine.Object.Destroy(tempParent);
+                return valid;
             }
-            return null;
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Timberbot] ValidatePlacement error at ({x},{y},{z}): {ex.Message}\n{ex.StackTrace}");
+                return false;
+            }
         }
 
         // PERF: O(n) entity scan for path/power tiles + O(area * 4) validation loop.
@@ -2491,12 +2478,6 @@ namespace Timberbot
                 return new { error = "no block object spec", prefab = prefabName };
 
             var size = blockObjectSpec.Size;
-            bool isWaterBuilding = false;
-            foreach (var w in WaterBuildingNames)
-                if (prefabName.IndexOf(w, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                { isWaterBuilding = true; break; }
-
-            var occupied = GetOccupiedTiles();
 
             // get all road nodes reachable from DC using the game's own range service
             // same method the game uses to draw the green-to-red path line
@@ -2577,8 +2558,7 @@ namespace Timberbot
 
                     for (int orient = 0; orient < 4; orient++)
                     {
-                        var err = ValidateFootprint(blockObjectSpec, prefabName, tx, ty, tz, orient, occupied, isWaterBuilding);
-                        if (err != null) continue;
+                        if (!ValidatePlacement(blockObjectSpec, tx, ty, tz, orient)) continue;
 
                         // count path tiles on entrance side
                         int rx = size.x, ry = size.y;
@@ -2729,57 +2709,10 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            // pre-validate: check all tiles the building would occupy
-            var footprint = ComputeFootprint(blockObjectSpec, gx, gy, z, orientation);
-            var occupied = GetOccupiedTiles();
-            bool isWaterBuilding = false;
-            foreach (var w in WaterBuildingNames)
-            {
-                if (prefabName.IndexOf(w, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    isWaterBuilding = true;
-                    break;
-                }
-            }
-
-            foreach (var ft in footprint)
-            {
-                var tile = ft.coords;
-
-                // only check terrain/water for ground floor tiles
-                if (ft.isGroundFloor)
-                {
-                    int terrainHeight = GetTerrainHeight(tile.x, tile.y);
-
-                    // check water
-                    if (!isWaterBuilding)
-                    {
-                        float waterHeight = 0f;
-                        try { waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(tile.x, tile.y, terrainHeight)); }
-                        catch { }
-                        if (waterHeight > 0)
-                            return new { error = $"tile ({tile.x},{tile.y}) is water", prefab = prefabName, x, y, z, orientation };
-                    }
-
-                    // check terrain supports the building
-                    if (terrainHeight == 0 && !isWaterBuilding)
-                        return new { error = $"no terrain at ({tile.x},{tile.y})", prefab = prefabName, x, y, z, orientation };
-
-                    if (terrainHeight < tile.z && !isWaterBuilding)
-                    {
-                        if (!_stackableBlockService.IsStackableBlockAt(new Vector3Int(tile.x, tile.y, tile.z - 1)))
-                            return new { error = $"terrain too low at ({tile.x},{tile.y}): height {terrainHeight} < {tile.z}", prefab = prefabName, x, y, z, orientation };
-                    }
-
-                    if (terrainHeight > tile.z && !isWaterBuilding)
-                        return new { error = $"terrain too high at ({tile.x},{tile.y}): height {terrainHeight} > {tile.z} (building would clip underground)", prefab = prefabName, x, y, z, orientation };
-                }
-
-                // check occupancy (all floors)
-                long key = (long)tile.x * 1000000 + (long)tile.y * 1000 + tile.z;
-                if (occupied.Contains(key))
-                    return new { error = $"tile ({tile.x},{tile.y},{tile.z}) already occupied", prefab = prefabName, x, y, z, orientation };
-            }
+            // validate using the game's own preview system (same as player UI)
+            if (!ValidatePlacement(blockObjectSpec, x, y, z, orientation))
+                return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
+                             prefab = prefabName, x, y, z, orientation };
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
