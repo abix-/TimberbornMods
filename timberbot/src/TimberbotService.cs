@@ -942,7 +942,8 @@ namespace Timberbot
                 return new { id = buildingId, name = ec.GameObject.name, recipe = "none" };
             }
 
-            var recipe = _recipeSpecService.GetRecipe(recipeId);
+            RecipeSpec recipe = null;
+            try { recipe = _recipeSpecService.GetRecipe(recipeId); } catch { }
             if (recipe == null)
             {
                 var available = new List<string>();
