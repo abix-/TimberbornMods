@@ -1,4 +1,4 @@
-# API Coverage
+# Features
 
 What Timberbot can and can't do, audited against every Timberborn 1.0 game system.
 
