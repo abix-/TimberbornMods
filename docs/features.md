@@ -17,6 +17,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Beaver age | YES | NO | `beavers` (lifeProgress) |
 | Bot distinction | YES | NO | `beavers` (isBot field) |
 | Place/demolish buildings | YES | YES | `place_building`, `demolish_building` |
+| Placement validation | YES | YES | Game-native `PreviewFactory` + `BlockObject.IsValid()` -- same 9 validators as player UI |
+| Find valid spots | YES | YES | `find_placement` (reachability, path access, power adjacency) |
 | Construction progress | YES | NO | `buildProgress`, `materialProgress`, `hasMaterials` |
 | Building inventory | YES | NO | `inventory` field |
 | Building reachability | YES | NO | `reachable` field |
@@ -25,12 +27,11 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Workers | YES | YES | `set_workers` |
 | Priority | YES | YES | `set_priority` |
 | Paths/stairs/platforms | YES | YES | `place_building`, `place_path` (auto-stairs + platforms for multi-level z-changes) |
-| Placement validation | YES | YES | `find_placement` (reachability, path access, power adjacency) |
 | Ziplines/tubeways | YES | NO | Visible as buildings |
 | Power network | YES | NO | `powered`, `isGenerator`, `isConsumer`, `powerDemand`, `powerSupply` |
 | Science points | YES | NO | `science` |
 | Unlock buildings | YES | YES | `unlock_building` |
-| Crops | YES | YES | `plant_crop`, `clear_planting` |
+| Crops | YES | YES | `plant_crop`, `clear_planting`. Game-native `PlantingAreaValidator.CanPlant()` validation |
 | Trees | YES | YES | `trees`, `mark_trees`, `clear_trees`, `tree_clusters` |
 | Stockpiles | YES | YES | `set_capacity`, `set_good` |
 | Districts | YES | NO | `districts` |
@@ -43,6 +44,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Map/terrain | YES | NO | `map`, `scan`, `visual` |
 | Game speed | YES | YES | `speed`, `set_speed` (0-3) |
 | Soil contamination | YES | NO | `contaminated` field on map tiles |
+| Soil moisture | YES | NO | `moist` field on map tiles |
+| Wellbeing breakdown | YES | NO | `wellbeing` endpoint -- per-category (SocialLife, Fun, Nutrition, Aesthetics, Awe, BasicNeeds) with current/max scores |
 | District migration | YES | YES | `migrate from_district:X to_district:Y count:N` |
 | Clutch status | YES | NO | `isClutch`, `clutchEngaged` on buildings |
 | Per-building power | YES | NO | `nominalPowerInput`, `nominalPowerOutput` on buildings |
@@ -54,6 +57,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Plantable priority | YES | YES | `set_plantable_priority` on foresters (tree type) |
 | Water contamination | YES | NO | `badwater` field on water tiles (0-1) |
 | Pagination | YES | N/A | `limit`/`offset` on buildings, trees, gatherables, beavers |
+| Debug inspection | YES | NO | `debug` endpoint -- reflection-based inspection of any game service, entity component, or field |
+| Water buildings | YES | YES | SwimmingPool, DoubleShower, pumps -- all validated correctly via game-native preview system |
 
 ## Known gaps
 
