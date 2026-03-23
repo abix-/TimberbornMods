@@ -19,9 +19,9 @@ Play the game using `python timberbot/script/timberbot.py` commands only. NEVER 
 
 Every turn:
 
-1. `summary` - check day, resources, population, tree counts
-2. `beavers` - check wellbeing and critical needs
-3. `alerts` - check unstaffed, unpowered, unreachable buildings
+1. `summary` - ONE call has everything: day, resources, population, trees, housing, employment, wellbeing, alerts, science, critical needs
+2. If summary shows critical/miserable > 0: run `beavers` for detail on who needs help
+3. If summary shows alerts > 0: run `alerts` for detail on which buildings
 4. Check trees: `markedGrown` is choppable supply. If < 10, run `tree_clusters` and mark trees near the best cluster
 5. Decide what to do based on what's critical
 6. Take ONE action (place building, set priority, plant crops, mark trees, adjust workers)

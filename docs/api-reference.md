@@ -9,7 +9,7 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | Endpoint | CLI format | Returns |
 |----------|-----------|---------|
 | `/api/ping` | flat kv | `{status, ready}` -- health check |
-| `/api/summary` | flat kv | day, weather, population, resources (flattened) |
+| `/api/summary` | flat kv | day, weather, population, resources, trees, housing, employment, wellbeing, science, alerts |
 | `/api/time` | flat kv | day number, progress |
 | `/api/weather` | flat kv | cycle, drought countdown |
 | `/api/population` | tabular | `[N]{district,adults,children,bots}` |
