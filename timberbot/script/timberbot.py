@@ -135,7 +135,7 @@ class Timberbot:
         buildings = self.buildings()
         issues = []
         for b in buildings:
-            name = _clean_name(b.get("name", ""))
+            name = b.get("name", "")
             bid = b.get("id", 0)
             if b.get("desiredWorkers", 0) > 0 and b.get("assignedWorkers", 0) < b.get("desiredWorkers", 0):
                 issues.append({"type": "unstaffed", "id": bid, "name": name,
@@ -350,7 +350,7 @@ class Timberbot:
             is_dead = t.get("dead", False)
 
             if has_occupant:
-                name = _clean_name(has_occupant)
+                name = has_occupant
                 if is_dead:
                     name += ".dead"
                 elif is_seedling:
@@ -435,7 +435,7 @@ class Timberbot:
                     row += f"{BWHT}@{R}"
                     legend["@"] = (BWHT, "entrance")
                 elif t.get("occupant"):
-                    oname = _clean_name(t["occupant"])
+                    oname = t["occupant"]
                     ch, co = None, None
                     for key, (c, s) in STYLE.items():
                         if key.lower() in oname.lower():
@@ -604,10 +604,6 @@ def _watch():
 import inspect
 
 
-def _clean_name(name):
-    """Strip Unity suffixes from entity names. C# now does this server-side but kept for safety."""
-    return name.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
-
 
 def _flatten_for_toon(method, data):
     """Flatten nested structures so TOON renders them as tables."""
@@ -667,10 +663,7 @@ def _flatten_for_toon(method, data):
             row = {"x": t["x"], "y": t["y"],
                    "terrain": t.get("terrain", 0),
                    "water": t.get("water", 0)}
-            occ = t.get("occupant", "")
-            if occ:
-                occ = _clean_name(occ)
-            row["occupant"] = occ
+            row["occupant"] = t.get("occupant", "")
             if t.get("entrance"):
                 row["entrance"] = True
             if t.get("seedling"):
@@ -714,7 +707,7 @@ def _flatten_for_toon(method, data):
     if method == "buildings" and isinstance(data, list):
         flat = []
         for b in data:
-            row = {"id": b["id"], "name": _clean_name(b.get("name", "")),
+            row = {"id": b["id"], "name": b.get("name", ""),
                    "x": b.get("x", 0), "y": b.get("y", 0), "z": b.get("z", 0),
                    "orientation": b.get("orientation", 0),
                    "finished": b.get("finished", False),
@@ -739,10 +732,8 @@ def _flatten_for_toon(method, data):
             elif wb >= 4: tier = "unhappy"
             else: tier = "miserable"
             wp = b.get("workplace", "")
-            if wp:
-                wp = _clean_name(wp)
             flat.append({"id": b["id"],
-                         "name": _clean_name(b.get("name", "")),
+                         "name": b.get("name", ""),
                          "wellbeing": wb,
                          "tier": tier,
                          "isBot": b.get("isBot", False),
