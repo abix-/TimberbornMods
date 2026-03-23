@@ -43,6 +43,7 @@ using Timberborn.StatusSystem;
 using Timberborn.DwellingSystem;
 using Timberborn.PowerManagement;
 using Timberborn.SoilContaminationSystem;
+using Timberborn.Hauling;
 using Timberborn.GameDistrictsMigration;
 using Timberborn.ToolButtonSystem;
 using Timberborn.ToolSystem;
@@ -904,6 +905,20 @@ namespace Timberbot
             }
 
             return new { error = "building has no priority of that type", id = buildingId, type };
+        }
+
+        public object SetHaulPriority(int buildingId, bool prioritized)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var hp = ec.GetComponent<HaulPrioritizable>();
+            if (hp == null)
+                return new { error = "building has no haul priority", id = buildingId };
+
+            hp.Prioritized = prioritized;
+            return new { id = buildingId, name = ec.GameObject.name, haulPrioritized = hp.Prioritized };
         }
 
         // ================================================================

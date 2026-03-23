@@ -192,6 +192,10 @@ class Timberbot:
         """Set building priority. Values: VeryLow, Normal, VeryHigh. Type: workplace (finished) or construction (building)."""
         return self._post("/api/priority", {"id": building_id, "priority": priority, "type": type})
 
+    def set_haul_priority(self, building_id, prioritized=True):
+        """Set hauler priority on a building. Haulers will deliver goods here first."""
+        return self._post("/api/hauling/priority", {"id": building_id, "prioritized": prioritized})
+
     def set_workers(self, building_id, count):
         """Set desired worker count (0 to maxWorkers)."""
         return self._post("/api/workers", {"id": building_id, "count": count})
