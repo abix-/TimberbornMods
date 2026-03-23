@@ -52,7 +52,7 @@ def main():
 
     tests = [
         ("occupied tile (pump body)",
-         lambda: bot.place_building("Path", 122, 133, 1),
+         lambda: bot.place_building("Path", 122, 133, 2),
          {"expect_error": "occupied"}),
 
         ("occupied tile (berry bush)",
@@ -133,28 +133,39 @@ def main():
 
     print("\n=== orientation (origin correction) ===\n")
 
-    # find a clear test area by trying to place+demolish a path
+    # find a flat 5x5 clear area (fits largest building in any orientation)
     test_spot = None
-    for cx in range(80, 120):
-        scan = bot.scan(cx, 135, 8)
-        if len(scan.get("occupied", [])) == 0 and len(scan.get("water", [])) == 0:
-            tiles = bot.map(cx, 135, cx, 135)
-            t = tiles.get("tiles", [{}])[0]
-            tz = t.get("terrain", 0)
+    need = 5
+    for cy in range(125, 145):
+        for cx in range(70, 130):
+            region = bot.map(cx, cy, cx + need - 1, cy + need - 1)
+            tiles = region.get("tiles", [])
+            if len(tiles) < need * need:
+                continue
+            heights = set(t.get("terrain", 0) for t in tiles)
+            if len(heights) != 1:
+                continue
+            tz = heights.pop()
             if tz < 2:
                 continue
-            # verify placement actually works
-            test = bot.place_building("Path", cx, 135, tz, orientation="south")
+            occupants = [t for t in tiles if t.get("occupant") or t.get("water", 0) > 0]
+            if occupants:
+                continue
+            # verify placement works
+            test = bot.place_building("Path", cx, cy, tz, orientation="south")
             if "id" in test:
                 bot.demolish_building(test["id"])
-                test_spot = (cx, 135, tz)
+                test_spot = (cx, cy, tz)
                 break
+        if test_spot:
+            break
     if not test_spot:
-        print("  SKIP  no clear test area found")
+        print("  SKIP  no clear 5x5 flat area found")
     else:
         bx, by, bz = test_spot
         print(f"  using test area ({bx},{by},z={bz})\n")
 
+    skipped = 0
     if test_spot:
         for prefab, sx, sy in [("FarmHouse.IronTeeth", 2, 2),
                                 ("Barrack.IronTeeth", 3, 2),
@@ -165,6 +176,10 @@ def main():
             for orient in ["south", "west", "north", "east"]:
                 result = bot.place_building(prefab, bx, by, bz, orientation=orient)
                 if "id" not in result:
+                    if "not unlocked" in str(result.get("error", "")):
+                        skipped += 1
+                        print(f"  SKIP  {prefab} {orient} (not unlocked)")
+                        continue
                     if check(f"{prefab} {orient} placement", result, expect_id=True):
                         passed += 1
                     else:
@@ -203,7 +218,11 @@ def main():
     else:
         failed += 1
 
-    print(f"\n=== {passed} passed, {failed} failed ===\n")
+    summary = f"\n=== {passed} passed, {failed} failed"
+    if skipped:
+        summary += f", {skipped} skipped"
+    summary += " ===\n"
+    print(summary)
     sys.exit(1 if failed else 0)
 
 
