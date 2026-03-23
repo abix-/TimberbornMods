@@ -95,8 +95,3 @@ python timberbot/script/release.py --release
 
 This builds a Release DLL, packages a ZIP (DLL + manifest + thumbnail + timberbot.py), tags the version, and creates a GitHub release.
 
-### mod.io
-
-Create a mod entry at https://mod.io/g/timberborn and upload a ZIP containing `Timberbot.dll`, `manifest.json`, and `thumbnail.png`.
-
-Do NOT ship game DLLs. Only your mod's DLL.
