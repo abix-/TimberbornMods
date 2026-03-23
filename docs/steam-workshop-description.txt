@@ -17,7 +17,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 
 [h1]Features[/h1]
 [table]
-[tr][th]Category[/th][th]What you can do[/th][th][/th][/tr]
+[tr][th]Category[/th][th]What you can do[/th][th]Status[/th][/tr]
 [tr][td]Read[/td][td]Colony snapshot. Population, resources, weather, drought countdown[/td][td]Yes[/td][/tr]
 [tr][td]Read[/td][td]All buildings with workers, priority, reachability, power, construction progress, inventory[/td][td]Yes[/td][/tr]
 [tr][td]Read[/td][td]All trees with growth status, cutting marks. Find densest clusters[/td][td]Yes[/td][/tr]
@@ -27,13 +27,14 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Read[/td][td]Science points and unlockable buildings with costs[/td][td]Yes[/td][/tr]
 [tr][td]Read[/td][td]Distribution settings and game notifications[/td][td]Yes[/td][/tr]
 [tr][td]Build[/td][td]Place any building with named orientation. Validates tiles + unlock + z-level[/td][td]Yes[/td][/tr]
-[tr][td]Build[/td][td]Demolish buildings, lay paths[/td][td]Yes[/td][/tr]
+[tr][td]Build[/td][td]Find valid placement spots in an area with path access + power adjacency scoring[/td][td]Yes[/td][/tr]
+[tr][td]Build[/td][td]Demolish buildings, route paths with auto-stairs at z-level changes[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Workers, priority (construction + workplace), speed, pause/unpause[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Unlock buildings with UI update, set import/export per good[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Hauler priority, manufactory recipes, farmhouse action, plantable priority[/td][td]Yes[/td][/tr]
-[tr][td]Manage[/td][td]Migrate beavers between districts[/td][td]In-Progress[/td][/tr]
+[tr][td]Manage[/td][td]Migrate beavers between districts, set work hours[/td][td]Yes[/td][/tr]
 [tr][td]Resources[/td][td]Plant crops, mark trees, configure stockpiles, set floodgate heights[/td][td]Yes[/td][/tr]
-[tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]In-Progress[/td][/tr]
+[tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]Yes[/td][/tr]
 [tr][td]Tools[/td][td]TOON output for AI, ASCII map with terrain height shading, live dashboard, search[/td][td]Yes[/td][/tr]
 [/table]
 
@@ -51,9 +52,10 @@ python timberbot.py alerts
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
 2. Start a game. API starts automatically on port 8085
-3. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
-4. Run: python timberbot.py ping
-5. Run: python timberbot.py (lists all commands)
+3. Install dependencies: pip install requests toons
+4. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
+5. Run: python timberbot.py ping
+6. Run: python timberbot.py (lists all commands)
 
 [h1]Let AI play for you[/h1]
 The mod includes an AI prompt (docs/timberbot.md) that teaches Claude, ChatGPT, or any LLM how to run your colony. With Claude Code:
