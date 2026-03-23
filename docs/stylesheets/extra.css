@@ -1,56 +1,321 @@
-/* timberborn warm tones */
+/* ============================================================
+   TIMBERBORN THEME
+   Dark wood panels, gold/amber highlights, cream text
+   Inspired by the in-game UI: timber planks + brass fixtures
+   ============================================================ */
 
-:root {
-  --md-admonition-icon--beaver: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
+/* -- palette overrides (dark mode = primary experience) -- */
+
+[data-md-color-scheme="slate"] {
+  /* backgrounds: dark wood tones */
+  --md-default-bg-color: #1e1610;
+  --md-default-bg-color--light: #261c14;
+  --md-default-bg-color--lighter: #2e221a;
+  --md-default-bg-color--lightest: #3a2c20;
+
+  /* text: warm cream */
+  --md-default-fg-color: #e8dcc8;
+  --md-default-fg-color--light: #c8b898;
+  --md-default-fg-color--lighter: #a89878;
+  --md-default-fg-color--lightest: #887858;
+
+  /* primary: rich gold */
+  --md-primary-fg-color: #c88830;
+  --md-primary-fg-color--light: #d4a040;
+  --md-primary-fg-color--dark: #a06820;
+  --md-primary-bg-color: #1e1610;
+  --md-primary-bg-color--light: #261c14;
+
+  /* accent: bright amber */
+  --md-accent-fg-color: #f0a820;
+  --md-accent-fg-color--transparent: rgba(240, 168, 32, 0.1);
+  --md-accent-bg-color: #1e1610;
+
+  /* code */
+  --md-code-bg-color: #16100c;
+  --md-code-fg-color: #e0d4c0;
+  --md-code-hl-color: rgba(240, 168, 32, 0.15);
+
+  /* typeset */
+  --md-typeset-color: #e8dcc8;
+  --md-typeset-a-color: #e0b040;
+
+  /* footer */
+  --md-footer-bg-color: #140e0a;
+  --md-footer-bg-color--dark: #0e0a08;
+  --md-footer-fg-color: #c8b898;
+  --md-footer-fg-color--light: #a89878;
+  --md-footer-fg-color--lighter: #887858;
 }
 
-/* warm code block backgrounds in dark mode */
-[data-md-color-scheme="slate"] .md-typeset code {
-  background-color: rgba(255, 179, 0, 0.08);
+/* -- header: dark timber beam -- */
+
+[data-md-color-scheme="slate"] .md-header {
+  background: linear-gradient(180deg, #1a1208 0%, #221810 100%);
+  border-bottom: 2px solid #3d2b1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
+
+[data-md-color-scheme="slate"] .md-header__title {
+  color: #d4a040;
+  font-weight: 700;
+}
+
+/* -- navigation sidebar: wood panel -- */
+
+[data-md-color-scheme="slate"] .md-sidebar {
+  background-color: #1a1208;
+  border-right: 1px solid #3d2b1a;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: #c8b898;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #f0a820;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link--active:hover {
+  color: #f0a820;
+  font-weight: 600;
+}
+
+[data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
+  color: #f0a820;
+}
+
+/* -- search bar -- */
+
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: #2a1f14;
+  color: #e8dcc8;
+  border: 1px solid #4a3322;
+}
+
+[data-md-color-scheme="slate"] .md-search__input::placeholder {
+  color: #887858;
+}
+
+/* -- content area -- */
+
+[data-md-color-scheme="slate"] .md-content {
+  background-color: #1e1610;
+}
+
+/* headings: gold gradient */
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: #e0b040;
+  border-bottom: 2px solid #3d2b1a;
+  padding-bottom: 0.4em;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  color: #d4a040;
+  border-bottom: 1px solid #2e221a;
+  padding-bottom: 0.3em;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h3 {
+  color: #c89030;
+}
+
+/* links: warm gold */
+[data-md-color-scheme="slate"] .md-typeset a {
+  color: #e0b040;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover {
+  color: #f0c860;
+}
+
+/* -- code blocks: dark heartwood -- */
 
 [data-md-color-scheme="slate"] .md-typeset pre {
-  background-color: #1a1714;
+  background-color: #120e0a;
+  border: 1px solid #2e221a;
+  border-radius: 6px;
 }
 
-/* warm hover on nav items */
-[data-md-color-scheme="slate"] .md-nav__link:hover {
-  color: #ffb300;
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: #120e0a;
+  color: #e0d4c0;
 }
 
-/* style the header with a subtle wood grain feel */
-[data-md-color-scheme="slate"] .md-header {
-  background-color: #1c1610;
-}
-
-/* warmer footer */
-[data-md-color-scheme="slate"] .md-footer {
-  background-color: #1c1610;
-}
-
-/* custom admonition for api endpoints */
-.md-typeset .admonition.api,
-.md-typeset details.api {
-  border-color: #ffb300;
-}
-
-.md-typeset .api > .admonition-title,
-.md-typeset .api > summary {
-  background-color: rgba(255, 179, 0, 0.1);
-}
-
-/* make tables pop a bit more */
-[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background-color: rgba(255, 179, 0, 0.15);
-  color: #ffb300;
-}
-
-/* subtle glow on inline code */
+/* inline code: brass tag */
 [data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
-  border: 1px solid rgba(255, 179, 0, 0.15);
+  background-color: rgba(200, 136, 48, 0.1);
+  border: 1px solid rgba(200, 136, 48, 0.25);
+  color: #e0b848;
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
 }
 
-/* response example styling */
-.md-typeset details.example {
-  border-color: #ff9100;
+/* copy button */
+[data-md-color-scheme="slate"] .md-clipboard {
+  color: #887858;
+}
+
+[data-md-color-scheme="slate"] .md-clipboard:hover {
+  color: #f0a820;
+}
+
+/* -- tables: plank rows -- */
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) {
+  border: 1px solid #3d2b1a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: #2a1f14;
+  color: #d4a040;
+  font-weight: 700;
+  border-bottom: 2px solid #5c3d24;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) td {
+  border-color: #2e221a;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:nth-child(even) td {
+  background-color: rgba(42, 31, 20, 0.4);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover td {
+  background-color: rgba(200, 136, 48, 0.08);
+}
+
+/* -- admonitions: timber panels with colored trim -- */
+
+[data-md-color-scheme="slate"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset details {
+  background-color: #221810;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset summary {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* tip: green growth */
+[data-md-color-scheme="slate"] .md-typeset .admonition.tip,
+[data-md-color-scheme="slate"] .md-typeset details.tip {
+  border-color: #5a8a30;
+}
+
+/* warning: drought amber */
+[data-md-color-scheme="slate"] .md-typeset .admonition.warning,
+[data-md-color-scheme="slate"] .md-typeset details.warning {
+  border-color: #d4a040;
+}
+
+/* danger: fire/death red */
+[data-md-color-scheme="slate"] .md-typeset .admonition.danger,
+[data-md-color-scheme="slate"] .md-typeset details.danger {
+  border-color: #cc4422;
+}
+
+/* bug: rust orange */
+[data-md-color-scheme="slate"] .md-typeset .admonition.bug,
+[data-md-color-scheme="slate"] .md-typeset details.bug {
+  border-color: #b85820;
+}
+
+/* info: water blue */
+[data-md-color-scheme="slate"] .md-typeset .admonition.info,
+[data-md-color-scheme="slate"] .md-typeset details.info {
+  border-color: #4488cc;
+}
+
+/* example: brass/gold */
+[data-md-color-scheme="slate"] .md-typeset .admonition.example,
+[data-md-color-scheme="slate"] .md-typeset details.example {
+  border-color: #c88830;
+}
+
+/* -- tabs: brass fixtures -- */
+
+[data-md-color-scheme="slate"] .md-typeset .tabbed-labels > label {
+  color: #a89878;
+  border-bottom-color: transparent;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .tabbed-labels > label:hover {
+  color: #e0b040;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .tabbed-labels > .tabbed-label--active {
+  color: #f0a820;
+  border-bottom-color: #f0a820;
+}
+
+/* -- horizontal rules: plank divider -- */
+
+[data-md-color-scheme="slate"] .md-typeset hr {
+  border-color: #3d2b1a;
+}
+
+/* -- footer: dark base -- */
+
+[data-md-color-scheme="slate"] .md-footer {
+  border-top: 2px solid #3d2b1a;
+}
+
+/* -- scrollbar: timber -- */
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar {
+  width: 8px;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-track {
+  background: #1a1208;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+  background: #4a3322;
+  border-radius: 4px;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
+  background: #5c3d24;
+}
+
+/* -- back to top button -- */
+
+[data-md-color-scheme="slate"] .md-top {
+  background-color: #3d2b1a;
+  color: #d4a040;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-md-color-scheme="slate"] .md-top:hover {
+  background-color: #4a3322;
+}
+
+/* -- light mode: parchment -- */
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f5efe6;
+  --md-primary-fg-color: #5c3d24;
+  --md-accent-fg-color: #a06820;
+  --md-typeset-a-color: #7a5230;
+}
+
+[data-md-color-scheme="default"] .md-header {
+  background: linear-gradient(180deg, #4a3322 0%, #5c3d24 100%);
+}
+
+[data-md-color-scheme="default"] .md-typeset h1,
+[data-md-color-scheme="default"] .md-typeset h2 {
+  color: #3d2b1a;
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) th {
+  background-color: #5c3d24;
+  color: #f5efe6;
 }
