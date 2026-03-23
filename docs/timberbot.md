@@ -29,7 +29,7 @@ Every turn:
 
 ## Placement workflow (MANDATORY every time)
 
-1. `visual` the area -- see the map with colored tiles and terrain height. Background shading shows z-level; empty ground shows height digit (2, 3, 4). Find a clear rectangle that fits the building footprint
+1. `visual` the area -- see the map with colored tiles and terrain height. Background shading shows z-level; empty ground shows z % 10 digit. Find a clear rectangle that fits the building footprint
 2. Verify z from visual (height digits). Use `map` only if you need exact terrain data for ambiguous tiles
 3. Verify every tile in the footprint is open (height digits or .dead stumps). Count the tiles against building size
 4. Pick orientation so entrance FACES the path
@@ -142,7 +142,7 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 
 - ALWAYS use `python timberbot/script/timberbot.py <method>` for everything
 - Use `find source:buildings name:X` to look up building IDs
-- Use `scan` before and after every placement
+- Use `visual` before and after every placement
 - Set VeryHigh priority on food and water buildings (BOTH construction and workplace)
 - Set haul priority on breeding pods so beavers deliver food there
 - ALWAYS keep 1-2 idle haulers (unassigned beavers) -- breeding pods and construction need haulers to deliver materials
