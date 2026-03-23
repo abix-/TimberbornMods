@@ -19,7 +19,8 @@ def check(name, ok, detail=""):
 
 
 def main():
-    bot = Timberbot()
+    bot = Timberbot(json_mode=True)    # full data for detailed checks
+    tbot = Timberbot(json_mode=False)  # toon format for display checks
     if not bot.ping():
         print("error: game not reachable")
         sys.exit(1)
@@ -336,6 +337,84 @@ def main():
         else:
             failed += 1
             print(f"         first 100 chars: {out[:100]}")
+
+    print("\n=== TOON format (API) ===\n")
+
+    # summary toon: flat keys
+    ts = tbot.summary()
+    for field in ["day", "adults", "beds", "workers", "wellbeing", "science", "alerts"]:
+        if check(f"toon summary has {field}", field in ts):
+            passed += 1
+        else:
+            failed += 1
+
+    # buildings toon: flat with workers string
+    tb = tbot.buildings()
+    if tb:
+        b0 = tb[0]
+        if check("toon building has workers string", isinstance(b0.get("workers", None), str)):
+            passed += 1
+        else:
+            failed += 1
+        if check("toon building has no desiredWorkers", "desiredWorkers" not in b0):
+            passed += 1
+        else:
+            failed += 1
+
+    # beavers toon: has tier, no needs dict
+    tbv = tbot.beavers()
+    if tbv:
+        bv0 = tbv[0]
+        if check("toon beaver has tier", "tier" in bv0):
+            passed += 1
+        else:
+            failed += 1
+        if check("toon beaver has no needs dict", "needs" not in bv0):
+            passed += 1
+        else:
+            failed += 1
+
+    # resources toon: flat list with district key
+    tr = tbot.resources()
+    if check("toon resources is list", isinstance(tr, list) and len(tr) > 0):
+        passed += 1
+    else:
+        failed += 1
+    if tr:
+        if check("toon resource has district", "district" in tr[0]):
+            passed += 1
+        else:
+            failed += 1
+
+    # districts toon: flat with goods inline
+    td = tbot.districts()
+    if td:
+        if check("toon district has adults", "adults" in td[0]):
+            passed += 1
+        else:
+            failed += 1
+
+    print("\n=== JSON format (API) ===\n")
+
+    # summary json: nested
+    js = Timberbot(json_mode=True).summary()
+    if check("json summary has time", "time" in js):
+        passed += 1
+    else:
+        failed += 1
+    if check("json summary has districts", "districts" in js):
+        passed += 1
+    else:
+        failed += 1
+
+    # buildings json: full fields
+    jb = bot.buildings()
+    if jb:
+        jb0 = jb[0]
+        if check("json building has desiredWorkers or no workplace", "desiredWorkers" in jb0 or "maxWorkers" not in jb0):
+            passed += 1
+        else:
+            failed += 1
 
     print(f"\n=== {passed} passed, {failed} failed ===\n")
     sys.exit(1 if failed else 0)
