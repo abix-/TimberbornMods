@@ -232,7 +232,7 @@ namespace Timberbot
                             foreach (var needSpec in needMgr.GetNeeds())
                             {
                                 var need = needMgr.GetNeed(needSpec.Id);
-                                if (need.IsActive && need.IsCritical) { critical++; break; }
+                                if (need.IsActive && need.IsBelowWarningThreshold) { critical++; break; }
                             }
                         }
                     }
