@@ -63,7 +63,7 @@ nav:
   - Getting Started: index.md
   - API Reference: api-reference.md
   - AI Prompt: timberbot.md
-  - Features: coverage.md
+  - Features: features.md
   - Developing: developing.md
 
 copyright: Timberbot API &mdash; Play Timberborn with an AI

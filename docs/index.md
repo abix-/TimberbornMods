@@ -179,5 +179,5 @@ Paste the contents of `docs/timberbot.md` as a system prompt. Then ask the AI to
 
 - [API Reference](api-reference.md) -- every endpoint with request/response examples
 - [AI Prompt](timberbot.md) -- autonomous colony management
-- [Coverage](coverage.md) -- what's implemented vs gaps
+- [Features](features.md) -- what's implemented vs gaps
 - [Developing](developing.md) -- build from source

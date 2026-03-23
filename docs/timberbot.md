@@ -32,12 +32,12 @@ Every turn:
 !!! warning "ALWAYS use find_placement"
     Never guess coordinates or z-level. The server validates terrain, occupancy, water, and picks the best orientation.
 
-1. `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` -- server finds all valid spots with correct z and orientation toward paths
-2. Pick the first result with `pathAccess: true`
+1. `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` -- server finds all valid spots with correct z, orientation, reachability, and power adjacency
+2. Pick the first result with `reachable: true` -- this means it's connected to the district center via roads
 3. `place_building` with the coords, z, and orientation from the result
-4. `visual` the area -- confirm building placed correctly and entrance faces path. If not, demolish and redo
-- If find_placement returns no results, widen the search area or try a different location
-- After placing, check `alerts` for "not connected to any district center" -- if it appears, demolish and redo with path access
+4. `visual` the area -- confirm building placed correctly
+- Results sorted by: reachable > pathAccess > nearPower > pathCount
+- If find_placement returns no reachable results, widen the search area or build paths to connect
 
 ## Z-level rules
 

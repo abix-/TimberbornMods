@@ -12,7 +12,13 @@
       "Bash(curl:*)",
       "Bash(cd:*)",
       "Bash(reg add:*)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Read(//c/code/timberborn python timberbot/script/**)",
+      "Bash(1 echo:*)",
+      "Bash(__NEW_LINE_b112362df25bf862__ echo:*)",
+      "Bash(grep -rl \"NeedSystem\\\\|Wellbeing\\\\|NeedCollection\\\\|NeedSpec\\\\|NeedApplication\" C:GamesSteamsteamappscommonTimberbornTimberborn_DataManaged/*.dll)",
+      "Bash(grep -rn \"AllBuildings\\\\|AllTemplates\\\\|GetAll\\\\|Templates\\\\|Prefabs\\\\|BuildingSpecification\\\\|BuildingTemplateRegistry\" C:/code/timberborn/timberbot --include=*.cs)",
+      "Bash(grep -rn \"BuildingService\\\\|Building\\\\|Template\" C:/code/timberborn/docs --include=*.md)"
     ]
   }
 }
