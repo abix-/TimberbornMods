@@ -542,6 +542,50 @@ class TestRunner:
                    self.err(result2) and "straight" in str(result2.get("error", "")),
                    json.dumps(result2)[:100])
 
+        # path across z-level change (should auto-place stairs)
+        # find two adjacent unoccupied tiles with z-height difference of 1
+        stair_spot = None
+        for ty in range(125, 145):
+            for tx in range(70, 140):
+                region = self.bot.map(tx, ty, tx + 1, ty)
+                tiles = region.get("tiles", [])
+                if len(tiles) < 2:
+                    continue
+                t0, t1 = tiles[0], tiles[1]
+                if t0.get("occupant") or t1.get("occupant"):
+                    continue
+                if t0.get("water", 0) > 0 or t1.get("water", 0) > 0:
+                    continue
+                h0, h1 = t0.get("terrain", 0), t1.get("terrain", 0)
+                if abs(h0 - h1) == 1 and h0 >= 2 and h1 >= 2:
+                    stair_spot = (tx, ty, tx + 1, ty)
+                    break
+            if stair_spot:
+                break
+
+        if stair_spot:
+            sx1, sy1, sx2, sy2 = stair_spot
+            result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
+            self.check("path with z-change places stairs",
+                       self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
+                       json.dumps(result3)[:100])
+
+            # verify stairs on map
+            region = self.bot.map(sx1, sy1, sx2, sy2)
+            has_stairs = any("Stairs" in str(t.get("occupant", "")) for t in region.get("tiles", []))
+            self.check("verify stairs on map", has_stairs)
+
+            # cleanup
+            buildings = self.bot.buildings()
+            if isinstance(buildings, list):
+                for b in buildings:
+                    bx, by = b.get("x", -1), b.get("y", -1)
+                    if (bx == sx1 and by == sy1) or (bx == sx2 and by == sy2):
+                        if "Path" in str(b.get("name", "")) or "Stairs" in str(b.get("name", "")):
+                            self.bot.demolish_building(b["id"])
+        else:
+            self.skip("path with z-change", "no adjacent z-diff=1 tiles found")
+
     def test_summary_projection(self):
         print("\n=== summary projection ===\n")
 
@@ -597,6 +641,16 @@ class TestRunner:
             self.check("science deducted",
                        result["remaining"] == expected,
                        f"expected {expected}, got {result['remaining']}")
+
+        # try unlocking same building again -- should say already unlocked, no point change
+        points_after = result.get("remaining", 0)
+        result2 = self.bot.unlock_building(target["name"])
+        self.check("already unlocked returns note",
+                   self.has(result2, "note") and "already" in str(result2.get("note", "")),
+                   json.dumps(result2)[:100])
+        self.check("no points deducted on re-unlock",
+                   result2.get("remaining") == points_after,
+                   f"expected {points_after}, got {result2.get('remaining')}")
 
 
 def main():

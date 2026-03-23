@@ -93,6 +93,7 @@ namespace Timberbot
         private readonly ToolUnlockingService _toolUnlockingService;      // full unlock flow (cost + UI + events)
         private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry; // plantable groups (for unlock UI)
         private readonly RecipeSpecService _recipeSpecService;              // manufactory recipe lookup
+        private readonly StackableBlockService _stackableBlockService;    // stackable block checks (platforms)
         private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
         private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
@@ -127,7 +128,8 @@ namespace Timberbot
             RecipeSpecService recipeSpecService,
             DistrictPathNavRangeDrawerRegistrar districtPathNavRegistrar,
             Timberborn.Navigation.INavMeshService navMeshService,
-            ISoilMoistureService soilMoistureService)
+            ISoilMoistureService soilMoistureService,
+            StackableBlockService stackableBlockService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -158,6 +160,7 @@ namespace Timberbot
             _districtPathNavRegistrar = districtPathNavRegistrar;
             _navMeshService = navMeshService;
             _soilMoistureService = soilMoistureService;
+            _stackableBlockService = stackableBlockService;
         }
 
         public void Load()
@@ -2042,9 +2045,7 @@ namespace Timberbot
                     }
 
                     prevZ = tz;
-                    if (cx == x2 && cy == y2) break;
-                    cx += dx; cy += dy;
-                    continue;
+                    // fall through to place path at current tile (first tile at new z-level)
                 }
 
                 // place path at current tile
@@ -2351,7 +2352,12 @@ namespace Timberbot
                         if (waterHeight > 0) return "water";
                     }
                     if (terrainHeight == 0 && !isWaterBuilding) return "no terrain";
-                    if (terrainHeight < tile.z && !isWaterBuilding) return "terrain too low";
+                    if (terrainHeight < tile.z && !isWaterBuilding)
+                    {
+                        // check if a stackable block (platform) supports this z-level
+                        if (!_stackableBlockService.IsStackableBlockAt(new Vector3Int(tile.x, tile.y, tile.z - 1)))
+                            return "terrain too low";
+                    }
                     if (terrainHeight > tile.z && !isWaterBuilding) return "terrain too high";
                 }
                 long key = (long)tile.x * 1000000 + (long)tile.y * 1000 + tile.z;
@@ -2646,7 +2652,10 @@ namespace Timberbot
                         return new { error = $"no terrain at ({tile.x},{tile.y})", prefab = prefabName, x, y, z, orientation };
 
                     if (terrainHeight < tile.z && !isWaterBuilding)
-                        return new { error = $"terrain too low at ({tile.x},{tile.y}): height {terrainHeight} < {tile.z}", prefab = prefabName, x, y, z, orientation };
+                    {
+                        if (!_stackableBlockService.IsStackableBlockAt(new Vector3Int(tile.x, tile.y, tile.z - 1)))
+                            return new { error = $"terrain too low at ({tile.x},{tile.y}): height {terrainHeight} < {tile.z}", prefab = prefabName, x, y, z, orientation };
+                    }
 
                     if (terrainHeight > tile.z && !isWaterBuilding)
                         return new { error = $"terrain too high at ({tile.x},{tile.y}): height {terrainHeight} > {tile.z} (building would clip underground)", prefab = prefabName, x, y, z, orientation };
