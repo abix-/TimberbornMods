@@ -104,6 +104,9 @@ class TestRunner:
         self.test_bot_toon_format()
         self.test_beaver_detail()
         self.test_building_detail()
+        self.test_beaver_position()
+        self.test_beaver_district()
+        self.test_map_stacking()
         self.test_performance()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
@@ -1277,6 +1280,86 @@ class TestRunner:
         else:
             self.skip("bot_toon", "no bots in colony")
 
+
+    def test_beaver_position(self):
+        """Test beaver/bot x,y,z grid position."""
+        print("\n=== beaver position ===\n")
+        beavers = self.bot._get("/api/beavers?format=json")
+        if not beavers:
+            self.skip("beaver_position", "no beavers")
+            return
+        b = beavers[0]
+        self.check("beaver has x", "x" in b, f"keys: {list(b.keys())[:10]}")
+        self.check("beaver has y", "y" in b)
+        self.check("beaver has z", "z" in b)
+        if "x" in b:
+            self.check("x is int", isinstance(b["x"], int), f"type={type(b['x'])}")
+            self.check("x in range", 0 <= b["x"] <= 256, f"x={b['x']}")
+            self.check("y in range", 0 <= b["y"] <= 256, f"y={b['y']}")
+            self.check("z >= 0", b["z"] >= 0, f"z={b['z']}")
+
+        # bot should also have position
+        bots = [x for x in beavers if x.get("isBot")]
+        if bots:
+            bot = bots[0]
+            self.check("bot has x", "x" in bot)
+            self.check("bot has y", "y" in bot)
+        else:
+            self.skip("bot_position", "no bots in colony")
+
+    def test_beaver_district(self):
+        """Test district field on beavers."""
+        print("\n=== beaver district ===\n")
+        beavers = self.bot._get("/api/beavers?format=json")
+        if not beavers:
+            self.skip("beaver_district", "no beavers")
+            return
+        # at least one beaver should have a district
+        with_district = [b for b in beavers if "district" in b]
+        self.check("some beavers have district",
+                   len(with_district) > 0,
+                   f"{len(with_district)}/{len(beavers)} have district")
+        if with_district:
+            self.check("district is string",
+                       isinstance(with_district[0]["district"], str))
+            self.check("district is not empty",
+                       len(with_district[0]["district"]) > 0)
+
+    def test_map_stacking(self):
+        """Test map shows multiple occupants at different z-levels."""
+        print("\n=== map stacking ===\n")
+        # scan an area known to have stairs/platforms (z-transitions)
+        result = self.bot.map(139, 147, 140, 148)
+        tiles = result.get("tiles", [])
+        self.check("map returns tiles", len(tiles) > 0)
+
+        # check for stacked tiles (occupants array)
+        stacked = [t for t in tiles if "occupants" in t]
+        single = [t for t in tiles if "occupant" in t and "occupants" not in t]
+
+        if stacked:
+            t = stacked[0]
+            self.check("stacked tile has occupants array",
+                       isinstance(t["occupants"], list))
+            self.check("stacked has multiple occupants",
+                       len(t["occupants"]) >= 2,
+                       f"count={len(t['occupants'])}")
+            occ = t["occupants"][0]
+            self.check("stacked occupant has name", "name" in occ)
+            self.check("stacked occupant has z", "z" in occ)
+        else:
+            self.skip("map_stacked", "no stacked tiles in test area")
+
+        if single:
+            self.check("single occupant is string",
+                       isinstance(single[0]["occupant"], str))
+
+        # backward compat: single occupant tiles still use "occupant" string
+        for t in tiles:
+            has_both = "occupant" in t and "occupants" in t
+            self.check(f"tile ({t['x']},{t['y']}) no overlap",
+                       not has_both,
+                       "has both occupant and occupants")
 
     def test_building_detail(self):
         print("\n=== building detail ===\n")

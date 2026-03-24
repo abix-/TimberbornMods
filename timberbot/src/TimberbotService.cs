@@ -206,10 +206,48 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
-        // PERF: event-driven entity indexes. Updated via EventBus on entity create/delete.
-        // Zero per-frame cost. Always accurate. No stale references.
-        private readonly List<EntityComponent> _buildingIndex = new List<EntityComponent>();
-        private readonly List<EntityComponent> _naturalResourceIndex = new List<EntityComponent>();
+        // PERF: event-driven entity indexes with cached component refs.
+        // Components resolved once at add-time. Zero GetComponent calls per request.
+
+        private struct CachedNaturalResource
+        {
+            public EntityComponent Entity;
+            public int Id;
+            public string Name;
+            public BlockObject BlockObject;
+            public LivingNaturalResource Living;
+            public Cuttable Cuttable;
+            public Gatherable Gatherable;
+            public Timberborn.Growing.Growable Growable;
+        }
+
+        private struct CachedBuilding
+        {
+            public EntityComponent Entity;
+            public int Id;
+            public string Name;
+            public BlockObject BlockObject;
+            public PausableBuilding Pausable;
+            public Floodgate Floodgate;
+            public BuilderPrioritizable BuilderPrio;
+            public Workplace Workplace;
+            public WorkplacePriority WorkplacePrio;
+            public EntityReachabilityStatus Reachability;
+            public MechanicalBuilding Mechanical;
+            public StatusSubject Status;
+            public MechanicalNode PowerNode;
+            public ConstructionSite Site;
+            public Inventories Inventories;
+            public Wonder Wonder;
+            public Dwelling Dwelling;
+            public Clutch Clutch;
+            public Manufactory Manufactory;
+            public BreedingPod BreedingPod;
+            public RangedEffectBuildingSpec RangedEffect;
+        }
+
+        private readonly List<CachedBuilding> _buildingIndex = new List<CachedBuilding>();
+        private readonly List<CachedNaturalResource> _naturalResourceIndex = new List<CachedNaturalResource>();
         private readonly List<EntityComponent> _beaverIndex = new List<EntityComponent>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
 
@@ -227,18 +265,58 @@ namespace Timberbot
         {
             _entityCache[ec.GameObject.GetInstanceID()] = ec;
             if (ec.GetComponent<Building>() != null)
-                _buildingIndex.Add(ec);
+            {
+                _buildingIndex.Add(new CachedBuilding
+                {
+                    Entity = ec,
+                    Id = ec.GameObject.GetInstanceID(),
+                    Name = CleanName(ec.GameObject.name),
+                    BlockObject = ec.GetComponent<BlockObject>(),
+                    Pausable = ec.GetComponent<PausableBuilding>(),
+                    Floodgate = ec.GetComponent<Floodgate>(),
+                    BuilderPrio = ec.GetComponent<BuilderPrioritizable>(),
+                    Workplace = ec.GetComponent<Workplace>(),
+                    WorkplacePrio = ec.GetComponent<WorkplacePriority>(),
+                    Reachability = ec.GetComponent<EntityReachabilityStatus>(),
+                    Mechanical = ec.GetComponent<MechanicalBuilding>(),
+                    Status = ec.GetComponent<StatusSubject>(),
+                    PowerNode = ec.GetComponent<MechanicalNode>(),
+                    Site = ec.GetComponent<ConstructionSite>(),
+                    Inventories = ec.GetComponent<Inventories>(),
+                    Wonder = ec.GetComponent<Wonder>(),
+                    Dwelling = ec.GetComponent<Dwelling>(),
+                    Clutch = ec.GetComponent<Clutch>(),
+                    Manufactory = ec.GetComponent<Manufactory>(),
+                    BreedingPod = ec.GetComponent<BreedingPod>(),
+                    RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>()
+                });
+            }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
-                _naturalResourceIndex.Add(ec);
+            {
+                _naturalResourceIndex.Add(new CachedNaturalResource
+                {
+                    Entity = ec,
+                    Id = ec.GameObject.GetInstanceID(),
+                    Name = CleanName(ec.GameObject.name),
+                    BlockObject = ec.GetComponent<BlockObject>(),
+                    Living = ec.GetComponent<LivingNaturalResource>(),
+                    Cuttable = ec.GetComponent<Cuttable>(),
+                    Gatherable = ec.GetComponent<Gatherable>(),
+                    Growable = ec.GetComponent<Timberborn.Growing.Growable>()
+                });
+            }
             else if (ec.GetComponent<NeedManager>() != null)
+            {
                 _beaverIndex.Add(ec);
+            }
         }
 
         private void RemoveFromIndexes(EntityComponent ec)
         {
-            _entityCache.Remove(ec.GameObject.GetInstanceID());
-            _buildingIndex.Remove(ec);
-            _naturalResourceIndex.Remove(ec);
+            int id = ec.GameObject.GetInstanceID();
+            _entityCache.Remove(id);
+            _buildingIndex.RemoveAll(b => b.Id == id);
+            _naturalResourceIndex.RemoveAll(n => n.Id == id);
             _beaverIndex.Remove(ec);
         }
 
@@ -283,53 +361,41 @@ namespace Timberbot
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
             int miserable = 0, critical = 0;
 
-            // trees (from natural resource index)
-
-            foreach (var ec in _naturalResourceIndex)
+            // trees (cached component refs -- zero GetComponent)
+            foreach (var c in _naturalResourceIndex)
             {
-                var cuttable = ec.GetComponent<Cuttable>();
-                if (cuttable != null)
+                if (c.Cuttable == null) continue;
+                if (c.Living != null && !c.Living.IsDead && c.BlockObject != null)
                 {
-                    var living = ec.GetComponent<LivingNaturalResource>();
-                    var growable = ec.GetComponent<Timberborn.Growing.Growable>();
-                    var bo = ec.GetComponent<BlockObject>();
-                    if (living != null && !living.IsDead && bo != null)
-                    {
-                        bool marked = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
-                        bool grown = growable != null && growable.IsGrown;
-                        if (marked && grown) markedGrown++;
-                        else if (marked && !grown) markedSeedling++;
-                        else if (!marked && grown) unmarkedGrown++;
-                    }
+                    bool marked = _treeCuttingArea.IsInCuttingArea(c.BlockObject.Coordinates);
+                    bool grown = c.Growable != null && c.Growable.IsGrown;
+                    if (marked && grown) markedGrown++;
+                    else if (marked && !grown) markedSeedling++;
+                    else if (!marked && grown) unmarkedGrown++;
                 }
             }
 
-            // buildings: housing, employment, power, reachability
-
-            foreach (var ec in _buildingIndex)
+            // buildings (cached component refs -- zero GetComponent)
+            foreach (var c in _buildingIndex)
             {
-                var dwelling = ec.GetComponent<Dwelling>();
-                if (dwelling != null)
+                if (c.Dwelling != null)
                 {
-                    occupiedBeds += dwelling.NumberOfDwellers;
-                    totalBeds += dwelling.MaxBeavers;
+                    occupiedBeds += c.Dwelling.NumberOfDwellers;
+                    totalBeds += c.Dwelling.MaxBeavers;
                 }
 
-                var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
-                if (wp != null)
+                if (c.Workplace != null)
                 {
-                    assignedWorkers += wp.AssignedWorkers.Count;
-                    totalVacancies += wp.DesiredWorkers;
-                    if (wp.DesiredWorkers > 0 && wp.AssignedWorkers.Count < wp.DesiredWorkers)
+                    assignedWorkers += c.Workplace.AssignedWorkers.Count;
+                    totalVacancies += c.Workplace.DesiredWorkers;
+                    if (c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
                         alertUnstaffed++;
                 }
 
-                var mech = ec.GetComponent<MechanicalNode>();
-                if (mech != null && mech.IsConsumer && !mech.Active)
+                if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
                     alertUnpowered++;
 
-                var reach = ec.GetComponent<EntityReachabilityStatus>();
-                if (reach != null && reach.IsAnyUnreachable())
+                if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
                     alertUnreachable++;
             }
 
@@ -477,33 +543,26 @@ namespace Timberbot
         {
 
             var alerts = new List<object>();
-            foreach (var ec in _buildingIndex)
+            foreach (var c in _buildingIndex)
             {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                var name = CleanName(ec.GameObject.name);
-                int id = ec.GameObject.GetInstanceID();
+                if (c.BlockObject == null) continue;
 
-                var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
-                if (wp != null && wp.DesiredWorkers > 0 && wp.AssignedWorkers.Count < wp.DesiredWorkers)
-                    alerts.Add(new { type = "unstaffed", id, name, workers = $"{wp.AssignedWorkers.Count}/{wp.DesiredWorkers}" });
+                if (c.Workplace != null && c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
+                    alerts.Add(new { type = "unstaffed", id = c.Id, name = c.Name, workers = $"{c.Workplace.AssignedWorkers.Count}/{c.Workplace.DesiredWorkers}" });
 
-                var mech = ec.GetComponent<MechanicalNode>();
-                if (mech != null && mech.IsConsumer && !mech.Active)
-                    alerts.Add(new { type = "unpowered", id, name });
+                if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
+                    alerts.Add(new { type = "unpowered", id = c.Id, name = c.Name });
 
-                var reach = ec.GetComponent<EntityReachabilityStatus>();
-                if (reach != null && reach.IsAnyUnreachable())
-                    alerts.Add(new { type = "unreachable", id, name });
+                if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
+                    alerts.Add(new { type = "unreachable", id = c.Id, name = c.Name });
 
-                var statuses = ec.GetComponent<StatusSubject>();
-                if (statuses != null)
+                if (c.Status != null)
                 {
-                    foreach (var status in statuses.ActiveStatuses)
+                    foreach (var status in c.Status.ActiveStatuses)
                     {
                         var desc = status.StatusDescription;
                         if (!string.IsNullOrEmpty(desc) && desc != "Normal")
-                            alerts.Add(new { type = "status", id, name, status = desc });
+                            alerts.Add(new { type = "status", id = c.Id, name = c.Name, status = desc });
                     }
                 }
             }
@@ -799,84 +858,73 @@ namespace Timberbot
 
 
             var results = new List<object>();
-            foreach (var ec in _buildingIndex)
+            foreach (var c in _buildingIndex)
             {
-                if (singleId.HasValue && ec.GameObject.GetInstanceID() != singleId.Value)
+                if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
-
-                var go = ec.GameObject;
-                var bo = ec.GetComponent<BlockObject>();            // position, orientation, entrance, finished state
-                var pausable = ec.GetComponent<PausableBuilding>(); // can be paused/unpaused
-                var floodgate = ec.GetComponent<Floodgate>();       // water gate with adjustable height
-                var prio = ec.GetComponent<BuilderPrioritizable>(); // construction priority (while being built)
-                var workplace = ec.GetComponent<Workplace>();       // worker slots (desiredWorkers, assignedWorkers)
 
                 var entry = new Dictionary<string, object>
                 {
-                    ["id"] = go.GetInstanceID(),
-                    ["name"] = CleanName(go.name)
+                    ["id"] = c.Id,
+                    ["name"] = c.Name
                 };
 
-                if (bo != null)
+                if (c.BlockObject != null)
                 {
-                    entry["finished"] = bo.IsFinished;
-                    var coords = bo.Coordinates;
+                    entry["finished"] = c.BlockObject.IsFinished;
+                    var coords = c.BlockObject.Coordinates;
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
-                    entry["orientation"] = OrientNames[(int)bo.Orientation];
+                    entry["orientation"] = OrientNames[(int)c.BlockObject.Orientation];
 
-                    if (bo.HasEntrance)
+                    if (c.BlockObject.HasEntrance)
                     {
-                        var entrance = bo.PositionedEntrance;
+                        var entrance = c.BlockObject.PositionedEntrance;
                         entry["entranceX"] = entrance.DoorstepCoordinates.x;
                         entry["entranceY"] = entrance.DoorstepCoordinates.y;
                         entry["entranceZ"] = entrance.DoorstepCoordinates.z;
                     }
                 }
 
-                if (pausable != null)
+                if (c.Pausable != null)
                 {
                     entry["pausable"] = true;
-                    entry["paused"] = pausable.Paused;
+                    entry["paused"] = c.Pausable.Paused;
                 }
 
-                if (floodgate != null)
+                if (c.Floodgate != null)
                 {
                     entry["floodgate"] = true;
-                    entry["height"] = floodgate.Height;
-                    entry["maxHeight"] = floodgate.MaxHeight;
+                    entry["height"] = c.Floodgate.Height;
+                    entry["maxHeight"] = c.Floodgate.MaxHeight;
                 }
 
-                if (prio != null)
-                    entry["constructionPriority"] = prio.Priority.ToString();
+                if (c.BuilderPrio != null)
+                    entry["constructionPriority"] = c.BuilderPrio.Priority.ToString();
 
-                var wpPrio = ec.GetComponent<WorkplacePriority>(); // workplace priority (after built) -- separate from construction priority
-                if (wpPrio != null)
-                    entry["workplacePriority"] = wpPrio.Priority.ToString();
+                if (c.WorkplacePrio != null)
+                    entry["workplacePriority"] = c.WorkplacePrio.Priority.ToString();
 
-                if (workplace != null)
+                if (c.Workplace != null)
                 {
-                    entry["maxWorkers"] = workplace.MaxWorkers;
-                    entry["desiredWorkers"] = workplace.DesiredWorkers;
-                    entry["assignedWorkers"] = workplace.NumberOfAssignedWorkers;
+                    entry["maxWorkers"] = c.Workplace.MaxWorkers;
+                    entry["desiredWorkers"] = c.Workplace.DesiredWorkers;
+                    entry["assignedWorkers"] = c.Workplace.NumberOfAssignedWorkers;
                 }
 
-                var reachability = ec.GetComponent<EntityReachabilityStatus>(); // connected to district center via paths
-                if (reachability != null)
-                    entry["reachable"] = !reachability.IsAnyUnreachable();
+                if (c.Reachability != null)
+                    entry["reachable"] = !c.Reachability.IsAnyUnreachable();
 
-                var mechanical = ec.GetComponent<MechanicalBuilding>();     // powered by adjacent power buildings
-                if (mechanical != null)
-                    entry["powered"] = mechanical.ActiveAndPowered;
+                if (c.Mechanical != null)
+                    entry["powered"] = c.Mechanical.ActiveAndPowered;
 
-                var statusSubject = ec.GetComponent<StatusSubject>();       // status messages shown in game UI
-                if (statusSubject != null)
+                if (c.Status != null)
                 {
                     var statuses = new List<string>();
                     try
                     {
-                        foreach (var s in statusSubject.ActiveStatuses)
+                        foreach (var s in c.Status.ActiveStatuses)
                             statuses.Add(s.StatusDescription);
                     }
                     catch { }
@@ -884,16 +932,15 @@ namespace Timberbot
                         entry["statuses"] = statuses;
                 }
 
-                var node = ec.GetComponent<MechanicalNode>();               // power grid: generator/consumer, nominal power values
-                if (node != null)
+                if (c.PowerNode != null)
                 {
-                    entry["isGenerator"] = node.IsGenerator;
-                    entry["isConsumer"] = node.IsConsumer;
-                    entry["nominalPowerInput"] = node._nominalPowerInput;
-                    entry["nominalPowerOutput"] = node._nominalPowerOutput;
+                    entry["isGenerator"] = c.PowerNode.IsGenerator;
+                    entry["isConsumer"] = c.PowerNode.IsConsumer;
+                    entry["nominalPowerInput"] = c.PowerNode._nominalPowerInput;
+                    entry["nominalPowerOutput"] = c.PowerNode._nominalPowerOutput;
                     try
                     {
-                        var graph = node.Graph;
+                        var graph = c.PowerNode.Graph;
                         if (graph != null)
                         {
                             entry["powerDemand"] = graph.PowerDemand;
@@ -903,23 +950,19 @@ namespace Timberbot
                     catch { }
                 }
 
-                // construction progress
-                var site = ec.GetComponent<ConstructionSite>();
-                if (site != null)
+                if (c.Site != null)
                 {
-                    entry["buildProgress"] = site.BuildTimeProgress;
-                    entry["materialProgress"] = site.MaterialProgress;
-                    entry["hasMaterials"] = site.HasMaterialsToResumeBuilding;
+                    entry["buildProgress"] = c.Site.BuildTimeProgress;
+                    entry["materialProgress"] = c.Site.MaterialProgress;
+                    entry["hasMaterials"] = c.Site.HasMaterialsToResumeBuilding;
                 }
 
-                // inventory contents
-                var inventories = ec.GetComponent<Inventories>();
-                if (inventories != null)
+                if (c.Inventories != null)
                 {
                     var goods = new Dictionary<string, int>();
                     try
                     {
-                        foreach (var inv in inventories.AllInventories)
+                        foreach (var inv in c.Inventories.AllInventories)
                         {
                             if (inv.ComponentName == ConstructionSiteInventoryInitializer.InventoryComponentName) continue;
                             foreach (var ga in inv.Stock)
@@ -939,11 +982,10 @@ namespace Timberbot
                     if (goods.Count > 0)
                         entry["inventory"] = goods;
 
-                    // total stock and capacity across all inventories
                     int totalStock = 0, totalCapacity = 0;
                     try
                     {
-                        foreach (var inv in inventories.AllInventories)
+                        foreach (var inv in c.Inventories.AllInventories)
                         {
                             if (inv.ComponentName == ConstructionSiteInventoryInitializer.InventoryComponentName) continue;
                             totalStock += inv.TotalAmountInStock;
@@ -958,51 +1000,43 @@ namespace Timberbot
                     }
                 }
 
-                var wonder = ec.GetComponent<Wonder>();
-                if (wonder != null)
+                if (c.Wonder != null)
                 {
                     entry["isWonder"] = true;
-                    entry["wonderActive"] = wonder.IsActive;
+                    entry["wonderActive"] = c.Wonder.IsActive;
                 }
 
-                var dwelling = ec.GetComponent<Dwelling>();
-                if (dwelling != null)
+                if (c.Dwelling != null)
                 {
-                    entry["dwellers"] = dwelling.NumberOfDwellers;
-                    entry["maxDwellers"] = dwelling.MaxBeavers;
+                    entry["dwellers"] = c.Dwelling.NumberOfDwellers;
+                    entry["maxDwellers"] = c.Dwelling.MaxBeavers;
                 }
 
-                var clutch = ec.GetComponent<Clutch>();
-                if (clutch != null)
+                if (c.Clutch != null)
                 {
                     entry["isClutch"] = true;
-                    entry["clutchEngaged"] = clutch.IsEngaged;
+                    entry["clutchEngaged"] = c.Clutch.IsEngaged;
                 }
 
-                // manufactory recipes
-                var manufactory = ec.GetComponent<Manufactory>();
-                if (manufactory != null)
+                if (c.Manufactory != null)
                 {
                     var recipes = new List<string>();
-                    foreach (var r in manufactory.ProductionRecipes)
+                    foreach (var r in c.Manufactory.ProductionRecipes)
                         recipes.Add(r.Id);
                     entry["recipes"] = recipes;
-                    entry["currentRecipe"] = manufactory.HasCurrentRecipe ? manufactory.CurrentRecipe.Id : "";
-                    entry["productionProgress"] = manufactory.ProductionProgress;
-                    entry["readyToProduce"] = manufactory.IsReadyToProduce;
+                    entry["currentRecipe"] = c.Manufactory.HasCurrentRecipe ? c.Manufactory.CurrentRecipe.Id : "";
+                    entry["productionProgress"] = c.Manufactory.ProductionProgress;
+                    entry["readyToProduce"] = c.Manufactory.IsReadyToProduce;
                 }
 
-                // breeding pod status
-                var breedingPod = ec.GetComponent<BreedingPod>();
-                if (breedingPod != null)
+                if (c.BreedingPod != null)
                 {
-                    entry["needsNutrients"] = breedingPod.NeedsNutrients;
-                    try { entry["nutrients"] = breedingPod.Nutrients; } catch { }
+                    entry["needsNutrients"] = c.BreedingPod.NeedsNutrients;
+                    try { entry["nutrients"] = c.BreedingPod.Nutrients; } catch { }
                 }
 
-                var rangedEffect = ec.GetComponent<RangedEffectBuildingSpec>();
-                if (rangedEffect != null)
-                    entry["effectRadius"] = rangedEffect.EffectRadius;
+                if (c.RangedEffect != null)
+                    entry["effectRadius"] = c.RangedEffect.EffectRadius;
 
                 if (format == "toon" && !fullDetail)
                 {
@@ -1029,61 +1063,70 @@ namespace Timberbot
             return results;
         }
 
-        // PERF: iterates _naturalResourceIndex (trees/bushes) instead of all entities. Type filter still needed for Cuttable vs Gatherable.
-        private List<object> CollectNaturalResources<T>(System.Action<EntityComponent, Dictionary<string, object>> enrich = null) where T : class
+        // PERF: cached component refs -- zero GetComponent per item.
+        public object CollectTrees()
         {
-
             var results = new List<object>();
-            foreach (var ec in _naturalResourceIndex)
+            foreach (var c in _naturalResourceIndex)
             {
-                if (ec.GetComponent<T>() == null) continue;
-
-                var go = ec.GameObject;
-                var bo = ec.GetComponent<BlockObject>();
-                var living = ec.GetComponent<LivingNaturalResource>();
+                if (c.Cuttable == null) continue;
 
                 var entry = new Dictionary<string, object>
                 {
-                    ["id"] = go.GetInstanceID(),
-                    ["name"] = CleanName(go.name)
+                    ["id"] = c.Id,
+                    ["name"] = c.Name
                 };
 
-                if (bo != null)
+                if (c.BlockObject != null)
                 {
-                    var coords = bo.Coordinates;
+                    var coords = c.BlockObject.Coordinates;
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
+                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
                 }
 
-                if (living != null)
-                    entry["alive"] = !living.IsDead;
+                if (c.Living != null)
+                    entry["alive"] = !c.Living.IsDead;
 
-                enrich?.Invoke(ec, entry);
+                if (c.Growable != null)
+                {
+                    entry["grown"] = c.Growable.IsGrown;
+                    entry["growth"] = c.Growable.GrowthProgress;
+                }
+
                 results.Add(entry);
             }
             return results;
         }
 
-        public object CollectTrees()
-        {
-            return CollectNaturalResources<Cuttable>((ec, entry) =>
-            {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo != null)
-                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
-                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
-                if (growable != null)
-                {
-                    entry["grown"] = growable.IsGrown;
-                    entry["growth"] = growable.GrowthProgress;
-                }
-            });
-        }
-
         public object CollectGatherables()
         {
-            return CollectNaturalResources<Gatherable>();
+            var results = new List<object>();
+            foreach (var c in _naturalResourceIndex)
+            {
+                if (c.Gatherable == null) continue;
+
+                var entry = new Dictionary<string, object>
+                {
+                    ["id"] = c.Id,
+                    ["name"] = c.Name
+                };
+
+                if (c.BlockObject != null)
+                {
+                    var coords = c.BlockObject.Coordinates;
+                    entry["x"] = coords.x;
+                    entry["y"] = coords.y;
+                    entry["z"] = coords.z;
+                }
+
+                if (c.Living != null)
+                    entry["alive"] = !c.Living.IsDead;
+
+                results.Add(entry);
+            }
+            return results;
         }
 
         // PERF: iterates _beaverIndex instead of all entities.
@@ -1116,6 +1159,12 @@ namespace Timberbot
                     ["id"] = go.GetInstanceID(),
                     ["name"] = CleanName(go.name)
                 };
+
+                // grid position from world transform
+                var pos = go.transform.position;
+                entry["x"] = Mathf.FloorToInt(pos.x);
+                entry["y"] = Mathf.FloorToInt(pos.z);
+                entry["z"] = Mathf.FloorToInt(pos.y);
 
                 // overall wellbeing
                 var tracker = ec.GetComponent<WellbeingTracker>();
@@ -1192,6 +1241,18 @@ namespace Timberbot
                 var dweller = ec.GetComponent<Dweller>();
                 if (dweller != null)
                     entry["hasHome"] = dweller.HasHome;
+
+                var citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>();
+                if (citizen != null)
+                {
+                    try
+                    {
+                        var dc = citizen.AssignedDistrict;
+                        if (dc != null)
+                            entry["district"] = dc.DistrictName;
+                    }
+                    catch { }
+                }
 
                 if (format == "toon" && !fullDetail)
                 {
@@ -1319,7 +1380,8 @@ namespace Timberbot
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
             // build occupancy map from all entities -- use ALL occupied blocks, not just origin
-            var occupants = new Dictionary<long, string>();
+            // key = x*100000+y, value = list of (name, z) for vertical stacking
+            var occupants = new Dictionary<long, List<(string name, int z)>>();
             var entrances = new HashSet<long>();
             var seedlings = new HashSet<long>();
             var deadTiles = new HashSet<long>();
@@ -1364,7 +1426,9 @@ namespace Timberbot
                         if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
                         {
                             long key = (long)c.x * 100000 + c.y;
-                            occupants[key] = name;
+                            if (!occupants.ContainsKey(key))
+                                occupants[key] = new List<(string, int)>();
+                            occupants[key].Add((name, c.z));
                         }
                     }
                 }
@@ -1375,7 +1439,9 @@ namespace Timberbot
                     if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
                     {
                         long key = (long)c.x * 100000 + c.y;
-                        occupants[key] = name;
+                        if (!occupants.ContainsKey(key))
+                            occupants[key] = new List<(string, int)>();
+                        occupants[key].Add((name, c.z));
                     }
                 }
             }
@@ -1417,7 +1483,7 @@ namespace Timberbot
                     catch { }
 
                     long key = (long)x * 100000 + y;
-                    occupants.TryGetValue(key, out var occupant);
+                    occupants.TryGetValue(key, out var occList);
                     bool isEntrance = entrances.Contains(key);
                     bool isSeedling = seedlings.Contains(key);
 
@@ -1429,7 +1495,13 @@ namespace Timberbot
                     };
                     if (waterContamination > 0)
                         tile["badwater"] = Math.Round(waterContamination, 2);
-                    if (occupant != null) tile["occupant"] = occupant;
+                    if (occList != null)
+                    {
+                        if (occList.Count == 1)
+                            tile["occupant"] = occList[0].name;
+                        else
+                            tile["occupants"] = occList.Select(o => new { name = o.name, z = o.z }).ToList();
+                    }
                     if (isEntrance) tile["entrance"] = true;
                     if (isSeedling) tile["seedling"] = true;
                     if (deadTiles.Contains(key)) tile["dead"] = true;
