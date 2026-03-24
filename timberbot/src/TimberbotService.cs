@@ -2627,6 +2627,94 @@ namespace Timberbot
 
         // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
         // chain through objects with dot-separated paths: "type._field1._field2.MethodName"
+        // ================================================================
+        // BENCHMARK -- compare foreach vs for-loop on game collections
+        // ================================================================
+
+        public object RunBenchmark(int iterations)
+        {
+            var results = new List<object>();
+            var buildings = _buildings.Read;
+
+            // --- Test 1: BreedingPod.Nutrients foreach vs for ---
+            var breedingPods = new List<CachedBuilding>();
+            for (int i = 0; i < buildings.Count; i++)
+                if (buildings[i].BreedingPod != null) breedingPods.Add(buildings[i]);
+
+            if (breedingPods.Count > 0)
+            {
+                // Warmup
+                for (int w = 0; w < 10; w++)
+                    for (int pi = 0; pi < breedingPods.Count; pi++)
+                        foreach (var ga in breedingPods[pi].BreedingPod.Nutrients) { var _ = ga.Amount; }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int pi = 0; pi < breedingPods.Count; pi++)
+                        foreach (var ga in breedingPods[pi].BreedingPod.Nutrients) { var _ = ga.Amount; }
+                sw.Stop();
+                long gcForeach = GC.CollectionCount(0) - gcBefore;
+                double foreachMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                // Nutrients is IEnumerable<GoodAmount> -- not indexable
+                // Test alternative: .ToList() then iterate (trades enumerator box for list alloc)
+                results.Add(new { test = "BreedingPod.Nutrients", count = breedingPods.Count, iterations,
+                    foreachMs, forLoopMs = -1.0, foreachGC0 = gcForeach, forLoopGC0 = -1L,
+                    speedup = -1.0, note = "IEnumerable -- not indexable, foreach is the only option" });
+            }
+
+            // --- Test 2: Inventories.AllInventories + inv.Stock foreach vs for ---
+            var withInv = new List<CachedBuilding>();
+            for (int i = 0; i < buildings.Count; i++)
+                if (buildings[i].Inventories != null) withInv.Add(buildings[i]);
+
+            if (withInv.Count > 0)
+            {
+                // Warmup
+                for (int w = 0; w < 10; w++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                        foreach (var inv in withInv[bi].Inventories.AllInventories)
+                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                        foreach (var inv in withInv[bi].Inventories.AllInventories)
+                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
+                sw.Stop();
+                long gcForeach = GC.CollectionCount(0) - gcBefore;
+                double foreachMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                // for-loop version
+                sw.Restart();
+                gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                    {
+                        var allInv = withInv[bi].Inventories.AllInventories;
+                        for (int ii = 0; ii < allInv.Count; ii++)
+                        {
+                            var stock = allInv[ii].Stock;
+                            for (int si = 0; si < stock.Count; si++) { var _ = stock[si].Amount; }
+                        }
+                    }
+                sw.Stop();
+                long gcFor = GC.CollectionCount(0) - gcBefore;
+                double forMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                results.Add(new { test = "Inventories.AllInventories+Stock", count = withInv.Count, iterations,
+                    foreachMs, forLoopMs = forMs, foreachGC0 = gcForeach, forLoopGC0 = gcFor,
+                    speedup = foreachMs > 0 ? foreachMs / forMs : 0 });
+            }
+
+            return new { benchmarks = results };
+        }
+
+        // ================================================================
+        // DEBUG -- reflection-based game state inspector
+        // ================================================================
         // all params passed as args dict from POST body
         private static object _debugLastResult;
 

@@ -1,12 +1,12 @@
-Play Timberborn with an AI partner. Timberbot API gives Claude, ChatGPT, or your own scripts full read/write access to every game system over HTTP. You make the decisions, the AI handles the busywork. Or let it run autonomously and step in when you want.
+Play Timberborn with an AI partner. Timberbot API adds external read/write HTTP access to game systems that Timberborn's built-in automation (levers, sensors, adapters) doesn't cover. Colony-wide decisions, building placement, worker management, map analysis, and AI-driven strategy on top of the game's own logic circuits.
 
 [code]
 /loop 1m /timberbot keep my beavers alive and get to 77 wellbeing
 [/code]
 
-One line in Claude Code. The AI checks your colony every minute, makes decisions based on what it sees, and takes action. Water running low before a drought? It builds tanks. Population growing? It places farms and housing. Need bots? It manages the entire supply chain.
+The AI checks your colony every minute, makes decisions based on what it sees, and takes action. It works alongside the game's native automation. Use levers and sensors for in-game logic. Use Timberbot for the big-picture decisions that need external intelligence.
 
-Or use it as a scripting API for your own tools, dashboards, and automation.
+Or use it as a scripting API for your own tools, dashboards, and external automation.
 
 [h1]What can the AI see and do?[/h1]
 [b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
@@ -44,7 +44,7 @@ Works with any language that speaks HTTP. Python client is optional. Raw curl wo
 cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 /loop 1m /timberbot
 [/code]
-The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy. You just tell it what you want.
+The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy. You tell it what you want, and it works alongside whatever in-game automation you've already set up.
 
 Works with ChatGPT too. Paste docs/timberbot.md as a system prompt.
 
