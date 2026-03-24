@@ -578,18 +578,20 @@ def _hline(left="╠", mid="═", right="╣", split=None):
     return f" {left}{mid * (W - 1)}{right}"
 
 
-def _row(left, right="", split=37):
-    """two-column row with box borders"""
+def _row(left, right=None, split=37):
+    """two-column row with box borders. right=None for full-width, right="" for empty right column."""
     import re
     plain_l = re.sub(r'\033\[[0-9;]*m', '', left)
-    plain_r = re.sub(r'\033\[[0-9;]*m', '', right)
-    pad_l = max(0, split - 2 - len(plain_l))
-    pad_r = max(0, W - split - 2 - len(plain_r))
-    if right:
-        return f" {_DIM}║{_RST} {left}{' ' * pad_l} {_DIM}║{_RST} {right}{' ' * pad_r}{_DIM}║{_RST}"
-    else:
+    if right is None:
+        # full-width single column
         full_pad = max(0, W - 3 - len(plain_l))
         return f" {_DIM}║{_RST} {left}{' ' * full_pad}{_DIM}║{_RST}"
+    else:
+        # two-column with middle separator
+        plain_r = re.sub(r'\033\[[0-9;]*m', '', right)
+        pad_l = max(0, split - 2 - len(plain_l))
+        pad_r = max(0, W - split - 2 - len(plain_r))
+        return f" {_DIM}║{_RST} {left}{' ' * pad_l} {_DIM}║{_RST} {right}{' ' * pad_r}{_DIM}║{_RST}"
 
 
 def _top_render(summary, wellbeing_data):
