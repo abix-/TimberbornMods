@@ -1487,7 +1487,7 @@ class TestRunner:
     def test_performance(self):
         print("\n=== performance ===\n")
 
-        # time ALL endpoints, 10 iterations each, track reliability
+        # time ALL endpoints, 100 iterations each, track reliability
         endpoints = [
             ("ping", lambda: self.bot.ping()),
             ("summary", lambda: self.bot.summary()),
@@ -1511,7 +1511,7 @@ class TestRunner:
             ("tree_clusters", lambda: self.bot.tree_clusters()),
         ]
 
-        iterations = 10
+        iterations = 100
 
         print(f"  timing {len(endpoints)} endpoints x {iterations} iterations\n")
         print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'ok':>4}")
