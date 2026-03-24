@@ -587,7 +587,7 @@ def _row(left, right=None, split=43):
         return f"  {left}{' ' * pad_l}  {right}"
 
 
-def _top_render(summary, wellbeing_data):
+def _top_render(summary, wellbeing_data, trees_data=None):
     if not summary:
         print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
@@ -709,21 +709,47 @@ def _top_render(summary, wellbeing_data):
     if len(alert_lines) == 1:
         alert_lines.append(f"  {_BGRN}● all clear{_RST}")
 
-    # trees
+    # trees (from summary)
     trees_obj = summary.get("trees", {})
     marked_grown = trees_obj.get("markedGrown", 0)
     unmarked_grown = trees_obj.get("unmarkedGrown", 0)
     marked_seedling = trees_obj.get("markedSeedling", 0)
     alert_lines.append("")
-    alert_lines.append(f"{_BCYN}{_BOLD}TREES{_RST}")
-    alert_lines.append(f"  Choppable  {_BGRN}{_BOLD}{marked_grown}{_RST} marked  {_DIM}{unmarked_grown} unmarked{_RST}")
-    alert_lines.append(f"  Seedlings  {_DIM}{marked_seedling}{_RST}")
+    alert_lines.append(f"{_BCYN}{_BOLD}LUMBER{_RST}  {_BGRN}{_BOLD}{marked_grown}{_RST} choppable  {_DIM}{unmarked_grown} unmarked  {marked_seedling} seedlings{_RST}")
 
     max_rows = max(len(mat_lines), len(alert_lines))
     for i in range(max_rows):
         l = mat_lines[i] if i < len(mat_lines) else ""
         r = alert_lines[i] if i < len(alert_lines) else ""
         print(_row(l, r))
+
+    # crops (from trees endpoint -- planted crops in the ground)
+    _CROP_NAMES = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava",
+                   "Mushroom", "Potato", "Wheat", "Carrot", "MangroveFruit"}
+    if trees_data and isinstance(trees_data, list):
+        crop_counts = {}
+        for t in trees_data:
+            name = t.get("name", "")
+            if name not in _CROP_NAMES:
+                continue
+            if name not in crop_counts:
+                crop_counts[name] = {"alive": 0, "grown": 0}
+            if t.get("alive"):
+                crop_counts[name]["alive"] += 1
+            if t.get("grown"):
+                crop_counts[name]["grown"] += 1
+        if crop_counts:
+            print(_hline())
+            crop_left = [f"{_BCYN}{_BOLD}CROPS{_RST}  {_DIM}(in ground){_RST}"]
+            crop_right = []
+            items = sorted(crop_counts.items(), key=lambda x: x[1]["alive"], reverse=True)
+            for name, c in items:
+                grown_c = _BGRN if c["grown"] > 0 else _DIM
+                crop_left.append(f"  {name:14s} {grown_c}{_BOLD}{c['grown']:>4}{_RST} ready  {_DIM}{c['alive'] - c['grown']} growing{_RST}")
+            for i in range(len(crop_left)):
+                l = crop_left[i] if i < len(crop_left) else ""
+                r = crop_right[i] if i < len(crop_right) else ""
+                print(_row(l, r))
 
     # districts
     if len(districts) > 0:
@@ -757,12 +783,14 @@ def _top():
             try:
                 summary = bot.summary()
                 wb = bot.wellbeing()
+                trees = bot.trees()
             except Exception:
                 summary = None
                 wb = None
+                trees = None
             print("\033[2J\033[H", end="")
             print()
-            _top_render(summary, wb)
+            _top_render(summary, wb, trees)
             time.sleep(3)
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
