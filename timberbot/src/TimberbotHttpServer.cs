@@ -102,12 +102,19 @@ namespace Timberbot
                     continue;
                 }
 
-                // Speed is a simple field read, safe off main thread
-                if (path == "/api/speed" && method == "GET")
+                // extract query params
+                var format = ctx.Request.QueryString["format"] ?? "toon";
+                var detail = ctx.Request.QueryString["detail"] ?? "basic";
+
+                // GET: serve reads directly on listener thread -- zero main-thread cost.
+                // Reads access cached component refs (event-driven indexes).
+                // Race window: entity destroyed mid-read. Per-item try/catch in endpoints handles this.
+                if (method == "GET")
                 {
                     try
                     {
-                        Respond(ctx, 200, _service.CollectSpeed());
+                        var data = RouteRequest(path, method, null, format, detail);
+                        Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
                     {
@@ -116,8 +123,9 @@ namespace Timberbot
                     continue;
                 }
 
+                // POST: queue writes to main thread (mutate game state)
                 JObject body = null;
-                if (method == "POST" && ctx.Request.HasEntityBody)
+                if (ctx.Request.HasEntityBody)
                 {
                     try
                     {
@@ -134,9 +142,8 @@ namespace Timberbot
                     }
                 }
 
-                // extract format from query string or body
-                var format = ctx.Request.QueryString["format"] ?? body?.Value<string>("format") ?? "toon";
-                var detail = ctx.Request.QueryString["detail"] ?? body?.Value<string>("detail") ?? "basic";
+                format = body?.Value<string>("format") ?? format;
+                detail = body?.Value<string>("detail") ?? detail;
 
                 _pending.Enqueue(new PendingRequest
                 {

@@ -366,39 +366,47 @@ namespace Timberbot
             // trees (cached component refs -- zero GetComponent)
             foreach (var c in _naturalResourceIndex)
             {
-                if (c.Cuttable == null) continue;
-                if (c.Living != null && !c.Living.IsDead && c.BlockObject != null)
+                try
                 {
-                    bool marked = _treeCuttingArea.IsInCuttingArea(c.BlockObject.Coordinates);
-                    bool grown = c.Growable != null && c.Growable.IsGrown;
-                    if (marked && grown) markedGrown++;
-                    else if (marked && !grown) markedSeedling++;
-                    else if (!marked && grown) unmarkedGrown++;
+                    if (c.Cuttable == null) continue;
+                    if (c.Living != null && !c.Living.IsDead && c.BlockObject != null)
+                    {
+                        bool marked = _treeCuttingArea.IsInCuttingArea(c.BlockObject.Coordinates);
+                        bool grown = c.Growable != null && c.Growable.IsGrown;
+                        if (marked && grown) markedGrown++;
+                        else if (marked && !grown) markedSeedling++;
+                        else if (!marked && grown) unmarkedGrown++;
+                    }
                 }
+                catch { }
             }
 
             // buildings (cached component refs -- zero GetComponent)
             foreach (var c in _buildingIndex)
             {
-                if (c.Dwelling != null)
+                try
                 {
-                    occupiedBeds += c.Dwelling.NumberOfDwellers;
-                    totalBeds += c.Dwelling.MaxBeavers;
+                    if (c.Dwelling != null)
+                    {
+                        occupiedBeds += c.Dwelling.NumberOfDwellers;
+                        totalBeds += c.Dwelling.MaxBeavers;
+                    }
+
+                    if (c.Workplace != null)
+                    {
+                        assignedWorkers += c.Workplace.AssignedWorkers.Count;
+                        totalVacancies += c.Workplace.DesiredWorkers;
+                        if (c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
+                            alertUnstaffed++;
+                    }
+
+                    if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
+                        alertUnpowered++;
+
+                    if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
+                        alertUnreachable++;
                 }
-
-                if (c.Workplace != null)
-                {
-                    assignedWorkers += c.Workplace.AssignedWorkers.Count;
-                    totalVacancies += c.Workplace.DesiredWorkers;
-                    if (c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
-                        alertUnstaffed++;
-                }
-
-                if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
-                    alertUnpowered++;
-
-                if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
-                    alertUnreachable++;
+                catch { }
             }
 
             // beavers: wellbeing + critical needs
@@ -555,26 +563,30 @@ namespace Timberbot
             var alerts = new List<object>();
             foreach (var c in _buildingIndex)
             {
-                if (c.BlockObject == null) continue;
-
-                if (c.Workplace != null && c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
-                    alerts.Add(new { type = "unstaffed", id = c.Id, name = c.Name, workers = $"{c.Workplace.AssignedWorkers.Count}/{c.Workplace.DesiredWorkers}" });
-
-                if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
-                    alerts.Add(new { type = "unpowered", id = c.Id, name = c.Name });
-
-                if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
-                    alerts.Add(new { type = "unreachable", id = c.Id, name = c.Name });
-
-                if (c.Status != null)
+                try
                 {
-                    foreach (var status in c.Status.ActiveStatuses)
+                    if (c.BlockObject == null) continue;
+
+                    if (c.Workplace != null && c.Workplace.DesiredWorkers > 0 && c.Workplace.AssignedWorkers.Count < c.Workplace.DesiredWorkers)
+                        alerts.Add(new { type = "unstaffed", id = c.Id, name = c.Name, workers = $"{c.Workplace.AssignedWorkers.Count}/{c.Workplace.DesiredWorkers}" });
+
+                    if (c.PowerNode != null && c.PowerNode.IsConsumer && !c.PowerNode.Active)
+                        alerts.Add(new { type = "unpowered", id = c.Id, name = c.Name });
+
+                    if (c.Reachability != null && c.Reachability.IsAnyUnreachable())
+                        alerts.Add(new { type = "unreachable", id = c.Id, name = c.Name });
+
+                    if (c.Status != null)
                     {
-                        var desc = status.StatusDescription;
-                        if (!string.IsNullOrEmpty(desc) && desc != "Normal")
-                            alerts.Add(new { type = "status", id = c.Id, name = c.Name, status = desc });
+                        foreach (var status in c.Status.ActiveStatuses)
+                        {
+                            var desc = status.StatusDescription;
+                            if (!string.IsNullOrEmpty(desc) && desc != "Normal")
+                                alerts.Add(new { type = "status", id = c.Id, name = c.Name, status = desc });
+                        }
                     }
                 }
+                catch { }
             }
             return alerts;
         }
@@ -869,6 +881,8 @@ namespace Timberbot
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
+                try
+                {
 
                 var entry = new Dictionary<string, object>
                 {
@@ -1066,6 +1080,8 @@ namespace Timberbot
                 {
                     results.Add(entry);
                 }
+                }
+                catch { }
             }
             return results;
         }
@@ -1076,33 +1092,37 @@ namespace Timberbot
             var results = new List<object>();
             foreach (var c in _naturalResourceIndex)
             {
-                if (c.Cuttable == null) continue;
-
-                var entry = new Dictionary<string, object>
+                try
                 {
-                    ["id"] = c.Id,
-                    ["name"] = c.Name
-                };
+                    if (c.Cuttable == null) continue;
 
-                if (c.BlockObject != null)
-                {
-                    var coords = c.BlockObject.Coordinates;
-                    entry["x"] = coords.x;
-                    entry["y"] = coords.y;
-                    entry["z"] = coords.z;
-                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
+                    var entry = new Dictionary<string, object>
+                    {
+                        ["id"] = c.Id,
+                        ["name"] = c.Name
+                    };
+
+                    if (c.BlockObject != null)
+                    {
+                        var coords = c.BlockObject.Coordinates;
+                        entry["x"] = coords.x;
+                        entry["y"] = coords.y;
+                        entry["z"] = coords.z;
+                        entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
+                    }
+
+                    if (c.Living != null)
+                        entry["alive"] = !c.Living.IsDead;
+
+                    if (c.Growable != null)
+                    {
+                        entry["grown"] = c.Growable.IsGrown;
+                        entry["growth"] = c.Growable.GrowthProgress;
+                    }
+
+                    results.Add(entry);
                 }
-
-                if (c.Living != null)
-                    entry["alive"] = !c.Living.IsDead;
-
-                if (c.Growable != null)
-                {
-                    entry["grown"] = c.Growable.IsGrown;
-                    entry["growth"] = c.Growable.GrowthProgress;
-                }
-
-                results.Add(entry);
+                catch { }
             }
             return results;
         }
@@ -1112,26 +1132,30 @@ namespace Timberbot
             var results = new List<object>();
             foreach (var c in _naturalResourceIndex)
             {
-                if (c.Gatherable == null) continue;
-
-                var entry = new Dictionary<string, object>
+                try
                 {
-                    ["id"] = c.Id,
-                    ["name"] = c.Name
-                };
+                    if (c.Gatherable == null) continue;
 
-                if (c.BlockObject != null)
-                {
-                    var coords = c.BlockObject.Coordinates;
-                    entry["x"] = coords.x;
-                    entry["y"] = coords.y;
-                    entry["z"] = coords.z;
+                    var entry = new Dictionary<string, object>
+                    {
+                        ["id"] = c.Id,
+                        ["name"] = c.Name
+                    };
+
+                    if (c.BlockObject != null)
+                    {
+                        var coords = c.BlockObject.Coordinates;
+                        entry["x"] = coords.x;
+                        entry["y"] = coords.y;
+                        entry["z"] = coords.z;
+                    }
+
+                    if (c.Living != null)
+                        entry["alive"] = !c.Living.IsDead;
+
+                    results.Add(entry);
                 }
-
-                if (c.Living != null)
-                    entry["alive"] = !c.Living.IsDead;
-
-                results.Add(entry);
+                catch { }
             }
             return results;
         }

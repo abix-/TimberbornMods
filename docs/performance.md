@@ -30,17 +30,17 @@ Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zer
 
 | Endpoint | Iterates | Items | Measured | GetComponent/item | Notes |
 |---|---|---|---|---|---|
-| `ping` | none | 1 | **1ms** | 0 | Answered on listener thread |
-| `summary` | all 3 indexes | 3000+500+65 | **7ms** | 0 (buildings/trees), 2-3 (beavers) | Three passes over subsets |
-| `buildings` | `_buildingIndex` | 522 | **8ms** | **0** | `detail:basic` skips full serialization |
-| `buildings detail:full` | `_buildingIndex` | 522 | **13ms** | **0** | All fields including inventory, recipes, effectRadius |
-| `trees` | `_naturalResourceIndex` | 2986 | **25ms** | **0** | Remaining cost: dict alloc + IsInCuttingArea per item |
-| `gatherables` | `_naturalResourceIndex` | ~150 | **<5ms** | **0** | Low item count |
-| `beavers` | `_beaverIndex` | 65 | **8ms** | 5-8 | NeedManager iteration per beaver |
-| `alerts` | `_buildingIndex` | 522 | **7ms** | **0** | Workplace + PowerNode + Reachability from cache |
-| `resources` | district centers | 13 | **7ms** | 0 | Iterates district registries, not entities |
-| `weather` | none | 1 | **7ms** | 0 | Reads service fields |
-| `prefabs` | building templates | 157 | **7ms** | 0 | Iterates BuildingService templates |
+| `ping` | none | 1 | **1ms** | 0 | Listener thread |
+| `summary` | all 3 indexes | 3000+500+65 | **2ms** | 0 (buildings/trees), 2-3 (beavers) | Listener thread, three passes over subsets |
+| `buildings` | `_buildingIndex` | 522 | **6.5ms** | **0** | Listener thread, `detail:basic` skips full serialization |
+| `buildings detail:full` | `_buildingIndex` | 522 | **8ms** | **0** | Listener thread, all fields |
+| `trees` | `_naturalResourceIndex` | 2986 | **23ms** | **0** | Listener thread. Remaining cost: dict alloc + IsInCuttingArea |
+| `gatherables` | `_naturalResourceIndex` | ~150 | **<3ms** | **0** | Listener thread |
+| `beavers` | `_beaverIndex` | 65 | **3ms** | 5-8 | Listener thread |
+| `alerts` | `_buildingIndex` | 522 | **1.4ms** | **0** | Listener thread |
+| `resources` | district centers | 13 | **1.2ms** | 0 | Listener thread |
+| `weather` | none | 1 | **0.8ms** | 0 | Listener thread |
+| `prefabs` | building templates | 157 | **4ms** | 0 | Listener thread |
 
 ### Still scan all entities (by design)
 
@@ -55,19 +55,19 @@ Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zer
 | Location | Thread | Blocks game? |
 |---|---|---|
 | HTTP listener (accept + queue) | background | no |
-| `ping`, `speed` responses | background (listener thread) | no |
-| All other GET/POST | main thread via `DrainRequests` | **yes, for duration** |
-| JSON serialization (`Respond`) | main thread | **yes** |
+| All GET requests (reads) | background (listener thread) | **no** |
+| All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
+| JSON serialization (`Respond`) | same thread as request | no for GETs |
 
-Python client calls are synchronous (send, wait, send next), so only 1 request is queued per frame. Burst of 7 calls = 7 frames, ~10ms each.
+All reads served on the listener thread. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread for safe game state mutation. Per-item try/catch handles the race window where an entity is destroyed mid-read.
 
 ## Remaining bottlenecks (ordered by impact)
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **trees 25ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads | pre-allocated result arrays or TOON serialization bypass |
-| 2 | **buildings full 13ms** | 522 items | per-item Dictionary alloc + inventory iteration | same |
-| 3 | **JSON on main thread** | ~1-3ms/response | `JsonConvert.SerializeObject` blocks | move serialization to listener thread |
+| 1 | **trees 23ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads | pre-allocated result arrays or TOON serialization bypass |
+| 2 | **buildings full 8ms** | 522 items | per-item Dictionary alloc + inventory iteration | same |
+| 3 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | unavoidable from mod code |
 
 ## Resolved bottlenecks
 
@@ -82,6 +82,8 @@ Python client calls are synchronous (send, wait, send next), so only 1 request i
 | wellbeing full scan | O(4161) | switched to `_beaverIndex` |
 | find_placement full scan | O(4161) | switched to `_buildingIndex` with cached refs |
 | demolish_path_at full scan | O(4161) x up to 6 | switched to `_buildingIndex` with cached refs |
+| All reads blocking main thread | ~7ms overhead per call | GETs served on listener thread, zero main-thread cost |
+| JSON serialization on main thread | ~1-3ms/response | now serializes on listener thread for GETs |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 
 ## Optimization history
@@ -91,9 +93,10 @@ Python client calls are synchronous (send, wait, send next), so only 1 request i
 | Baseline (full entity scan) | ~50ms est | ~20ms est | ~30ms est | ~150ms est |
 | Typed entity indexes | 29ms | 9ms | 10ms | 67ms |
 | Event-driven (EventBus) | 28ms | 9ms | 13ms | 62ms |
-| Cached component refs | **25ms** | **8ms** | **13ms** | **64ms** |
+| Cached component refs | 25ms | 8ms | 13ms | 64ms |
+| GETs on listener thread | **23ms** | **6.5ms** | **8ms** | **39ms** |
 
-GetComponent elimination reduced trees by ~15%. The remaining ~85% of cost is Dictionary allocation, property reads, and `IsInCuttingArea` per tree. Further gains require changing the serialization approach (not the entity access pattern).
+The ~7ms floor in earlier measurements was main-thread frame scheduling overhead. Moving GETs to the listener thread eliminated it. Remaining cost is per-item Dictionary allocation, property reads, and `IsInCuttingArea`. Main-thread cost for reads is now **zero**.
 
 ## Late-game projections
 
@@ -103,7 +106,7 @@ GetComponent elimination reduced trees by ~15%. The remaining ~85% of cost is Di
 | Trees | 2986 | 5000+ | linear -- trees endpoint could hit 40ms+ |
 | Beavers | 65 | 200+ | linear but low base count |
 | Total entities | 4161 | 10000+ | only affects CollectScan/CollectMap (rare, region-bounded) |
-| Burst (7 calls) | 64ms | ~110ms est | acceptable at 1 call/minute cadence |
+| Burst (7 calls) | 39ms | ~70ms est | acceptable at 1 call/minute cadence |
 
 ## Test coverage
 
