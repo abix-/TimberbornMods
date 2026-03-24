@@ -870,6 +870,24 @@ namespace Timberbot
                     catch { }
                     if (goods.Count > 0)
                         entry["inventory"] = goods;
+
+                    // total stock and capacity across all inventories
+                    int totalStock = 0, totalCapacity = 0;
+                    try
+                    {
+                        foreach (var inv in inventories.AllInventories)
+                        {
+                            if (inv.ComponentName == ConstructionSiteInventoryInitializer.InventoryComponentName) continue;
+                            totalStock += inv.TotalAmountInStock;
+                            totalCapacity += inv.Capacity;
+                        }
+                    }
+                    catch { }
+                    if (totalCapacity > 0)
+                    {
+                        entry["stock"] = totalStock;
+                        entry["capacity"] = totalCapacity;
+                    }
                 }
 
                 var wonder = ec.GetComponent<Wonder>();
@@ -1033,6 +1051,25 @@ namespace Timberbot
 
                 var bot = ec.GetComponent<Bot>();
                 entry["isBot"] = bot != null;
+
+                // beaver activity from status system (same as building alerts)
+                var statusSubject = ec.GetComponent<StatusSubject>();
+                if (statusSubject != null)
+                {
+                    try
+                    {
+                        var actList = new List<string>();
+                        foreach (var status in statusSubject.ActiveStatuses)
+                        {
+                            var desc = status.StatusDescription;
+                            if (!string.IsNullOrEmpty(desc) && desc != "Normal")
+                                actList.Add(desc);
+                        }
+                        if (actList.Count > 0)
+                            entry["activity"] = string.Join(", ", actList);
+                    }
+                    catch { }
+                }
 
                 var contaminable = ec.GetComponent<Contaminable>();
                 if (contaminable != null)
@@ -2019,6 +2056,30 @@ namespace Timberbot
                     entry["sizeX"] = size.x;
                     entry["sizeY"] = size.y;
                     entry["sizeZ"] = size.z;
+                }
+
+                var bs = building.GetSpec<BuildingSpec>();
+                if (bs != null)
+                {
+                    if (bs.ScienceCost > 0)
+                    {
+                        entry["scienceCost"] = bs.ScienceCost;
+                        entry["unlocked"] = _buildingUnlockingService.Unlocked(bs);
+                    }
+                    var costs = new List<object>();
+                    try
+                    {
+                        foreach (var ga in bs.BuildingCost)
+                        {
+                            var goodProp = ga.GetType().GetProperty("GoodId") ?? ga.GetType().GetProperty("Id");
+                            var amtProp = ga.GetType().GetProperty("Amount");
+                            if (goodProp != null && amtProp != null)
+                                costs.Add(new { good = goodProp.GetValue(ga)?.ToString(), amount = amtProp.GetValue(ga) });
+                        }
+                    }
+                    catch { }
+                    if (costs.Count > 0)
+                        entry["cost"] = costs;
                 }
 
                 results.Add(entry);
