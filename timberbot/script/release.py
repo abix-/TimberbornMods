@@ -31,7 +31,7 @@ def main():
     with open(MANIFEST) as f:
         version = json.load(f)["Version"]
 
-    print(f"building timberbot v{version}")
+    print(f"building Timberbot API v{version}")
 
     # build
     run("dotnet build -c Release", cwd=SRC_DIR)
@@ -42,7 +42,7 @@ def main():
     os.makedirs(DIST_DIR)
 
     # mod zip (DLL + manifest + thumbnail + python client)
-    zip_name = f"Timberbot-v{version}.zip"
+    zip_name = f"TimberbotAPI-v{version}.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(DLL_PATH, "Timberbot.dll")
@@ -67,7 +67,7 @@ def main():
         run(
             f'gh release create {tag} "{zip_path}"'
             f" --repo abix-/TimberbornMods"
-            f' --title "Timberbot {tag}"'
+            f' --title "Timberbot API {tag}"'
             f' --notes "HTTP API for AI agents to read and control Timberborn."'
         )
         print(f"released: {tag}")
