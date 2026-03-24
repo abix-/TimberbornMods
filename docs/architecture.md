@@ -24,20 +24,23 @@ UpdateSingleton() [60fps]              ListenLoop() [blocking accept]
 
 ## Double buffer
 
-Two pre-allocated lists per entity type. Main thread writes to one, background reads the other. Ref swap publishes updates.
+`DoubleBuffer<T>` generic class manages two pre-allocated lists per entity type. Main thread writes to `.Write`, background reads from `.Read`. Ref swap publishes updates.
 
 ```
-Frame N:   main writes _buildingsWrite    |  background reads _buildingsRead
-           main writes _naturalResWrite   |  background reads _naturalResRead
-           [swap refs]
-Frame N+1: main writes old _buildingsRead |  background reads freshly updated buffer
+Cadence N:   main refreshes _buildings.Write  |  background reads _buildings.Read
+             [_buildings.Swap()]
+Cadence N+1: main refreshes old .Read         |  background reads freshly updated buffer
 ```
 
 **Rules:**
-- `AddToIndexes` / `RemoveFromIndexes`: update BOTH buffers (always same entities)
-- `RefreshCachedState`: updates write buffer only, then swaps refs
+- `DoubleBuffer.Add(writeItem, readItem)`: add to both buffers with separate reference-type instances
+- `DoubleBuffer.Add(item)`: safe for value-only structs (no reference fields)
+- `DoubleBuffer.RemoveAll()`: removes from both buffers
+- `RefreshCachedState`: updates `.Write` only, then `.Swap()`
 - No copy-back. Old read buffer (now write) has same entities, 1-cadence-stale values
 - Background thread never modifies any buffer. Zero contention.
+
+**Reference-type fields** (`List<T>`, `Dictionary<K,V>`) must be separate instances per buffer. Shared references cause mutation-during-read corruption. Use `Add(writeItem, readItem)` with distinct instances. Immutable-after-add fields (e.g. `OccupiedTiles`) are safe to share.
 
 ## Entity lifecycle
 
@@ -55,31 +58,43 @@ Entity destroyed (building demolished, beaver died, tree cut)
 
 ## Cached structs
 
-Component references resolved once at entity-add time. Mutable state refreshed on main thread at cadence.
+Component references resolved once at entity-add time. Mutable state refreshed on main thread at cadence. Serialized via `Jw` (JsonWriter) helper for zero-alloc JSON.
 
 ```
 CachedBuilding {
-  // immutable (set at add-time)
+  // immutable refs (set at add-time, never refreshed)
   Entity, Id, Name, BlockObject, Pausable, Floodgate, Workplace, ...
   HasFloodgate, HasClutch, HasWonder, IsGenerator, IsConsumer, ...
+  OccupiedTiles (immutable List, safe to share between buffers)
 
-  // mutable (refreshed by RefreshCachedState)
+  // mutable primitives (refreshed by RefreshCachedState)
   Finished, Paused, Unreachable, Powered, X, Y, Z, Orientation,
   AssignedWorkers, DesiredWorkers, FloodgateHeight, BuildProgress, ...
+
+  // mutable reference types (SEPARATE instances per buffer!)
+  Recipes (List<string>), Inventory (Dict), NutrientStock (Dict)
 }
 
 CachedNaturalResource {
-  // immutable
+  // immutable refs
   Id, Name, BlockObject, Living, Cuttable, Gatherable, Growable
-
-  // mutable
+  // mutable primitives (all value types -- safe to share)
   X, Y, Z, Alive, Grown, Growth, Marked
+}
+
+CachedBeaver {
+  // immutable refs
+  Id, Name, IsBot, NeedMgr, WbTracker, Worker, Life, Carrier, ...
+  // mutable primitives
+  Wellbeing, X, Y, Z, Workplace, District, HasHome, ...
+  // mutable reference type (SEPARATE instance per buffer!)
+  Needs (List<CachedNeed>)
 }
 ```
 
 ## Serialization
 
-High-volume endpoints (buildings, trees) use `StringBuilder` for manual JSON -- no Dictionary allocation, no Newtonsoft overhead. Pre-allocated `_sbBuildings` and `_sbTrees` fields, `.Clear()` per request.
+High-volume endpoints (buildings, trees, beavers) use `Jw` (JsonWriter) helper with `StringBuilder` for zero-alloc JSON. Pre-allocated `_sbBuildings`, `_sbTrees`, `_sbBeavers` fields, `.Clear()` per request.
 
 Other endpoints use `Dictionary<string, object>` + `JsonConvert.SerializeObject` (acceptable for low-volume data).
 
