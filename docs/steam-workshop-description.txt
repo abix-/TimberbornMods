@@ -9,7 +9,6 @@ That's it. One line in Claude Code and the AI plays Timberborn for you. It check
 Or use it as a scripting API for your own tools, dashboards, and automation.
 
 [h1]What can the AI see and do?[/h1]
-
 [b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
 
 [b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation.
@@ -23,9 +22,7 @@ Or use it as a scripting API for your own tools, dashboards, and automation.
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
 [h1]How it works[/h1]
-
 Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
-
 [code]
 timberbot.py summary                              # full colony snapshot
 timberbot.py beavers detail:full                  # every need on every beaver
@@ -33,16 +30,13 @@ timberbot.py power                                # power networks with supply v
 timberbot.py visual x:120 y:140 radius:10         # ASCII map
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2
 [/code]
-
 Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
 
 [h1]AI setup (Claude Code)[/h1]
-
 [code]
 cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 /loop 1m /timberbot
 [/code]
-
 The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy. You just tell it what you want.
 
 Works with ChatGPT too. Paste docs/timberbot.md as a system prompt.
