@@ -560,7 +560,12 @@ namespace Timberbot
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
         // separate StringBuilders per endpoint to avoid contention on background thread
         private readonly System.Text.StringBuilder _sbBuildings = new System.Text.StringBuilder(200000);
-        private readonly System.Text.StringBuilder _sbTrees = new System.Text.StringBuilder(400000);
+        private readonly System.Text.StringBuilder _sbTrees = new System.Text.StringBuilder(300000);
+        private readonly System.Text.StringBuilder _sbCrops = new System.Text.StringBuilder(100000);
+        private static readonly System.Collections.Generic.HashSet<string> _treeSpecies = new System.Collections.Generic.HashSet<string>
+            { "Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove" };
+        private static readonly System.Collections.Generic.HashSet<string> _cropSpecies = new System.Collections.Generic.HashSet<string>
+            { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
 
         private void BuildAllIndexes()
         {
@@ -1324,15 +1329,15 @@ namespace Timberbot
         // PERF: cached component refs -- zero GetComponent per item.
         // serial param: dict (default), anon, sb -- for A/B testing serialization methods
         // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
-        public object CollectTrees()
+        private object CollectNaturalResourcesSb(System.Text.StringBuilder sb, System.Collections.Generic.HashSet<string> species)
         {
-            var sb = _sbTrees;
             sb.Clear();
             Jw.OpenArr(sb);
             bool first = true;
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
+                if (!species.Contains(c.Name)) continue;
                 if (!first) Jw.Sep(sb);
                 first = false;
                 Jw.Open(sb);
@@ -1350,6 +1355,9 @@ namespace Timberbot
             Jw.CloseArr(sb);
             return sb.ToString();
         }
+
+        public object CollectTrees() => CollectNaturalResourcesSb(_sbTrees, _treeSpecies);
+        public object CollectCrops() => CollectNaturalResourcesSb(_sbCrops, _cropSpecies);
 
         public object CollectGatherables()
         {

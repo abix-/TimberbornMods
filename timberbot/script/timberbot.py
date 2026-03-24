@@ -105,29 +105,21 @@ class Timberbot:
             if limit: data = data[:limit]
         return data
 
-    _TREE_SPECIES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
-    _CROP_SPECIES = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot"}
-
-    def natural_resources(self, limit=0, offset=0):
-        """All natural resources (trees, crops, bushes): [{id, name, x, y, z, marked, alive, grown, growth}]."""
-        data = self._get("/api/natural_resources")
-        if isinstance(data, dict) and "error" in data:
-            data = self._get("/api/trees")  # fallback for older mod versions
+    def trees(self, limit=0, offset=0):
+        """Trees: [{id, name, x, y, z, marked, alive, grown, growth}]."""
+        data = self._get("/api/trees")
         if isinstance(data, list):
             if offset: data = data[offset:]
             if limit: data = data[:limit]
         return data
 
-    def trees(self, limit=0, offset=0):
-        """Trees only (Pine, Birch, Oak, etc). Filtered from natural_resources."""
-        data = [t for t in self.natural_resources() if t.get("name") in self._TREE_SPECIES]
-        if offset: data = data[offset:]
-        if limit: data = data[:limit]
+    def crops(self, limit=0, offset=0):
+        """Crops in the ground: [{id, name, x, y, z, marked, alive, grown, growth}]."""
+        data = self._get("/api/crops")
+        if isinstance(data, list):
+            if offset: data = data[offset:]
+            if limit: data = data[:limit]
         return data
-
-    def crops(self):
-        """Planted crops in the ground (Kohlrabi, Soybean, Corn, etc). Filtered from natural_resources."""
-        return [t for t in self.natural_resources() if t.get("name") in self._CROP_SPECIES]
 
     def gatherables(self, limit=0, offset=0):
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
@@ -604,7 +596,7 @@ def _row(left, right=None, split=43):
         return f"  {left}{' ' * pad_l}  {right}"
 
 
-def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
+def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, interval=5):
     if not summary:
         print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
@@ -730,12 +722,10 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
         r = alert_lines[i] if i < len(alert_lines) else ""
         print(_row(l, r))
 
-    # trees section (trees only, not crops)
-    _TREE_NAMES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
+    # trees section (server already filters to tree species only)
     if trees_data and isinstance(trees_data, list):
-        tree_only = [t for t in trees_data if t.get("name") in _TREE_NAMES]
         tree_counts = {}
-        for t in tree_only:
+        for t in trees_data:
             n = t.get("name", "")
             if n not in tree_counts:
                 tree_counts[n] = {"marked_grown": 0, "unmarked_grown": 0, "seedling": 0}
@@ -765,15 +755,11 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
                 r = tree_right[i] if i < len(tree_right) else ""
                 print(_row(l, r))
 
-    # crops (from natural_resources -- planted crops in the ground)
-    _CROP_NAMES = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava",
-                   "Mushroom", "Potato", "Wheat", "Carrot", "MangroveFruit"}
-    if trees_data and isinstance(trees_data, list):
+    # crops section (server already filters to crop species only)
+    if crops_data and isinstance(crops_data, list):
         crop_counts = {}
-        for t in trees_data:
+        for t in crops_data:
             name = t.get("name", "")
-            if name not in _CROP_NAMES:
-                continue
             if name not in crop_counts:
                 crop_counts[name] = {"alive": 0, "grown": 0}
             if t.get("alive"):
@@ -825,14 +811,16 @@ def _top(interval=5):
             try:
                 summary = bot.summary()
                 wb = bot.wellbeing()
-                nr = bot.natural_resources()
+                trees = bot.trees()
+                crops = bot.crops()
             except Exception:
                 summary = None
                 wb = None
-                nr = None
+                trees = None
+                crops = None
             print("\033[2J\033[H", end="")
             print()
-            _top_render(summary, wb, nr, interval)
+            _top_render(summary, wb, trees, crops, interval)
             time.sleep(interval)
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
