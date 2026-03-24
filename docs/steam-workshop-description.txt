@@ -1,79 +1,61 @@
-Play Timberborn with an AI. Timberbot API gives Claude, ChatGPT, or your own scripts full read/write access to your colony over HTTP so they can partner with you to run it.
+Let Claude or ChatGPT run your beaver colony. Timberbot API gives AI full read/write access to every game system over HTTP -- it reads your beavers, places buildings, manages crops, and keeps everyone alive while you watch.
 
-[h1]What Timberbot API adds[/h1]
-Timberborn already has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot API (port 8085) adds everything the built-in API doesn't cover:
-
-[table]
-[tr][th]Capability[/th][th]Built-in API[/th][th]Timberbot API[/th][/tr]
-[tr][td]Building placement + demolition[/td][td]No[/td][td]Yes, with tile validation[/td][/tr]
-[tr][td]Read game state[/td][td]On/off signals via sensor -> adapter chains[/td][td]Full data: buildings, beavers, trees, map, resources, weather, science[/td][/tr]
-[tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver position, district, needs, carried goods, bot durability. detail:full for all 38 needs with group category[/td][/tr]
-[tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science, distribution[/td][/tr]
-[tr][td]Map + terrain reading[/td][td]No[/td][td]Terrain, water, contamination, occupants[/td][/tr]
-[tr][td]AI-optimized output[/td][td]No[/td][td]TOON format, scan, visual map with terrain height, alerts, tree clusters[/td][/tr]
-[/table]
-
-Use both together: the built-in API handles real-time automation (sensor -> lever -> floodgate). Timberbot handles strategic AI decisions (check needs -> place farmhouse -> plant crops).
-
-[h1]Features[/h1]
-Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] with request/response examples for every endpoint.
-
-[table]
-[tr][th]System[/th][th]What you get[/th][th]Status[/th][/tr]
-[tr][td]Beavers & Bots[/td][td]Position, district, wellbeing, all 38 needs with group category, carried goods, lifting capacity, activity, contamination. Bot energy, grease, control tower needs, deterioration[/td][td]Yes[/td][/tr]
-[tr][td]Wellbeing[/td][td]Population wellbeing by category (Social, Fun, Nutrition, Aesthetics, Awe) with current/max per beaver[/td][td]Yes[/td][/tr]
-[tr][td]Buildings[/td][td]Workers, priority, power, reachability, inventory, recipes, production progress, construction progress, breeding, clutch, effect radius, building costs, unlock status[/td][td]Yes[/td][/tr]
-[tr][td]Placement & Paths[/td][td]Place any building with game-native validation. Find spots scored by reachability and power. Auto-stairs and platforms across z-levels[/td][td]Yes[/td][/tr]
-[tr][td]Crops & Trees[/td][td]Plant, clear, find irrigated spots. Tree growth, cutting marks, densest clusters, forester priority[/td][td]Yes[/td][/tr]
-[tr][td]Map & Terrain[/td][td]Terrain height, water depth, badwater, soil contamination, moisture, occupants with vertical stacking. ASCII visual with height shading. Compact scan[/td][td]Yes[/td][/tr]
-[tr][td]Power networks[/td][td]Connected building groups with supply vs demand per network[/td][td]Yes[/td][/tr]
-[tr][td]Workers & Production[/td][td]Worker count, priority, pause, haul priority, work schedule, recipes, farmhouse action[/td][td]Yes[/td][/tr]
-[tr][td]Storage & Water[/td][td]Stockpile capacity, allowed goods, floodgate height[/td][td]Yes[/td][/tr]
-[tr][td]Distribution[/td][td]Import/export per good per district, beaver migration[/td][td]Yes[/td][/tr]
-[tr][td]Weather & Science[/td][td]Drought countdown, badtide status. Science points, unlock costs, unlock buildings[/td][td]Yes[/td][/tr]
-[tr][td]Summary[/td][td]Entire colony in one call: resources, weather, alerts, food/water/log/plank/gear projections[/td][td]Yes[/td][/tr]
-[tr][td]Alerts[/td][td]Unstaffed, unpowered, unreachable buildings[/td][td]Yes[/td][/tr]
-[tr][td]Game speed[/td][td]Pause, normal, fast, fastest[/td][td]Yes[/td][/tr]
-[tr][td]Debug[/td][td]Reflection-based inspection of any game object at runtime[/td][td]Yes[/td][/tr]
-[tr][td]Webhooks[/td][td]Push notifications for game events (drought, death, construction complete)[/td][td]Planned[/td][/tr]
-[/table]
-
-[h1]How it works[/h1]
-Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
-python timberbot.py summary                          # colony snapshot: resources, weather, alerts, projections
-python timberbot.py beavers                          # position, district, wellbeing, carried goods per beaver
-python timberbot.py beavers detail:full              # all 38 needs with group category per beaver
-python timberbot.py buildings detail:full             # inventory, production progress, power, effect radius
-python timberbot.py power                            # power networks with supply vs demand
-python timberbot.py visual x:120 y:140 radius:10     # ASCII map with terrain height shading
-python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+/loop 1m /timberbot keep my beavers alive and get to 77 wellbeing
 [/code]
 
-[h1]Getting started[/h1]
-1. Subscribe and enable in Mod Manager
-2. Start a game. API starts automatically on port 8085
-3. Install dependencies: pip install requests toons
-4. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
-5. Run: python timberbot.py ping
-6. Run: python timberbot.py (lists all commands)
+That's it. One line in Claude Code and the AI plays Timberborn for you -- checking water before drought, planting crops, building housing, unlocking science, managing power grids, and assembling bots.
 
-[h1]Let AI play for you[/h1]
-The mod includes an AI prompt (docs/timberbot.md) that teaches Claude, ChatGPT, or any LLM how to run your colony. With Claude Code:
+Or use it as a scripting API for your own tools, dashboards, and automation.
+
+[h1]What can the AI see and do?[/h1]
+
+[b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
+
+[b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation.
+
+[b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII visual with height shading.
+
+[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed.
+
+[b]Power networks:[/b] which buildings share a power grid, supply vs demand per network, generator output.
+
+[b]One-call snapshot:[/b] entire colony in a single request -- resources, weather, drought countdown, alerts, food/water/log/plank/gear day projections.
+
+[h1]How it works[/h1]
+
+Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
 
 [code]
-# copy the prompt as a skill
-cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
+timberbot.py summary                              # full colony snapshot
+timberbot.py beavers detail:full                  # every need on every beaver
+timberbot.py power                                # power networks with supply vs demand
+timberbot.py visual x:120 y:140 radius:10         # ASCII map
+timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2
+[/code]
 
-# let Claude play on a loop
+Works with any language that speaks HTTP. Python client is optional -- raw curl works too.
+
+[h1]AI setup (Claude Code)[/h1]
+
+[code]
+cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 /loop 1m /timberbot
 [/code]
 
-The AI will check beaver wellbeing, manage food and water, place buildings, mark trees, and keep your colony alive.
+The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy -- you just tell it what you want.
+
+Works with ChatGPT too -- paste docs/timberbot.md as a system prompt.
+
+[h1]Getting started[/h1]
+1. Subscribe and enable in Mod Manager
+2. Start a game -- API starts automatically on port 8085
+3. pip install requests toons
+4. Run: timberbot.py ping
 
 [h1]Docs[/h1]
 [url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
 [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] All endpoints with request/response examples
 [url=https://abix-.github.io/TimberbornMods/timberbot/]AI Prompt[/url] Teach Claude or ChatGPT to run your colony
-[url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full game system compatibility matrix
+[url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full compatibility matrix (40 game systems)
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
