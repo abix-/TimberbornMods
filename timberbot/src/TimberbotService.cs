@@ -387,12 +387,30 @@ namespace Timberbot
                         c.Z = Mathf.FloorToInt(pos.y);
                     }
                     if (c.Worker != null && c.Worker.Workplace != null)
-                        c.Workplace = CleanName(c.Worker.Workplace.GameObject.name);
+                    {
+                        if (!ReferenceEquals(c.Worker.Workplace, c.LastWorkplaceRef))
+                        {
+                            c.LastWorkplaceRef = c.Worker.Workplace;
+                            c.Workplace = CleanName(c.Worker.Workplace.GameObject.name);
+                        }
+                    }
                     else
+                    {
                         c.Workplace = null;
+                        c.LastWorkplaceRef = null;
+                    }
                     if (c.Citizen != null)
                     {
-                        try { var dc = c.Citizen.AssignedDistrict; c.District = dc != null ? dc.DistrictName : null; } catch { }
+                        try
+                        {
+                            var dc = c.Citizen.AssignedDistrict;
+                            if (!ReferenceEquals(dc, c.LastDistrictRef))
+                            {
+                                c.LastDistrictRef = dc;
+                                c.District = dc != null ? dc.DistrictName : null;
+                            }
+                        }
+                        catch { }
                     }
                     c.HasHome = c.Dweller != null && c.Dweller.HasHome;
                     c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
@@ -549,6 +567,8 @@ namespace Timberbot
             public float Wellbeing;
             public int X, Y, Z;
             public string Workplace, District;
+            public object LastWorkplaceRef; // reference comparison to avoid CleanName per refresh
+            public object LastDistrictRef; // reference comparison to avoid DistrictName per refresh
             public bool HasHome, Contaminated;
             public float LifeProgress, DeteriorationProgress;
             public bool IsCarrying;
