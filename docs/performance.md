@@ -171,20 +171,22 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 
 ## Late-game projections
 
-| Endpoint | Current items | Current time | Per-item rate | Late-game items | Projected time |
+| Endpoint | Current items | Min (ms) | Per-item | Late-game items | Projected |
 |---|---|---|---|---|---|
-| `buildings` | 522 | 2.8ms | 5.4us/item | 1500 | ~8ms |
-| `buildings detail:full` | 522 | 1.3ms | 2.5us/item | 1500 | ~4ms |
-| `trees` | 2986 | 2.0ms | 0.67us/item | 5000 | ~3.5ms |
-| `beavers` | 65 | 0.9ms | 13.8us/item | 250 | ~3.5ms |
-| `beavers detail:full` | 65 | 2.0ms | 30.8us/item | 250 | ~8ms |
-| `alerts` | 522 | 1.0ms | 1.9us/item | 1500 | ~3ms |
-| `summary` | 3500 | 1.2ms | 0.34us/item | 10000 | ~3.5ms |
-| `power` | 17 networks | ~5ms | not indexed | 50+ networks | ~15ms (full scan) |
-| `map` (region) | varies | ~10ms | region-bounded | larger builds | ~20ms |
-| Burst (7 calls) | -- | 28ms total | -- | -- | ~50ms est |
+| `buildings` | 522 | 2.1 | 4.0us | 1500 | ~6ms |
+| `buildings full` | 522 | 3.4 | 6.5us | 1500 | ~10ms |
+| `trees` | 2983 | 8.6 | 2.9us | 5000 | ~14ms |
+| `gatherables` | 1504 | 6.7 | 4.5us | 3000 | ~13ms |
+| `beavers` | 65 | 1.1 | 16.9us | 250 | ~4ms |
+| `alerts` | 19 | 0.8 | -- | 50 | ~1ms |
+| `summary` | 3500+ | 0.9 | 0.26us | 10000 | ~3ms |
+| `prefabs` | 157 | 2.9 | 18.5us | 200 | ~4ms |
+| `wellbeing` | 65 beavers | 0.9 | -- | 250 | ~3ms |
+| `power` | cached | 0.8 | -- | 50+ networks | ~2ms |
+| `map` (region) | varies | ~10 | region-bounded | larger builds | ~20ms |
+| **Burst (7 calls)** | -- | **17** | -- | -- | **~30ms** |
 
-All scaling is linear. Zero main-thread cost for GET-only bot turns.
+All scaling is linear with item count. Zero main-thread cost for GET-only bot turns. Bot polling at 1/min cadence -- even 30ms burst is imperceptible. RefreshCachedState runs once per second on main thread (<1ms for 3500 entities).
 
 ### Late-game risk factors
 
