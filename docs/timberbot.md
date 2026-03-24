@@ -32,7 +32,8 @@ Beavers die if food or water hits 0.
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
 | `alerts` | Unstaffed, unpowered, unreachable buildings |
-| `trees` | All cuttable trees with growth and marking status |
+| `trees` | Trees only (Pine, Birch, Oak, etc) with growth, marking, alive status |
+| `crops` | Crops only (Kohlrabi, Soybean, Corn, etc) with growth and alive status |
 | `tree_clusters` | Densest grown tree clusters |
 | `gatherables` | Berry bushes and other gatherable resources |
 | `science` | Science points and unlock costs |
