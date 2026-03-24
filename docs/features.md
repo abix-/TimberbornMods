@@ -3,7 +3,7 @@
 | System | What you can do | Status |
 |---|---|---|
 | [Beavers](api-reference.md#get-apibeavers) | Per-beaver wellbeing, every unmet need by name, workplace, age, contamination | Yes |
-| [Wellbeing](api-reference.md#get-apiwellbeing) | Population breakdown by category with current/max -- know exactly what to build | Yes |
+| [Wellbeing](api-reference.md#get-apiwellbeing) | Population breakdown by category with current/max. Know exactly what to build | Yes |
 | [Buildings](api-reference.md#get-apibuildings) | Workers, priority, power, reachability, inventory, construction progress | Yes |
 | [Placement](api-reference.md#post-apibuildingplace) | Place any building. Game-native validation. Find best spot with reachability + power | Yes |
 | [Building range](api-reference.md#post-apibuildingrange) | Work radius for farmhouse, lumberjack, forester, gatherer, scavenger, DC | Yes |

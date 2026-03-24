@@ -19,7 +19,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [table]
 [tr][th]System[/th][th]What you can do[/th][th]Status[/th][/tr]
 [tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#get-apibeavers]Beavers[/url][/td][td]Per-beaver wellbeing, every unmet need by name, workplace, age, contamination[/td][td]Yes[/td][/tr]
-[tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#get-apiwellbeing]Wellbeing[/url][/td][td]Population breakdown by category with current/max -- know exactly what to build[/td][td]Yes[/td][/tr]
+[tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#get-apiwellbeing]Wellbeing[/url][/td][td]Population breakdown by category with current/max. Know exactly what to build[/td][td]Yes[/td][/tr]
 [tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#get-apibuildings]Buildings[/url][/td][td]Workers, priority, power, reachability, inventory, construction progress[/td][td]Yes[/td][/tr]
 [tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#post-apibuildingplace]Placement[/url][/td][td]Place any building. Game-native validation. Find best spot with reachability + power[/td][td]Yes[/td][/tr]
 [tr][td][url=https://abix-.github.io/TimberbornMods/api-reference/#post-apibuildingrange]Building range[/url][/td][td]Work radius for farmhouse, lumberjack, forester, gatherer, scavenger, DC[/td][td]Yes[/td][/tr]
