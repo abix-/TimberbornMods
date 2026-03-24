@@ -664,7 +664,7 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
     homeless_str = f"  {_BRED}{_BOLD}{homeless} homeless{_RST}" if homeless > 0 else ""
     miserable_str = f"  {_BYEL}{miserable} miserable{_RST}" if miserable > 0 else ""
 
-    print(_row(f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}    Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}  Idle {idle_c}{_BOLD}{unemployed}{_RST}  Science {_BCYN}{_BOLD}{science}{_RST}"))
+    print(_row(f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}", f"Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}  Idle {idle_c}{_BOLD}{unemployed}{_RST}"))
     print(_row(f"Wellbeing {_bar(wb_avg, 77, 20)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}{miserable_str}{homeless_str}"))
     print(_hline())
 
@@ -713,6 +713,7 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
     for good in ["Log", "Plank", "Gear", "ScrapMetal", "MetalPart"]:
         if good in resources:
             mat_lines.append(f"  {good:16s} {_BOLD}{resources[good]:>5}{_RST}")
+    mat_lines.append(f"  {'Science':16s} {_BCYN}{_BOLD}{science:>5}{_RST}")
 
     alerts_obj = summary.get("alerts", {})
     alert_lines = [f"{_BCYN}{_BOLD}ALERTS{_RST}"]
@@ -723,25 +724,48 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
     if len(alert_lines) == 1:
         alert_lines.append(f"  {_BGRN}● all clear{_RST}")
 
-    # lumber (trees only, not crops -- computed from natural_resources data)
-    _TREE_NAMES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
-    if trees_data and isinstance(trees_data, list):
-        tree_only = [t for t in trees_data if t.get("name") in _TREE_NAMES]
-        marked_grown = sum(1 for t in tree_only if t.get("marked") and t.get("grown") and t.get("alive"))
-        unmarked_grown = sum(1 for t in tree_only if not t.get("marked") and t.get("grown") and t.get("alive"))
-        marked_seedling = sum(1 for t in tree_only if t.get("marked") and not t.get("grown") and t.get("alive"))
-    else:
-        marked_grown = unmarked_grown = marked_seedling = 0
-    alert_lines.append("")
-    alert_lines.append(f"{_BCYN}{_BOLD}LUMBER{_RST}  {_BGRN}{_BOLD}{marked_grown}{_RST} choppable  {_DIM}{unmarked_grown} unmarked  {marked_seedling} seedlings{_RST}")
-
     max_rows = max(len(mat_lines), len(alert_lines))
     for i in range(max_rows):
         l = mat_lines[i] if i < len(mat_lines) else ""
         r = alert_lines[i] if i < len(alert_lines) else ""
         print(_row(l, r))
 
-    # crops (from trees endpoint -- planted crops in the ground)
+    # trees section (trees only, not crops)
+    _TREE_NAMES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
+    if trees_data and isinstance(trees_data, list):
+        tree_only = [t for t in trees_data if t.get("name") in _TREE_NAMES]
+        tree_counts = {}
+        for t in tree_only:
+            n = t.get("name", "")
+            if n not in tree_counts:
+                tree_counts[n] = {"marked_grown": 0, "unmarked_grown": 0, "seedling": 0}
+            if not t.get("alive"):
+                continue
+            if t.get("grown"):
+                if t.get("marked"):
+                    tree_counts[n]["marked_grown"] += 1
+                else:
+                    tree_counts[n]["unmarked_grown"] += 1
+            elif t.get("marked"):
+                tree_counts[n]["seedling"] += 1
+        if tree_counts:
+            print(_hline())
+            tree_left = [f"{_BCYN}{_BOLD}TREES{_RST}"]
+            tree_right = []
+            total_chop = sum(c["marked_grown"] for c in tree_counts.values())
+            total_unmarked = sum(c["unmarked_grown"] for c in tree_counts.values())
+            total_seed = sum(c["seedling"] for c in tree_counts.values())
+            tree_left.append(f"  {_BGRN}{_BOLD}{total_chop}{_RST} choppable  {_DIM}{total_unmarked} unmarked  {total_seed} seedlings{_RST}")
+            for name in sorted(tree_counts, key=lambda n: tree_counts[n]["marked_grown"], reverse=True):
+                c = tree_counts[name]
+                if c["marked_grown"] + c["unmarked_grown"] + c["seedling"] > 0:
+                    tree_left.append(f"  {_DIM}{name:10s}{_RST} {_BGRN}{_BOLD}{c['marked_grown']:>4}{_RST} marked  {_DIM}{c['unmarked_grown']} free  {c['seedling']} growing{_RST}")
+            for i in range(len(tree_left)):
+                l = tree_left[i] if i < len(tree_left) else ""
+                r = tree_right[i] if i < len(tree_right) else ""
+                print(_row(l, r))
+
+    # crops (from natural_resources -- planted crops in the ground)
     _CROP_NAMES = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava",
                    "Mushroom", "Potato", "Wheat", "Carrot", "MangroveFruit"}
     if trees_data and isinstance(trees_data, list):

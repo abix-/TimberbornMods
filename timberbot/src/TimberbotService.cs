@@ -738,7 +738,8 @@ namespace Timberbot
         // Three passes over subsets (buildings, natural resources, beavers) instead of one pass over everything.
         public object CollectSummary(string format = "toon")
         {
-            int markedGrown = 0, markedSeedling = 0, unmarkedGrown = 0;
+            int treeMarkedGrown = 0, treeMarkedSeedling = 0, treeUnmarkedGrown = 0;
+            int cropReady = 0, cropGrowing = 0;
             int occupiedBeds = 0, totalBeds = 0;
             int totalVacancies = 0, assignedWorkers = 0;
             float totalWellbeing = 0f;
@@ -746,15 +747,23 @@ namespace Timberbot
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
             int miserable = 0, critical = 0;
 
-            // trees (read cached primitives only -- zero Unity calls)
+            // natural resources: split into trees vs crops
+            var _cropNames = new System.Collections.Generic.HashSet<string>
+                { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
-                if (c.Alive)
+                if (!c.Alive) continue;
+                if (_cropNames.Contains(c.Name))
                 {
-                    if (c.Marked && c.Grown) markedGrown++;
-                    else if (c.Marked && !c.Grown) markedSeedling++;
-                    else if (!c.Marked && c.Grown) unmarkedGrown++;
+                    if (c.Grown) cropReady++;
+                    else cropGrowing++;
+                }
+                else
+                {
+                    if (c.Marked && c.Grown) treeMarkedGrown++;
+                    else if (c.Marked && !c.Grown) treeMarkedSeedling++;
+                    else if (!c.Marked && c.Grown) treeUnmarkedGrown++;
                 }
             }
 
@@ -805,7 +814,8 @@ namespace Timberbot
                     time = CollectTime(),
                     weather = CollectWeather(),
                     districts = CollectDistricts("json"),
-                    trees = new { markedGrown, markedSeedling, unmarkedGrown },
+                    trees = new { markedGrown = treeMarkedGrown, markedSeedling = treeMarkedSeedling, unmarkedGrown = treeUnmarkedGrown },
+                    crops = new { ready = cropReady, growing = cropGrowing },
                     housing = new { occupiedBeds, totalBeds, homeless },
                     employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
                     wellbeing = new { average = System.Math.Round(avgWellbeing, 1), miserable, critical },
@@ -828,10 +838,13 @@ namespace Timberbot
             flat["tempDays"] = _weatherService.TemperateWeatherDuration;
             flat["hazardDays"] = _weatherService.HazardousWeatherDuration;
 
-            // trees
-            flat["markedGrown"] = markedGrown;
-            flat["markedSeedling"] = markedSeedling;
-            flat["unmarkedGrown"] = unmarkedGrown;
+            // trees (actual trees only, not crops)
+            flat["markedGrown"] = treeMarkedGrown;
+            flat["markedSeedling"] = treeMarkedSeedling;
+            flat["unmarkedGrown"] = treeUnmarkedGrown;
+            // crops
+            flat["cropReady"] = cropReady;
+            flat["cropGrowing"] = cropGrowing;
 
             // population + resources (first district)
             var goods = _goodService.Goods;
