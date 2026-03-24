@@ -75,8 +75,6 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Find placement for crops | High | "Where can I plant Kohlrabi on irrigated soil near this farmhouse?" |
 | Building work range | High | Farmhouse, lumberjack, forester work radii for smarter placement |
 | Resource projection | Medium | Project wood/plank/gear days like foodDays/waterDays |
-| Building power connections | Medium | Which buildings are in the same power chain |
-| Automation bridge | Medium | Expose port 8080 levers/adapters through Timberbot API |
 | Multi-district management | Medium | Better support for second district, cross-district resource flow |
 
 ## By design (not gaps)
