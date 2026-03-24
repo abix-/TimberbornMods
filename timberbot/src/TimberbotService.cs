@@ -512,6 +512,14 @@ namespace Timberbot
                 }
                 flat["foodDays"] = System.Math.Round((double)totalFood / totalPop, 1);
                 flat["waterDays"] = System.Math.Round((double)totalWater / (totalPop * 2.0), 1);
+
+                // material projection -- stock / pop, same rough estimate as food/water
+                int logs = flat.ContainsKey("Log") && flat["Log"] is int ls ? ls : 0;
+                int planks = flat.ContainsKey("Plank") && flat["Plank"] is int ps ? ps : 0;
+                int gears = flat.ContainsKey("Gear") && flat["Gear"] is int gs ? gs : 0;
+                flat["logDays"] = System.Math.Round((double)logs / totalPop, 1);
+                flat["plankDays"] = System.Math.Round((double)planks / totalPop, 1);
+                flat["gearDays"] = System.Math.Round((double)gears / totalPop, 1);
             }
 
             // housing
@@ -575,16 +583,13 @@ namespace Timberbot
         public object CollectTreeClusters(int cellSize = 10, int top = 5)
         {
             var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
-            foreach (var ec in _entityRegistry.Entities)
+            foreach (var nr in _naturalResourceIndex)
             {
-                if (ec.GetComponent<Cuttable>() == null) continue;
-                var living = ec.GetComponent<LivingNaturalResource>();
-                if (living == null || living.IsDead) continue;
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                if (nr.Cuttable == null) continue;
+                if (nr.Living == null || nr.Living.IsDead) continue;
+                if (nr.BlockObject == null) continue;
 
-                var c = bo.Coordinates;
+                var c = nr.BlockObject.Coordinates;
                 int cx = c.x / cellSize * cellSize + cellSize / 2;
                 int cy = c.y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
@@ -593,7 +598,7 @@ namespace Timberbot
                     cells[key] = new int[] { 0, 0, cx, cy, c.z };
 
                 cells[key][1]++;
-                if (growable != null && growable.IsGrown)
+                if (nr.Growable != null && nr.Growable.IsGrown)
                     cells[key][0]++;
             }
 
@@ -2112,7 +2117,7 @@ namespace Timberbot
                 var groupTotals = new Dictionary<string, float>();    // current wellbeing sum per group
                 var groupMaxTotals = new Dictionary<string, float>(); // max wellbeing sum per group
 
-                foreach (var ec in _entityRegistry.Entities)
+                foreach (var ec in _beaverIndex)
                 {
                     var needMgr = ec.GetComponent<NeedManager>();
                     if (needMgr == null) continue;
@@ -2418,14 +2423,13 @@ namespace Timberbot
                     // O(n) scan but only called once per z-level change (max ~6 times per route)
                     void DemolishPathAt(int px, int py, int pz)
                     {
-                        foreach (var ec in _entityRegistry.Entities)
+                        foreach (var cb in _buildingIndex)
                         {
-                            var bo = ec.GetComponent<BlockObject>();
-                            if (bo == null) continue;
-                            var c = bo.Coordinates;
-                            if (c.x == px && c.y == py && c.z == pz && CleanName(ec.GameObject.name).Contains("Path"))
+                            if (cb.BlockObject == null) continue;
+                            var c = cb.BlockObject.Coordinates;
+                            if (c.x == px && c.y == py && c.z == pz && cb.Name.Contains("Path"))
                             {
-                                DemolishBuilding(ec.GameObject.GetInstanceID());
+                                DemolishBuilding(cb.Id);
                                 placed--;
                                 break;
                             }
@@ -2848,22 +2852,20 @@ namespace Timberbot
             // collect path and power tile positions for placement scoring
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
-            foreach (var ec in _entityRegistry.Entities)
+            foreach (var cb in _buildingIndex)
             {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                var name = CleanName(ec.GameObject.name);
-                if (name.Contains("Path") || name.Contains("Stairs"))
+                if (cb.BlockObject == null) continue;
+                if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
                 {
-                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
                     {
                         var c = block.Coordinates;
                         pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
                     }
                 }
-                if (ec.GetComponent<MechanicalNode>() != null)
+                if (cb.PowerNode != null)
                 {
-                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
                     {
                         var c = block.Coordinates;
                         powerTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);

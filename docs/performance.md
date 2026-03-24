@@ -42,17 +42,13 @@ Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zer
 | `weather` | none | 1 | **7ms** | 0 | Reads service fields |
 | `prefabs` | building templates | 157 | **7ms** | 0 | Iterates BuildingService templates |
 
-### Not optimized (still scan all entities)
+### Still scan all entities (by design)
 
-| Endpoint | What it does | Frequency | Could use |
+| Endpoint | What it does | Frequency | Why not indexed |
 |---|---|---|---|
-| `BuildAllIndexes` | Initial index build | **once on load** | N/A (acceptable) |
-| `CollectTreeClusters` | Grid-bucket grown trees | rare | `_naturalResourceIndex` |
-| `CollectScan` | Radius-filtered survey | rare | all 3 indexes |
-| `CollectMap` | Region tile occupants | rare | all 3 indexes |
-| `CollectWellbeing` | Per-need-group breakdown | rare | `_beaverIndex` |
-| `DemolishPathAt` | Find path at tile | max 6x per route | `_buildingIndex` |
-| `FindPlacement` | Path/power tile scoring | rare | `_buildingIndex` |
+| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes |
+| `CollectScan` | Radius-filtered survey | rare | needs all entity types in region |
+| `CollectMap` | Region tile occupants | rare | needs all entity types in region |
 
 ## Thread model
 
@@ -71,11 +67,7 @@ Python client calls are synchronous (send, wait, send next), so only 1 request i
 |---|---|---|---|---|
 | 1 | **trees 25ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads | pre-allocated result arrays or TOON serialization bypass |
 | 2 | **buildings full 13ms** | 522 items | per-item Dictionary alloc + inventory iteration | same |
-| 3 | **tree_clusters full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_naturalResourceIndex` |
-| 4 | **wellbeing full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_beaverIndex` |
-| 5 | **find_placement full scan** | O(4161) | collects path/power tiles from all entities | switch to `_buildingIndex` |
-| 6 | **demolish_path_at full scan** | O(4161) x up to 6 | finds path at coordinate | use `_buildingIndex` |
-| 7 | **JSON on main thread** | ~1-3ms/response | `JsonConvert.SerializeObject` blocks | move serialization to listener thread |
+| 3 | **JSON on main thread** | ~1-3ms/response | `JsonConvert.SerializeObject` blocks | move serialization to listener thread |
 
 ## Resolved bottlenecks
 
@@ -86,6 +78,10 @@ Python client calls are synchronous (send, wait, send next), so only 1 request i
 | Full entity scan per endpoint | O(4161) every call | event-driven typed indexes via `EventBus` |
 | Per-frame index rebuild | O(4161) every frame | eliminated -- indexes update on entity add/remove only |
 | Per-frame entity cache rebuild | O(4161) every frame | eliminated -- `_entityCache` updates via EventBus |
+| tree_clusters full scan | O(4161) | switched to `_naturalResourceIndex` with cached refs |
+| wellbeing full scan | O(4161) | switched to `_beaverIndex` |
+| find_placement full scan | O(4161) | switched to `_buildingIndex` with cached refs |
+| demolish_path_at full scan | O(4161) x up to 6 | switched to `_buildingIndex` with cached refs |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 
 ## Optimization history
@@ -106,7 +102,7 @@ GetComponent elimination reduced trees by ~15%. The remaining ~85% of cost is Di
 | Buildings | 522 | 1500+ | linear with item count (dict alloc) |
 | Trees | 2986 | 5000+ | linear -- trees endpoint could hit 40ms+ |
 | Beavers | 65 | 200+ | linear but low base count |
-| Total entities | 4161 | 10000+ | only affects non-optimized endpoints |
+| Total entities | 4161 | 10000+ | only affects CollectScan/CollectMap (rare, region-bounded) |
 | Burst (7 calls) | 64ms | ~110ms est | acceptable at 1 call/minute cadence |
 
 ## Test coverage
