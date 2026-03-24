@@ -1,10 +1,10 @@
-Let Claude or ChatGPT run your beaver colony. Timberbot API gives AI full read/write access to every game system over HTTP -- it reads your beavers, places buildings, manages crops, and keeps everyone alive while you watch.
+Play Timberborn with an AI partner. Timberbot API gives Claude, ChatGPT, or your own scripts full read/write access to every game system over HTTP. You make the decisions, the AI handles the busywork. Or let it run autonomously and step in when you want.
 
 [code]
 /loop 1m /timberbot keep my beavers alive and get to 77 wellbeing
 [/code]
 
-That's it. One line in Claude Code and the AI plays Timberborn for you -- checking water before drought, planting crops, building housing, unlocking science, managing power grids, and assembling bots.
+That's it. One line in Claude Code and the AI plays Timberborn for you. It checks water before drought, plants crops, builds housing, unlocks science, manages power grids, and assembles bots.
 
 Or use it as a scripting API for your own tools, dashboards, and automation.
 
@@ -20,7 +20,7 @@ Or use it as a scripting API for your own tools, dashboards, and automation.
 
 [b]Power networks:[/b] which buildings share a power grid, supply vs demand per network, generator output.
 
-[b]One-call snapshot:[/b] entire colony in a single request -- resources, weather, drought countdown, alerts, food/water/log/plank/gear day projections.
+[b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
 [h1]How it works[/h1]
 
@@ -34,7 +34,7 @@ timberbot.py visual x:120 y:140 radius:10         # ASCII map
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2
 [/code]
 
-Works with any language that speaks HTTP. Python client is optional -- raw curl works too.
+Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
 
 [h1]AI setup (Claude Code)[/h1]
 
@@ -43,13 +43,13 @@ cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 /loop 1m /timberbot
 [/code]
 
-The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy -- you just tell it what you want.
+The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy. You just tell it what you want.
 
-Works with ChatGPT too -- paste docs/timberbot.md as a system prompt.
+Works with ChatGPT too. Paste docs/timberbot.md as a system prompt.
 
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
-2. Start a game -- API starts automatically on port 8085
+2. Start a game. The API starts automatically on port 8085
 3. pip install requests toons
 4. Run: timberbot.py ping
 
