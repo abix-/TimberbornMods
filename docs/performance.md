@@ -14,19 +14,19 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 |---|---|---|---|---|
 | `_buildingIndex` | `List<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove (instant) |
 | `_naturalResourceIndex` | `List<CachedNaturalResource>` | same | **zero** | entity add/remove (instant) |
-| `_beaverIndex` | `List<EntityComponent>` | same | **zero** | entity add/remove (instant) |
+| `_beaverIndex` | `List<CachedBeaver>` | same | **zero** | entity add/remove (instant) |
 | `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove (instant) |
 | `UpdateSingleton` | -- | just `DrainRequests()` | **~0ms** when idle | N/A |
 
 ### Cached component refs
 
-`CachedBuilding` and `CachedNaturalResource` structs resolve all component references once at entity-add time. Endpoints read live property values (`.Paused`, `.IsGrown`, `.Wellbeing`) from cached refs without calling `GetComponent<T>()`.
+`CachedBuilding`, `CachedNaturalResource`, and `CachedBeaver` structs resolve all component references once at entity-add time. Endpoints read cached primitives (refreshed at 1Hz) without calling `GetComponent<T>()`.
 
 | Struct | Fields cached | GetComponent calls saved per item |
 |---|---|---|
 | `CachedBuilding` | BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect | **18** |
 | `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
-| `_beaverIndex` | (not cached -- only 65 items, not worth it) | 0 |
+| `CachedBeaver` | NeedMgr, WbTracker, Worker, Life, Carrier, Deteriorable, Contaminable, Dweller, Citizen, Bot | **10** |
 
 ## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total)
 
@@ -141,6 +141,7 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | new Dictionary per breeding pod per frame | ~5 allocs/frame | persistent dict, clear+repopulate |
 | Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
+| LINQ `.Select().ToList()` in map stacking | anonymous objects + LINQ alloc per stacked tile | simple loop with Dictionary |
 
 ## Optimization history
 
