@@ -51,6 +51,13 @@ def main():
         if os.path.exists(thumb):
             zf.write(thumb, "thumbnail.png")
         zf.write(SCRIPT, "timberbot.py")
+        # include settings.json with debug disabled
+        release_settings = json.dumps({
+            "refreshIntervalSeconds": 1.0,
+            "debugEndpointEnabled": False,
+            "httpPort": 8085
+        }, indent=2)
+        zf.writestr("settings.json", release_settings)
         # include docs
         docs_dir = os.path.join(ROOT, "docs")
         for doc in os.listdir(docs_dir):
