@@ -256,12 +256,8 @@ namespace Timberbot
                 try
                 {
                     if (c.BlockObject != null)
-                    {
                         c.Finished = c.BlockObject.IsFinished;
-                        var coords = c.BlockObject.Coordinates;
-                        c.X = coords.x; c.Y = coords.y; c.Z = coords.z;
-                        c.Orientation = OrientNames[(int)c.BlockObject.Orientation];
-                    }
+                    // X, Y, Z, Orientation set at add-time (immutable after placement)
                     c.Paused = c.Pausable != null && c.Pausable.Paused;
                     c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable();
                     c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered;
@@ -386,32 +382,12 @@ namespace Timberbot
                         c.Y = Mathf.FloorToInt(pos.z);
                         c.Z = Mathf.FloorToInt(pos.y);
                     }
-                    if (c.Worker != null && c.Worker.Workplace != null)
-                    {
-                        if (!ReferenceEquals(c.Worker.Workplace, c.LastWorkplaceRef))
-                        {
-                            c.LastWorkplaceRef = c.Worker.Workplace;
-                            c.Workplace = CleanName(c.Worker.Workplace.GameObject.name);
-                        }
-                    }
-                    else
-                    {
-                        c.Workplace = null;
-                        c.LastWorkplaceRef = null;
-                    }
-                    if (c.Citizen != null)
-                    {
-                        try
-                        {
-                            var dc = c.Citizen.AssignedDistrict;
-                            if (!ReferenceEquals(dc, c.LastDistrictRef))
-                            {
-                                c.LastDistrictRef = dc;
-                                c.District = dc != null ? dc.DistrictName : null;
-                            }
-                        }
-                        catch { }
-                    }
+                    var wp = c.Worker?.Workplace;
+                    if (RefChanged(ref c.LastWorkplaceRef, wp))
+                        c.Workplace = wp != null ? CleanName(wp.GameObject.name) : null;
+                    var dc = c.Citizen?.AssignedDistrict;
+                    if (RefChanged(ref c.LastDistrictRef, dc))
+                        c.District = dc?.DistrictName;
                     c.HasHome = c.Dweller != null && c.Dweller.HasHome;
                     c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
                     if (c.Life != null) c.LifeProgress = c.Life.LifeProgress;
@@ -645,6 +621,10 @@ namespace Timberbot
                 var bo = cb.BlockObject;
                 if (bo != null)
                 {
+                    // immutable after placement -- set once at add-time
+                    var coords = bo.Coordinates;
+                    cb.X = coords.x; cb.Y = coords.y; cb.Z = coords.z;
+                    cb.Orientation = OrientNames[(int)bo.Orientation];
                     cb.OccupiedTiles = new List<(int, int, int)>();
                     try
                     {
@@ -736,6 +716,15 @@ namespace Timberbot
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+
+        // ref-compare helper: returns true (and updates cached ref) only when the reference changes.
+        // use to skip expensive string derivation (CleanName, DistrictName) when the source object hasn't changed.
+        private static bool RefChanged(ref object cached, object current)
+        {
+            if (ReferenceEquals(cached, current)) return false;
+            cached = current;
+            return true;
+        }
 
         private EntityComponent FindEntity(int id)
         {
