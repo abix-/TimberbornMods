@@ -2626,10 +2626,10 @@ namespace Timberbot
             var lower = orient.Trim().ToLowerInvariant();
             switch (lower)
             {
-                case "south": case "s": case "0": return 0;
-                case "west":  case "w": case "1": return 1;
-                case "north": case "n": case "2": return 2;
-                case "east":  case "e": case "3": return 3;
+                case "south": return 0;
+                case "west":  return 1;
+                case "north": return 2;
+                case "east":  return 3;
                 default: return -1;
             }
         }
