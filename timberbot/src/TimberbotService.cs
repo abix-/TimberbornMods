@@ -756,7 +756,7 @@ namespace Timberbot
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
-                    entry["orientation"] = (int)bo.Orientation;
+                    entry["orientation"] = OrientNames[(int)bo.Orientation];
 
                     if (bo.HasEntrance)
                     {
@@ -2039,7 +2039,7 @@ namespace Timberbot
                         // stack platforms: step count of them
                         for (int p = 0; p < step; p++)
                         {
-                            var platResult = PlaceBuilding("Platform.IronTeeth", rampTileX, rampTileY, baseZ + p, 0);
+                            var platResult = PlaceBuilding("Platform.IronTeeth", rampTileX, rampTileY, baseZ + p, "south");
                             if (platResult.GetType().GetProperty("id") == null)
                             {
                                 var err = platResult.GetType().GetProperty("error")?.GetValue(platResult);
@@ -2050,7 +2050,7 @@ namespace Timberbot
 
                         // place stair on top
                         int stairZ = baseZ + step;
-                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, rampOrient);
+                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
                         if (stairResult.GetType().GetProperty("id") != null)
                             stairs++;
                         else
@@ -2075,7 +2075,7 @@ namespace Timberbot
                 }
 
                 // place path at current tile
-                var result = PlaceBuilding("Path", cx, cy, tz, 0);
+                var result = PlaceBuilding("Path", cx, cy, tz, "south");
                 if (result.GetType().GetProperty("id") != null)
                     placed++;
                 else
@@ -2618,8 +2618,29 @@ namespace Timberbot
         // 2. origin correction (user coords = bottom-left regardless of orientation)
         // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
         // 4. Place() only after all checks pass
-        public object PlaceBuilding(string prefabName, int x, int y, int z, int orientation)
+        private static readonly string[] OrientNames = { "south", "west", "north", "east" };
+
+        private static int ParseOrientation(string orient)
         {
+            if (string.IsNullOrEmpty(orient)) return 0;
+            var lower = orient.Trim().ToLowerInvariant();
+            switch (lower)
+            {
+                case "south": case "s": case "0": return 0;
+                case "west":  case "w": case "1": return 1;
+                case "north": case "n": case "2": return 2;
+                case "east":  case "e": case "3": return 3;
+                default: return -1;
+            }
+        }
+
+        public object PlaceBuilding(string prefabName, int x, int y, int z, string orientationStr)
+        {
+            int orientation = ParseOrientation(orientationStr);
+            if (orientation < 0)
+                return new { error = $"invalid orientation '{orientationStr}', use: south, west, north, east",
+                             prefab = prefabName };
+
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
                 return new { error = "unknown prefab", prefab = prefabName };
@@ -2651,7 +2672,7 @@ namespace Timberbot
             // validate using the game's own preview system (same as player UI)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
                 return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
-                             prefab = prefabName, x, y, z, orientation };
+                             prefab = prefabName, x, y, z, orientation = OrientNames[orientation] };
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
@@ -2679,7 +2700,7 @@ namespace Timberbot
                 };
             }
 
-            return new { id = placedId, name = placedName, x, y, z, orientation };
+            return new { id = placedId, name = placedName, x, y, z, orientation = OrientNames[orientation] };
         }
     }
 }

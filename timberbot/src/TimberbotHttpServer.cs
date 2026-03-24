@@ -326,7 +326,7 @@ namespace Timberbot
                             body?.Value<int>("x") ?? 0,
                             body?.Value<int>("y") ?? 0,
                             body?.Value<int>("z") ?? 0,
-                            body?.Value<int>("orientation") ?? 0);
+                            body?.Value<string>("orientation") ?? "south");
                 }
             }
 
