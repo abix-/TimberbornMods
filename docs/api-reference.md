@@ -530,6 +530,12 @@ Each building includes all applicable fields (absent fields mean the component d
 | maxDwellers | int | Max residents |
 | isClutch | bool | Has a clutch mechanism |
 | clutchEngaged | bool | Clutch is engaged |
+| stock | int | Total items in all inventories |
+| capacity | int | Total inventory capacity |
+| recipes | array | Available recipe IDs for manufactories |
+| currentRecipe | string | Active recipe ID (empty if none) |
+| needsNutrients | bool | Breeding pod needs food delivered |
+| nutrients | int | Breeding pod nutrient count |
 | entranceX, entranceY, entranceZ | int | Doorstep coordinates |
 
 ```json
@@ -635,6 +641,7 @@ Pagination available in Python client only: `bot.beavers(limit=10)`
 | workplace | string | Assigned workplace name (empty if none) |
 | isBot | bool | Mechanical beaver |
 | contaminated | bool | Contaminated by badwater |
+| activity | string | Current status text (e.g. "Waiting for nutrients", "No available workers") |
 | hasHome | bool | Has assigned dwelling |
 
 ```json
@@ -679,10 +686,16 @@ All building templates with dimensions.
 | sizeX | int | Width |
 | sizeY | int | Depth |
 | sizeZ | int | Height |
+| scienceCost | int | Science points to unlock (omitted if 0) |
+| unlocked | bool | Whether unlocked (omitted if no science cost) |
+| cost | array | Material cost: `[{"good": "Log", "amount": 2}]` |
 
 ```json
 [
-  {"name": "LumberjackFlag.IronTeeth", "sizeX": 2, "sizeY": 2, "sizeZ": 1}
+  {
+    "name": "FarmHouse.IronTeeth", "sizeX": 2, "sizeY": 2, "sizeZ": 2,
+    "cost": [{"good": "Log", "amount": 4}, {"good": "Plank", "amount": 2}]
+  }
 ]
 ```
 
@@ -962,6 +975,27 @@ Pause or unpause a building.
 
 ---
 
+### POST /api/building/clutch
+
+Engage or disengage a clutch on a building.
+
+**CLI:** `timberbot.py set_clutch building_id:12340 engaged:true`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | int | yes | Building instance ID |
+| engaged | bool | yes | `true` to engage, `false` to disengage |
+
+#### Response
+
+```json
+{"id": 12340, "name": "GravityBattery", "engaged": true}
+```
+
+---
+
 ### POST /api/building/demolish
 
 Remove a building from the world.
@@ -1002,7 +1036,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 | x | int | yes | Bottom-left X |
 | y | int | yes | Bottom-left Y |
 | z | int | yes | Terrain height (must match) |
-| orientation | int | yes | 0=south, 1=west, 2=north, 3=east |
+| orientation | string | yes | south, west, north, east |
 
 !!! danger "Ghost buildings"
     Failed placements may create invisible entities. See [Known Issues](#known-issues).
