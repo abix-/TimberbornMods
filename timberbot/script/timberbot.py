@@ -604,7 +604,7 @@ def _row(left, right=None, split=43):
         return f"  {left}{' ' * pad_l}  {right}"
 
 
-def _top_render(summary, wellbeing_data, trees_data=None):
+def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
     if not summary:
         print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
@@ -688,14 +688,11 @@ def _top_render(summary, wellbeing_data, trees_data=None):
             wb_cats.append((cat.get("group", "?"), cat.get("current", 0), cat.get("max", 0)))
 
     # food header
-    raw_str = f"  {_DIM}+{total_raw} raw{_RST}" if total_raw > 0 else ""
-    left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} edible{raw_str}{_DIM}){_RST}"]
+    left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} total){_RST}"]
     for i, (g, amt) in enumerate(food_items):
         branch = "└─" if i == len(food_items) - 1 else "├─"
         left_lines.append(f"  {_DIM}{branch}{_RST} {g:16s} {_BOLD}{amt:>5}{_RST}")
 
-    if raw_crops:
-        left_lines.append(f"  {_DIM}crops:{_RST} " + "  ".join(f"{g} {_BOLD}{a}{_RST}" for g, a in raw_crops))
     left_lines.append(f"{_BCYN}{_BOLD}WATER{_RST} {_cv(water_days, 2, 0.5, '.1f')} days  {_BBLU}{_BOLD}{total_water}{_RST}")
     left_lines.append("")
 
@@ -784,10 +781,10 @@ def _top_render(summary, wellbeing_data, trees_data=None):
             print(_row(f"  {name:16s} {_BOLD}{dpop:>3}{_RST} pop   Water {_BBLU}{_BOLD}{dw:>4}{_RST}   Log {_BOLD}{dl:>4}{_RST}"))
 
     print(f" {_DIM}{'─' * W}{_RST}")
-    print(f"{'':30s}{_DIM}refreshing every 3s  ·  ctrl+c to stop{_RST}")
+    print(f"{'':30s}{_DIM}refreshing every {interval}s  ·  ctrl+c to stop{_RST}")
 
 
-def _top():
+def _top(interval=5):
     bot = Timberbot(json_mode=True)
 
     if not bot.ping():
@@ -800,15 +797,15 @@ def _top():
             try:
                 summary = bot.summary()
                 wb = bot.wellbeing()
-                trees = bot.natural_resources()
+                nr = bot.natural_resources()
             except Exception:
                 summary = None
                 wb = None
-                trees = None
+                nr = None
             print("\033[2J\033[H", end="")
             print()
-            _top_render(summary, wb, trees)
-            time.sleep(3)
+            _top_render(summary, wb, nr, interval)
+            time.sleep(interval)
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
 
@@ -963,7 +960,13 @@ def main():
     args = raw_args[1:]
 
     if method_name == "top":
-        _top()
+        # parse optional interval: top interval:3
+        interval = 5
+        for a in args:
+            if a.startswith("interval:"):
+                try: interval = int(a.split(":", 1)[1])
+                except ValueError: pass
+        _top(interval)
         return
 
     if method_name == "manager":
