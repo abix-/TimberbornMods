@@ -601,8 +601,10 @@ def _top_render(summary, wellbeing_data):
     cday = w.get("cycleDay", 0)
     remaining = temp_len + haz_len - cday + 1 if hazardous else temp_len - cday + 1
 
+    day_progress = t.get("dayProgress", 0)
     season_str = f"{_BRED}{_BOLD}DROUGHT{_RST}" if hazardous else f"{_BGRN}Temperate{_RST}"
-    day_str = f"Day {_BCYN}{_BOLD}{day}{_RST} {_DIM}--{_RST} {season_str} {_DIM}{cday}/{temp_len}+{haz_len}{_RST} ({_BOLD}{remaining}d{_RST})"
+    day_bar = _bar(day_progress, 1.0, 8)
+    day_str = f"Day {_BCYN}{_BOLD}{day}{_RST} {day_bar}  {season_str} {_DIM}{cday}/{temp_len}+{haz_len}{_RST} ({_BOLD}{remaining}d{_RST})"
 
     # header
     print(f" {_DIM}{'─' * W}{_RST}")
@@ -637,11 +639,16 @@ def _top_render(summary, wellbeing_data):
     if total_bots:
         pop_parts += f"  {_BOLD}{total_bots}{_RST} bots"
 
+    homeless = housing.get("homeless", 0)
+    miserable = wb_obj.get("miserable", 0) if isinstance(wb_obj, dict) else 0
+    science = summary.get("science", 0)
     idle_c = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
     crit_str = f"  {_BRED}{_BOLD}● {critical} critical{_RST}" if critical > 0 else ""
+    homeless_str = f"  {_BRED}{_BOLD}{homeless} homeless{_RST}" if homeless > 0 else ""
+    miserable_str = f"  {_BYEL}{miserable} miserable{_RST}" if miserable > 0 else ""
 
-    print(_row(f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}    Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}  Idle {idle_c}{_BOLD}{unemployed}{_RST}"))
-    print(_row(f"Wellbeing {_bar(wb_avg, 77, 20)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}"))
+    print(_row(f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}    Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}  Idle {idle_c}{_BOLD}{unemployed}{_RST}  Science {_BCYN}{_BOLD}{science}{_RST}"))
+    print(_row(f"Wellbeing {_bar(wb_avg, 77, 20)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}{miserable_str}{homeless_str}"))
     print(_hline())
 
     # food + water (left) | wellbeing categories (right)
@@ -651,6 +658,8 @@ def _top_render(summary, wellbeing_data):
     water_days = round(total_water / (total_pop * 2), 1) if total_pop > 0 else 0
 
     food_items = [(g, resources.get(g, 0)) for g in ["Kohlrabi", "Berries", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"] if resources.get(g, 0) > 0]
+    # raw crops (farming pipeline)
+    raw_crops = [(g, resources.get(g, 0)) for g in ["Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava"] if resources.get(g, 0) > 0]
 
     wb_cats = []
     if wellbeing_data and isinstance(wellbeing_data, dict):
@@ -663,6 +672,8 @@ def _top_render(summary, wellbeing_data):
         branch = "└─" if i == len(food_items) - 1 else "├─"
         left_lines.append(f"  {_DIM}{branch}{_RST} {g:16s} {_BOLD}{amt:>5}{_RST}")
 
+    if raw_crops:
+        left_lines.append(f"  {_DIM}crops:{_RST} " + "  ".join(f"{g} {_BOLD}{a}{_RST}" for g, a in raw_crops))
     left_lines.append(f"{_BCYN}{_BOLD}WATER{_RST} {_cv(water_days, 2, 0.5, '.1f')} days  {_BBLU}{_BOLD}{total_water}{_RST}")
     left_lines.append("")
 
@@ -693,13 +704,15 @@ def _top_render(summary, wellbeing_data):
     if len(alert_lines) == 1:
         alert_lines.append(f"  {_BGRN}● all clear{_RST}")
 
-    # projections
+    # trees
+    trees_obj = summary.get("trees", {})
+    marked_grown = trees_obj.get("markedGrown", 0)
+    unmarked_grown = trees_obj.get("unmarkedGrown", 0)
+    marked_seedling = trees_obj.get("markedSeedling", 0)
     alert_lines.append("")
-    alert_lines.append(f"{_BCYN}{_BOLD}PROJECTIONS{_RST}")
-    log_days = round(resources.get("Log", 0) / max(total_pop * 0.3, 1), 1)
-    plank_days = round(resources.get("Plank", 0) / max(total_pop * 0.2, 1), 1)
-    alert_lines.append(f"  Food  {_cv(food_days, 3, 1, '.1f')}d   Water {_cv(water_days, 2, 0.5, '.1f')}d")
-    alert_lines.append(f"  Log   {_cv(log_days, 5, 2, '.0f')}d   Plank {_cv(plank_days, 5, 2, '.0f')}d")
+    alert_lines.append(f"{_BCYN}{_BOLD}TREES{_RST}")
+    alert_lines.append(f"  Choppable  {_BGRN}{_BOLD}{marked_grown}{_RST} marked  {_DIM}{unmarked_grown} unmarked{_RST}")
+    alert_lines.append(f"  Seedlings  {_DIM}{marked_seedling}{_RST}")
 
     max_rows = max(len(mat_lines), len(alert_lines))
     for i in range(max_rows):
