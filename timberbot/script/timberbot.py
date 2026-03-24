@@ -723,11 +723,15 @@ def _top_render(summary, wellbeing_data, trees_data=None, interval=5):
     if len(alert_lines) == 1:
         alert_lines.append(f"  {_BGRN}● all clear{_RST}")
 
-    # trees (from summary)
-    trees_obj = summary.get("trees", {})
-    marked_grown = trees_obj.get("markedGrown", 0)
-    unmarked_grown = trees_obj.get("unmarkedGrown", 0)
-    marked_seedling = trees_obj.get("markedSeedling", 0)
+    # lumber (trees only, not crops -- computed from natural_resources data)
+    _TREE_NAMES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
+    if trees_data and isinstance(trees_data, list):
+        tree_only = [t for t in trees_data if t.get("name") in _TREE_NAMES]
+        marked_grown = sum(1 for t in tree_only if t.get("marked") and t.get("grown") and t.get("alive"))
+        unmarked_grown = sum(1 for t in tree_only if not t.get("marked") and t.get("grown") and t.get("alive"))
+        marked_seedling = sum(1 for t in tree_only if t.get("marked") and not t.get("grown") and t.get("alive"))
+    else:
+        marked_grown = unmarked_grown = marked_seedling = 0
     alert_lines.append("")
     alert_lines.append(f"{_BCYN}{_BOLD}LUMBER{_RST}  {_BGRN}{_BOLD}{marked_grown}{_RST} choppable  {_DIM}{unmarked_grown} unmarked  {marked_seedling} seedlings{_RST}")
 
