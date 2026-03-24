@@ -334,6 +334,7 @@ class Timberbot:
         BGRN = "\033[92m"
         BYEL = "\033[93m"
         BBLU = "\033[94m"
+        BMAG = "\033[95m"
         BWHT = "\033[97m"
         BOLD = "\033[1m"
 
