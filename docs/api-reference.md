@@ -100,7 +100,7 @@ Full game state snapshot: time, weather, population, resources, trees, housing, 
 
 #### Response (format=toon)
 
-Flat key-value pairs including `day`, `dayProgress`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`.
+Flat key-value pairs including `day`, `dayProgress`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`.
 
 ---
 
