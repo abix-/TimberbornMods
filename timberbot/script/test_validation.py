@@ -91,6 +91,9 @@ class TestRunner:
         self.test_stockpile_capacity()
         self.test_workhours()
         self.test_distribution()
+        self.test_beaver_needs()
+        self.test_building_range()
+        self.test_find_planting()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
         if self.skipped:
@@ -881,6 +884,96 @@ class TestRunner:
         self.check("set distribution",
                    not self.err(result),
                    json.dumps(result)[:100])
+
+
+    def test_beaver_needs(self):
+        print("\n=== beaver needs ===\n")
+
+        # get beavers in JSON mode for full need data
+        result = self.bot._get("/api/beavers?format=json")
+        if not isinstance(result, list) or len(result) == 0:
+            self.skip("beaver needs", "no beavers found")
+            return
+
+        beaver = result[0]
+        self.check("beaver has needs list",
+                   "needs" in beaver and isinstance(beaver["needs"], list),
+                   f"keys: {list(beaver.keys())}")
+
+        if isinstance(beaver.get("needs"), list) and len(beaver["needs"]) > 0:
+            need = beaver["needs"][0]
+            self.check("need has id",
+                       "id" in need,
+                       json.dumps(need)[:100])
+            self.check("need has wellbeing",
+                       "wellbeing" in need,
+                       json.dumps(need)[:100])
+            self.check("need has favorable",
+                       "favorable" in need,
+                       json.dumps(need)[:100])
+
+        # TOON format should have unmet field
+        toon = self.bot.beavers(limit=1)
+        if isinstance(toon, list) and len(toon) > 0:
+            self.check("toon has unmet field",
+                       "unmet" in toon[0],
+                       json.dumps(toon[0])[:100])
+
+    def test_building_range(self):
+        print("\n=== building range ===\n")
+
+        # find a farmhouse
+        fid = self.find_building("FarmHouse")
+        if not fid:
+            self.skip("building range", "no farmhouse found")
+            return
+
+        result = self.bot.building_range(fid)
+        self.check("range returns tiles",
+                   self.has(result, "tiles") and result["tiles"] > 0,
+                   json.dumps(result)[:100])
+        self.check("range has moist count",
+                   "moist" in result,
+                   json.dumps(result)[:100])
+        self.check("range has bounds",
+                   self.has(result, "bounds"),
+                   json.dumps(result)[:100])
+
+        # also test on a building without range
+        dc_id = self.find_building("DistrictCenter")
+        if dc_id:
+            dc_result = self.bot.building_range(dc_id)
+            # DC may or may not have range -- just check no crash
+            self.check("range on DC no crash", not self.err(dc_result) or "no work range" in str(dc_result.get("error", "")),
+                       json.dumps(dc_result)[:100])
+
+    def test_find_planting(self):
+        print("\n=== find planting ===\n")
+
+        # area mode
+        result = self.bot.find_planting("Kohlrabi", x1=68, y1=128, x2=72, y2=132, z=2)
+        self.check("find_planting area returns spots",
+                   self.has(result, "spots") and len(result.get("spots", [])) > 0,
+                   json.dumps(result)[:100])
+
+        if result.get("spots"):
+            spot = result["spots"][0]
+            self.check("spot has moist field",
+                       "moist" in spot,
+                       json.dumps(spot)[:60])
+            self.check("spot has planted field",
+                       "planted" in spot,
+                       json.dumps(spot)[:60])
+
+        # building mode
+        fid = self.find_building("FarmHouse")
+        if fid:
+            result2 = self.bot.find_planting("Kohlrabi", building_id=fid)
+            self.check("find_planting by building",
+                       self.has(result2, "spots"),
+                       json.dumps(result2)[:100])
+        else:
+            self.skip("find_planting by building", "no farmhouse found")
 
 
 def main():
