@@ -160,18 +160,20 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 
 ## Late-game projections
 
-| Endpoint | Current (items / time) | Late-game (est items / time) | Scaling notes |
-|---|---|---|---|
-| `buildings` | 522 / 2.8ms | 1500+ / ~8ms | linear, StringBuilder serialization |
-| `buildings detail:full` | 522 / 1.3ms | 1500+ / ~4ms | linear, cached primitives |
-| `trees` | 2986 / 2.0ms | 5000+ / ~3.5ms | linear, StringBuilder scales well |
-| `beavers` | 65 / 0.9ms | 200+ beavers + 50 bots / ~3ms | linear, CachedBeaver struct |
-| `beavers detail:full` | 65 / ~2ms | 250 / ~7ms | all 38 needs per beaver, heavier |
-| `alerts` | 522 / 1.0ms | 1500+ / ~3ms | linear, cached primitives |
-| `power` | 17 networks / ~5ms | 50+ networks / ~15ms | full entity scan, per-request only |
-| `map` (region) | varies / ~10ms | larger maps / ~20ms | region-bounded, stacking adds overhead for vertical builds |
-| `summary` | 3500 entities / 1.2ms | 10000+ / ~3ms | reads from all 3 cached indexes |
-| Burst (7 calls) | 28ms total | ~50ms est | zero main-thread cost for all GETs |
+| Endpoint | Current items | Current time | Per-item rate | Late-game items | Projected time |
+|---|---|---|---|---|---|
+| `buildings` | 522 | 2.8ms | 5.4us/item | 1500 | ~8ms |
+| `buildings detail:full` | 522 | 1.3ms | 2.5us/item | 1500 | ~4ms |
+| `trees` | 2986 | 2.0ms | 0.67us/item | 5000 | ~3.5ms |
+| `beavers` | 65 | 0.9ms | 13.8us/item | 250 | ~3.5ms |
+| `beavers detail:full` | 65 | 2.0ms | 30.8us/item | 250 | ~8ms |
+| `alerts` | 522 | 1.0ms | 1.9us/item | 1500 | ~3ms |
+| `summary` | 3500 | 1.2ms | 0.34us/item | 10000 | ~3.5ms |
+| `power` | 17 networks | ~5ms | not indexed | 50+ networks | ~15ms (full scan) |
+| `map` (region) | varies | ~10ms | region-bounded | larger builds | ~20ms |
+| Burst (7 calls) | -- | 28ms total | -- | -- | ~50ms est |
+
+All scaling is linear. Zero main-thread cost for GET-only bot turns.
 
 ### Late-game risk factors
 
