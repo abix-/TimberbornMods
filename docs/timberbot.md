@@ -26,7 +26,7 @@ Beavers die if food or water hits 0.
 |---|---|
 | **Read state** | |
 | `summary` | Colony snapshot: population, resources, weather, alerts, wellbeing |
-| `beavers` | Per-beaver wellbeing and active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
+| `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
 | `alerts` | Unstaffed, unpowered, unreachable buildings |
@@ -59,7 +59,7 @@ Beavers die if food or water hits 0.
 | `demolish_building building_id:X` | Remove a building |
 | **Map** | |
 | `visual x:X y:Y radius:10` | ASCII map with terrain height shading |
-| `map x1:X y1:Y x2:X2 y2:Y2` | Raw terrain, water, occupants, moisture data |
+| `map x1:X y1:Y x2:X2 y2:Y2` | Raw terrain, water depth, badwater, occupants (with z-stacking), moisture |
 | **Crops and trees** | |
 | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` | Mark area for planting |
 | `clear_planting x1:X y1:Y x2:X2 y2:Y2 z:Z` | Clear planting marks |

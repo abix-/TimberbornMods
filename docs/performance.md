@@ -4,46 +4,55 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 ## Entity tracking
 
-Event-driven indexes via Timberborn's `EventBus`. Zero per-frame cost.
+Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zero per-frame cost, zero `GetComponent` calls per request.
 
-| Index | Mechanism | Per-frame cost | Rebuild trigger |
-|---|---|---|---|
-| `_buildingIndex` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove (instant) |
-| `_naturalResourceIndex` | same | **zero** | entity add/remove (instant) |
-| `_beaverIndex` | same | **zero** | entity add/remove (instant) |
-| `_entityCache` (ID lookup) | same | **zero** | entity add/remove (instant) |
-| `UpdateSingleton` | just `DrainRequests()` | **~0ms** when idle | N/A |
-| `DrainRequests` | process up to 10 queued HTTP requests | **0ms** idle, ~10ms per request | incoming HTTP request |
+| Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
+|---|---|---|---|---|
+| `_buildingIndex` | `List<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove (instant) |
+| `_naturalResourceIndex` | `List<CachedNaturalResource>` | same | **zero** | entity add/remove (instant) |
+| `_beaverIndex` | `List<EntityComponent>` | same | **zero** | entity add/remove (instant) |
+| `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove (instant) |
+| `UpdateSingleton` | -- | just `DrainRequests()` | **~0ms** when idle | N/A |
+
+### Cached component refs
+
+`CachedBuilding` and `CachedNaturalResource` structs resolve all component references once at entity-add time. Endpoints read live property values (`.Paused`, `.IsGrown`, `.Wellbeing`) from cached refs without calling `GetComponent<T>()`.
+
+| Struct | Fields cached | GetComponent calls saved per item |
+|---|---|---|
+| `CachedBuilding` | BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect | **18** |
+| `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
+| `_beaverIndex` | (not cached -- only 65 items, not worth it) | 0 |
 
 ## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total)
 
-### Optimized (use typed indexes)
+### Optimized (cached struct indexes)
 
 | Endpoint | Iterates | Items | Measured | GetComponent/item | Notes |
 |---|---|---|---|---|---|
 | `ping` | none | 1 | **1ms** | 0 | Answered on listener thread |
-| `summary` | all 3 indexes | 3000+500+65 | **7ms** | 3-4 per type | Three passes over subsets |
-| `buildings` | `_buildingIndex` | 522 | **8ms** | 10-15 | `detail:basic` skips full serialization |
-| `buildings detail:full` | `_buildingIndex` | 522 | **13ms** | 15+ | All fields including inventory, recipes, effectRadius |
-| `trees` | `_naturalResourceIndex` | 2986 | **28ms** | 4 + IsInCuttingArea | **Highest cost** -- item count x GetComponent |
-| `gatherables` | `_naturalResourceIndex` | ~150 | **<5ms** | 2 | Low item count |
-| `beavers` | `_beaverIndex` | 65 | **5ms** | 5-8 | Needs iteration per beaver |
-| `alerts` | `_buildingIndex` | 522 | **7ms** | 3 | Workplace + MechanicalNode + Reachability |
+| `summary` | all 3 indexes | 3000+500+65 | **7ms** | 0 (buildings/trees), 2-3 (beavers) | Three passes over subsets |
+| `buildings` | `_buildingIndex` | 522 | **8ms** | **0** | `detail:basic` skips full serialization |
+| `buildings detail:full` | `_buildingIndex` | 522 | **13ms** | **0** | All fields including inventory, recipes, effectRadius |
+| `trees` | `_naturalResourceIndex` | 2986 | **25ms** | **0** | Remaining cost: dict alloc + IsInCuttingArea per item |
+| `gatherables` | `_naturalResourceIndex` | ~150 | **<5ms** | **0** | Low item count |
+| `beavers` | `_beaverIndex` | 65 | **8ms** | 5-8 | NeedManager iteration per beaver |
+| `alerts` | `_buildingIndex` | 522 | **7ms** | **0** | Workplace + PowerNode + Reachability from cache |
 | `resources` | district centers | 13 | **7ms** | 0 | Iterates district registries, not entities |
 | `weather` | none | 1 | **7ms** | 0 | Reads service fields |
 | `prefabs` | building templates | 157 | **7ms** | 0 | Iterates BuildingService templates |
 
 ### Not optimized (still scan all entities)
 
-| Endpoint | Line | What it does | Frequency | Could use |
-|---|---|---|---|---|
-| `BuildAllIndexes` | 222 | Initial index build | **once on load** | N/A (acceptable) |
-| `CollectTreeClusters` | 517 | Grid-bucket grown trees | rare | `_naturalResourceIndex` |
-| `CollectScan` | 562 | Radius-filtered survey | rare | all 3 indexes (needs all types) |
-| `CollectMap` | 1326 | Region tile occupants | rare | all 3 indexes (needs all types) |
-| `CollectWellbeing` | 1969 | Per-need-group breakdown | rare | `_beaverIndex` |
-| `DemolishPathAt` | 2275 | Find path at tile | max 6x per route | `_buildingIndex` or coordinate index |
-| `FindPlacement` | 2705 | Path/power tile scoring | rare | `_buildingIndex` |
+| Endpoint | What it does | Frequency | Could use |
+|---|---|---|---|
+| `BuildAllIndexes` | Initial index build | **once on load** | N/A (acceptable) |
+| `CollectTreeClusters` | Grid-bucket grown trees | rare | `_naturalResourceIndex` |
+| `CollectScan` | Radius-filtered survey | rare | all 3 indexes |
+| `CollectMap` | Region tile occupants | rare | all 3 indexes |
+| `CollectWellbeing` | Per-need-group breakdown | rare | `_beaverIndex` |
+| `DemolishPathAt` | Find path at tile | max 6x per route | `_buildingIndex` |
+| `FindPlacement` | Path/power tile scoring | rare | `_buildingIndex` |
 
 ## Thread model
 
@@ -54,29 +63,40 @@ Event-driven indexes via Timberborn's `EventBus`. Zero per-frame cost.
 | All other GET/POST | main thread via `DrainRequests` | **yes, for duration** |
 | JSON serialization (`Respond`) | main thread | **yes** |
 
-Python client calls are synchronous (send, wait, send next), so only 1 request is queued per frame. Burst of 7 calls = 7 frames, ~10ms each. No single frame exceeds 16ms budget except `trees` (28ms).
+Python client calls are synchronous (send, wait, send next), so only 1 request is queued per frame. Burst of 7 calls = 7 frames, ~10ms each.
 
 ## Remaining bottlenecks (ordered by impact)
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **trees 28ms** | 2986 x 4 GetComponent | per-item component resolution every call | cache component refs in index struct |
-| 2 | **buildings full 13ms** | 522 x 15 GetComponent | many optional components per building | cache frequently-accessed component refs |
+| 1 | **trees 25ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads. GetComponent eliminated. | pre-allocated result arrays or TOON serialization bypass |
+| 2 | **buildings full 13ms** | 522 items | per-item Dictionary alloc + inventory iteration. GetComponent eliminated. | same |
 | 3 | **tree_clusters full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_naturalResourceIndex` |
 | 4 | **wellbeing full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_beaverIndex` |
 | 5 | **find_placement full scan** | O(4161) | collects path/power tiles from all entities | switch to `_buildingIndex` |
-| 6 | **demolish_path_at full scan** | O(4161) x up to 6 | finds path at coordinate | use `_buildingIndex` or coordinate lookup |
+| 6 | **demolish_path_at full scan** | O(4161) x up to 6 | finds path at coordinate | use `_buildingIndex` |
 | 7 | **JSON on main thread** | ~1-3ms/response | `JsonConvert.SerializeObject` blocks | move serialization to listener thread |
+
+## Optimization history
+
+| Change | trees | buildings | buildings full | burst (7 calls) |
+|---|---|---|---|---|
+| Baseline (full entity scan) | ~50ms est | ~20ms est | ~30ms est | ~150ms est |
+| Typed entity indexes | 29ms | 9ms | 10ms | 67ms |
+| Event-driven (EventBus) | 28ms | 9ms | 13ms | 62ms |
+| Cached component refs | **25ms** | **8ms** | **13ms** | **64ms** |
+
+GetComponent elimination reduced trees by ~15%. The remaining ~85% of cost is Dictionary allocation, property reads, and `IsInCuttingArea` per tree. Further gains require changing the serialization approach (not the entity access pattern).
 
 ## Late-game projections
 
 | Metric | Current | Late-game (est) | Scaling |
 |---|---|---|---|
-| Buildings | 522 | 1500+ | linear with GetComponent count |
-| Trees | 2986 | 5000+ | linear -- trees endpoint could hit 50ms+ |
+| Buildings | 522 | 1500+ | linear with item count (dict alloc) |
+| Trees | 2986 | 5000+ | linear -- trees endpoint could hit 40ms+ |
 | Beavers | 65 | 200+ | linear but low base count |
 | Total entities | 4161 | 10000+ | only affects non-optimized endpoints |
-| Burst (7 calls) | 62ms | ~120ms est | acceptable at 1 call/minute cadence |
+| Burst (7 calls) | 64ms | ~110ms est | acceptable at 1 call/minute cadence |
 
 ## Test coverage
 

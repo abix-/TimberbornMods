@@ -641,7 +641,9 @@ Bots always show all 3 needs (Energy, ControlTower, Grease) regardless of detail
 |-------|------|-------------|
 | id | int | Instance ID |
 | name | string | Beaver name |
+| x, y, z | int | Grid position on the map |
 | wellbeing | float | Wellbeing score |
+| district | string | District name (e.g. "District 1") |
 | needs | array | Per-need breakdown (see below) |
 | needs[].id | string | Need name (Hunger, Thirst, Campfire, Scratcher, etc.) |
 | needs[].points | float | Current points (0-1, higher = more satisfied) |
@@ -782,7 +784,8 @@ Terrain, water, occupants, and contamination for a rectangular region.
 | tiles[].terrain | int | Terrain height |
 | tiles[].water | float | Water height |
 | tiles[].badwater | float | (optional) Water contamination 0-1 |
-| tiles[].occupant | string | (optional) Building/entity name |
+| tiles[].occupant | string | (optional) Building/entity name (single occupant) |
+| tiles[].occupants | array | (optional) Multiple occupants at different z-levels: `[{name, z}, ...]`. Appears instead of `occupant` when buildings are stacked vertically |
 | tiles[].entrance | bool | (optional) Is an entrance tile |
 | tiles[].seedling | bool | (optional) Has a seedling |
 | tiles[].dead | bool | (optional) Dead tree stump (buildable) |

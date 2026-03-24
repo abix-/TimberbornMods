@@ -33,10 +33,11 @@
 | [Beaver activity](api-reference.md#get-apibeavers) | Current status from game's status system | Yes |
 | [Clutch](api-reference.md#post-apibuildingclutch) | Engage/disengage clutch on buildings | Yes |
 | Bot condition/fuel | Bot needs (Energy, ControlTower, Grease) via beavers endpoint | Yes |
-| Beaver position | Per-beaver x,y,z coordinates on the map | Planned |
-| Water depth | Depth float per tile (not just boolean) for drought planning | Planned |
-| District per beaver | Which district each beaver/bot belongs to | Planned |
-| Badwater tiles | Contamination level per map tile | Planned |
+| [Beaver position](api-reference.md#get-apibeavers) | Per-beaver x,y,z grid coordinates | Yes |
+| [Water depth](api-reference.md#post-apimap) | Water height float per tile for drought planning | Yes |
+| [District per beaver](api-reference.md#get-apibeavers) | Which district each beaver/bot belongs to | Yes |
+| [Badwater tiles](api-reference.md#post-apimap) | Contamination level per map tile (badwater + soil) | Yes |
+| [Map stacking](api-reference.md#post-apimap) | Multiple occupants at different z-levels on same tile | Yes |
 | Carried goods | What each beaver is hauling in their backpack | Planned |
 | Power network graph | Connected building groups with total supply vs demand | Planned |
 | Resource projection | Projected days of wood, planks, gears | Planned |
