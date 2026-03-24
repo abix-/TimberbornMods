@@ -115,6 +115,59 @@ namespace Timberbot
         private float _refreshInterval = 1.0f;   // seconds between cache refreshes (default: 1s)
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
+        private bool _webhooksEnabled = false;    // enable webhook push notifications
+
+        // webhooks: fire-and-forget push to registered URLs
+        private class WebhookRegistration { public string Id; public string Url; public System.Collections.Generic.HashSet<string> Events; }
+        private readonly List<WebhookRegistration> _webhooks = new List<WebhookRegistration>();
+        private static readonly System.Net.Http.HttpClient _webhookClient = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(5) };
+        private int _webhookIdCounter = 0;
+
+        public object RegisterWebhook(string url, List<string> events)
+        {
+            if (!_webhooksEnabled) return new { error = "webhooks disabled in settings.json" };
+            var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
+            var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new System.Collections.Generic.HashSet<string>(events) : null };
+            _webhooks.Add(reg);
+            return new { id, url, events = reg.Events != null ? (object)events : "all" };
+        }
+
+        public object UnregisterWebhook(string id)
+        {
+            int removed = _webhooks.RemoveAll(w => w.Id == id);
+            return new { id, removed = removed > 0 };
+        }
+
+        public object ListWebhooks()
+        {
+            var result = new List<object>();
+            foreach (var w in _webhooks)
+                result.Add(new { w.Id, w.Url, events = w.Events != null ? (object)new List<string>(w.Events) : "all" });
+            return result;
+        }
+
+        private void PushEvent(string eventName, object data)
+        {
+            if (_webhooks.Count == 0) return;
+            var payload = Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                @event = eventName,
+                day = _dayNightCycle.DayNumber,
+                timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                data
+            });
+            var content = new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+            foreach (var wh in _webhooks.ToArray())
+            {
+                if (wh.Events != null && !wh.Events.Contains(eventName)) continue;
+                var url = wh.Url;
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { _webhookClient.PostAsync(url, new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json")).Wait(); }
+                    catch { }
+                });
+            }
+        }
 
         public TimberbotService(
             IGoodService goodService,
@@ -217,6 +270,8 @@ namespace Timberbot
                     _debugEnabled = json.Value<bool>("debugEndpointEnabled");
                     _httpPort = json.Value<int>("httpPort");
                     if (_httpPort <= 0) _httpPort = 8085;
+                    if (json["webhooksEnabled"] != null)
+                        _webhooksEnabled = json.Value<bool>("webhooksEnabled");
                 }
             }
             catch (System.Exception ex)
@@ -705,13 +760,31 @@ namespace Timberbot
         public void OnEntityInitialized(EntityInitializedEvent e)
         {
             AddToIndexes(e.Entity);
+            // webhooks
+            var ec = e.Entity;
+            if (ec.GetComponent<Building>() != null)
+                PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+            else if (ec.GetComponent<NeedManager>() != null)
+                PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
         }
 
         [OnEvent]
         public void OnEntityDeleted(EntityDeletedEvent e)
         {
+            // webhooks (before removing from indexes)
+            var ec = e.Entity;
+            if (ec.GetComponent<Building>() != null)
+                PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+            else if (ec.GetComponent<NeedManager>() != null)
+                PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
             RemoveFromIndexes(e.Entity);
         }
+
+        // weather + time webhooks (one-liners)
+        [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) => PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration });
+        [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end", null);
+        [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) => PushEvent("day.start", new { day = _dayNightCycle.DayNumber });
+        [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) => PushEvent("night.start", new { day = _dayNightCycle.DayNumber });
 
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>

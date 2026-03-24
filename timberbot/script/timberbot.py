@@ -68,6 +68,26 @@ class Timberbot:
         except (requests.ConnectionError, requests.Timeout):
             return False
 
+    # -- webhooks --
+
+    def register_webhook(self, url, events=None):
+        """Register a webhook URL to receive push notifications for game events.
+        events: list of event names to subscribe to (None = all events).
+        Available: drought.start, drought.end, building.placed, building.demolished,
+                   beaver.born, beaver.died, day.start, night.start"""
+        data = {"url": url}
+        if events:
+            data["events"] = events
+        return self._post("/api/webhooks/register", data)
+
+    def unregister_webhook(self, webhook_id):
+        """Unregister a webhook by ID."""
+        return self._post("/api/webhooks/unregister", {"id": webhook_id})
+
+    def list_webhooks(self):
+        """List all registered webhooks."""
+        return self._post("/api/webhooks/list", {})
+
     # -- read state (nouns) --
 
     def summary(self):

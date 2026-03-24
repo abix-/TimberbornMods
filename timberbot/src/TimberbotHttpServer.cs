@@ -332,6 +332,15 @@ namespace Timberbot
                     case "/api/building/demolish":
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
+                    case "/api/webhooks/register":
+                        return _service.RegisterWebhook(
+                            body?.Value<string>("url") ?? "",
+                            body?["events"]?.ToObject<System.Collections.Generic.List<string>>());
+                    case "/api/webhooks/unregister":
+                        return _service.UnregisterWebhook(
+                            body?.Value<string>("id") ?? "");
+                    case "/api/webhooks/list":
+                        return _service.ListWebhooks();
                     case "/api/debug":
                         if (!_debugEnabled) return new { error = "debug endpoint disabled in settings.json" };
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
