@@ -367,7 +367,7 @@ class Timberbot:
             "Metalsmith": ("m", BWHT), "Smelter": ("m", BWHT),
             "GearWorkshop": ("g", BWHT),
             "BotAssembler": ("b", BMAG), "BotPartFactory": ("b", BMAG),
-            "ChargingStation": ("c", BMAG),
+            "ChargingStation": ("z", BMAG),
             "FluidDump": ("V", BBLU), "DoubleShower": ("v", BBLU),
             "SwimmingPool": ("v", BBLU),
             "Scratcher": ("~", GRN), "Bench": ("~", GRN),

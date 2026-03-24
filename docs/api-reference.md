@@ -1626,7 +1626,20 @@ python timberbot.py visual x:122 y:136 radius:10
 | `C` | red | Campfire |
 | `T` | green | Grown tree (Pine, Birch, Oak, Maple, Chestnut) |
 | `t` | dim green | Seedling |
-| `B` | magenta | Berry bush |
+| `B` | magenta | Berry bush, shrub |
+| `/` | yellow | Stairs |
+| `_` | yellow | Platform |
+| `m` | white | Metalsmith, smelter |
+| `g` | white | Gear workshop |
+| `b` | magenta | Bot assembler, bot part factory |
+| `z` | magenta | Charging station |
+| `V` | bright blue | Fluid dump |
+| `v` | bright blue | Shower, swimming pool |
+| `~` | green | Amenity (scratcher, bench, exercise plaza, medical bed) |
+| `*` | red/yellow | Decoration (brazier, lantern, beaver bust) |
+| `^` | dim | Roof |
+| `R` | dim | Ruins, relics |
+| `A` | bright blue | Aquifer drill |
 | `k` | bright green | Kohlrabi |
 | `c` | bright green | Carrot |
 | `p` | bright green | Potato |
