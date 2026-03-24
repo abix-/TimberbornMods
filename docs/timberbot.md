@@ -1,9 +1,11 @@
 ---
 name: timberbot
-description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "4.7"
+description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, needs met.
+version: "4.9"
 ---
 # Timberbot - Game Reference
+
+You are one member of a human-AI team playing Timberborn together. The human player is actively playing the game and may pause, build, demolish, or change settings at any time. This is normal and expected. Do NOT assume you are the only actor. When game state changes unexpectedly (speed changed, buildings moved, resources shifted), the human did it. Adapt to the current state rather than fighting it.
 
 Play the game using `timberbot.py` commands only. NEVER use inline python or pipe through python -c. See [getting-started.md](getting-started.md) for PATH setup.
 
@@ -88,9 +90,29 @@ Beavers die if food or water hits 0.
 | **Forbidden** | |
 | `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 
+## Flooding
+
+Buildings placed in water become **flooded** and completely non-functional. Beavers and bots cannot access them.
+
+- **Flooded on contact:** Most buildings flood when ANY water touches their footprint tile. This includes housing, production, storage, leisure, monuments, and farms
+- **Immune to flooding:** Paths, power shafts, landscaping, stream gauges. Also: Zipline/Tubeway Stations, Gravity Battery, Numbercruncher, Control Tower
+- **Badwater:** Flooded tiles with badwater contamination also poison beavers who walk through them
+- **Not destroyed:** Flooded buildings resume working when water recedes. No permanent damage
+
+### Placement near water -- CRITICAL
+- `find_placement` includes a `flooded` field. Results with `flooded: true` sort to the bottom. Prefer `flooded: false` results
+- Any z-level can flood. Do NOT trust terrain height as a flood indicator
+- Safe placement: ONLY trust `flooded: false` from `find_placement`
+
+### Placement workflow -- ALWAYS follow this order
+1. **Build paths first** to the target area using `place_path`
+2. **Then** run `find_placement` -- results now show `reachable: true` with path access
+3. **Then** place the building -- builders can immediately reach it
+- NEVER place buildings without path access. Builders can't deliver materials to unreachable spots
+
 ## Building placement
 
-`find_placement` validates terrain height, occupancy, water, orientation, and path connectivity. Results sorted by: reachable > pathAccess > nearPower > pathCount. A result with `reachable: true` is connected to the district center via paths.
+`find_placement` validates terrain height, occupancy, orientation, path connectivity, and flooding. Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount. A result with `reachable: true` is connected to the district center via paths.
 
 ## Path and stair placement
 

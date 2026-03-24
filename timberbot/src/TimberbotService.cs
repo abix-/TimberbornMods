@@ -3076,21 +3076,40 @@ namespace Timberbot
                                     nearPower = true;
                             }
 
+                        // check flooding: any water on footprint tiles means building will flood
+                        int frx = size.x, fry = size.y;
+                        if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
+                        bool flooded = false;
+                        for (int fx = tx; fx < tx + frx && !flooded; fx++)
+                            for (int fy = ty; fy < ty + fry && !flooded; fy++)
+                            {
+                                try
+                                {
+                                    float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
+                                    if (wh > 0) flooded = true;
+                                }
+                                catch { }
+                            }
+
                         results.Add(new { x = tx, y = ty, z = tz,
                                           orientation = orientNames[bestOrient],
                                           pathAccess = bestPathCount > 0,
                                           pathCount = bestPathCount,
                                           reachable,
-                                          nearPower });
+                                          nearPower,
+                                          flooded });
                     }
                 }
             }
 
-            // sort: reachable > path access > power > path count
+            // sort: non-flooded > reachable > path access > power > path count
             results.Sort((a, b) =>
             {
                 var aType = a.GetType();
                 var bType = b.GetType();
+                bool fa = (bool)aType.GetProperty("flooded").GetValue(a);
+                bool fb = (bool)bType.GetProperty("flooded").GetValue(b);
+                if (fa != fb) return fa ? 1 : -1;
                 bool ra = (bool)aType.GetProperty("reachable").GetValue(a);
                 bool rb = (bool)bType.GetProperty("reachable").GetValue(b);
                 if (ra != rb) return rb ? 1 : -1;
