@@ -637,8 +637,7 @@ def _manage():
         while True:
             try:
                 summary = bot.summary()
-                # idle = adults not assigned to workplaces (children can't work)
-            idle = summary.get("employment", {}).get("unemployed", 0)
+                idle = summary.get("employment", {}).get("unemployed", 0)
                 buildings = bot.buildings()
             except Exception:
                 print(f"  {_RED}-- connection lost --{_RST}")
