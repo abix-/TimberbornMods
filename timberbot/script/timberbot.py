@@ -606,7 +606,7 @@ def _top_render(summary, wellbeing_data):
 
     # header
     print(f" {_DIM}{'─' * W}{_RST}")
-    print(_row(f"{_BCYN}{_BOLD}TIMBERBOT{_RST}                                {day_str}"))
+    print(_row(f"{_BCYN}{_BOLD}Timberbot API{_RST}                            {day_str}"))
     print(_hline())
 
     # population
