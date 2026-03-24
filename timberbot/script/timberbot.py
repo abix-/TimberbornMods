@@ -652,14 +652,18 @@ def _top_render(summary, wellbeing_data):
     print(_hline())
 
     # food + water (left) | wellbeing categories (right)
-    total_food = sum(resources.get(g, 0) for g in ["Berries", "Kohlrabi", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"])
+    _EDIBLE = ["Berries", "Kohlrabi", "Bread", "Carrot", "CornRation", "AlgaeRation",
+                "EggplantRation", "FermentedSoybean", "FermentedMushroom", "FermentedCassava",
+                "Coffee", "MangroveFruit"]
+    _RAW_CROPS = ["Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom"]
+    total_food = sum(resources.get(g, 0) for g in _EDIBLE)
+    total_raw = sum(resources.get(g, 0) for g in _RAW_CROPS)
     total_water = resources.get("Water", 0)
     food_days = round(total_food / total_pop, 1) if total_pop > 0 else 0
     water_days = round(total_water / (total_pop * 2), 1) if total_pop > 0 else 0
 
-    food_items = [(g, resources.get(g, 0)) for g in ["Kohlrabi", "Berries", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"] if resources.get(g, 0) > 0]
-    # raw crops (farming pipeline)
-    raw_crops = [(g, resources.get(g, 0)) for g in ["Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava"] if resources.get(g, 0) > 0]
+    food_items = [(g, resources.get(g, 0)) for g in _EDIBLE if resources.get(g, 0) > 0]
+    raw_crops = [(g, resources.get(g, 0)) for g in _RAW_CROPS if resources.get(g, 0) > 0]
 
     wb_cats = []
     if wellbeing_data and isinstance(wellbeing_data, dict):
@@ -667,7 +671,8 @@ def _top_render(summary, wellbeing_data):
             wb_cats.append((cat.get("group", "?"), cat.get("current", 0), cat.get("max", 0)))
 
     # food header
-    left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} total){_RST}"]
+    raw_str = f"  {_DIM}+{total_raw} raw{_RST}" if total_raw > 0 else ""
+    left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} edible{raw_str}{_DIM}){_RST}"]
     for i, (g, amt) in enumerate(food_items):
         branch = "└─" if i == len(food_items) - 1 else "├─"
         left_lines.append(f"  {_DIM}{branch}{_RST} {g:16s} {_BOLD}{amt:>5}{_RST}")
