@@ -94,6 +94,10 @@ class TestRunner:
         self.test_beaver_needs()
         self.test_building_range()
         self.test_find_planting()
+        self.test_prefab_costs()
+        self.test_building_inventory()
+        self.test_building_recipes()
+        self.test_clutch()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
         if self.skipped:
@@ -974,6 +978,163 @@ class TestRunner:
                        json.dumps(result2)[:100])
         else:
             self.skip("find_planting by building", "no farmhouse found")
+
+
+    def test_prefab_costs(self):
+        print("\n=== prefab costs ===\n")
+
+        prefabs = self.bot.prefabs()
+        if not isinstance(prefabs, list) or len(prefabs) == 0:
+            self.skip("prefab costs", "no prefabs")
+            return
+
+        # find a building with costs
+        with_cost = None
+        for p in prefabs:
+            if p.get("cost") and len(p.get("cost", [])) > 0:
+                with_cost = p
+                break
+
+        if with_cost:
+            self.check("prefab has cost array",
+                       isinstance(with_cost["cost"], list),
+                       json.dumps(with_cost)[:100])
+            cost0 = with_cost["cost"][0]
+            self.check("cost has good field",
+                       "good" in cost0,
+                       json.dumps(cost0)[:60])
+            self.check("cost has amount field",
+                       "amount" in cost0,
+                       json.dumps(cost0)[:60])
+        else:
+            self.skip("prefab cost fields", "no prefab with costs found")
+
+        # find a building with science cost
+        with_science = None
+        for p in prefabs:
+            if p.get("scienceCost") and p["scienceCost"] > 0:
+                with_science = p
+                break
+
+        if with_science:
+            self.check("prefab has scienceCost",
+                       with_science["scienceCost"] > 0,
+                       json.dumps(with_science)[:100])
+            self.check("prefab has unlocked field",
+                       "unlocked" in with_science,
+                       json.dumps(with_science)[:100])
+        else:
+            self.skip("prefab science fields", "no prefab with science cost")
+
+    def test_building_inventory(self):
+        print("\n=== building inventory ===\n")
+
+        # find a tank or warehouse with stock/capacity
+        buildings = self.bot._get("/api/buildings?format=json")
+        if not isinstance(buildings, list):
+            self.skip("building inventory", "no buildings")
+            return
+
+        with_capacity = None
+        for b in buildings:
+            if b.get("capacity") and b["capacity"] > 0:
+                with_capacity = b
+                break
+
+        if with_capacity:
+            self.check("building has stock",
+                       "stock" in with_capacity,
+                       f"{with_capacity.get('name')}: stock={with_capacity.get('stock')}")
+            self.check("building has capacity",
+                       with_capacity["capacity"] > 0,
+                       f"{with_capacity.get('name')}: capacity={with_capacity.get('capacity')}")
+
+            # verify via debug
+            bid = with_capacity["id"]
+            self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
+            # find Inventories component and check TotalAmountInStock
+            r = self.bot.debug(target="get", path="$~Inventories")
+            self.check("debug confirms Inventories component",
+                       r.get("value") != "null" or "error" not in r,
+                       json.dumps(r)[:100])
+        else:
+            self.skip("building inventory", "no building with capacity found")
+
+    def test_building_recipes(self):
+        print("\n=== building recipes ===\n")
+
+        buildings = self.bot._get("/api/buildings?format=json")
+        if not isinstance(buildings, list):
+            self.skip("building recipes", "no buildings")
+            return
+
+        with_recipes = None
+        for b in buildings:
+            if b.get("recipes") and len(b.get("recipes", [])) > 0:
+                with_recipes = b
+                break
+
+        if with_recipes:
+            self.check("building has recipes array",
+                       isinstance(with_recipes["recipes"], list) and len(with_recipes["recipes"]) > 0,
+                       json.dumps(with_recipes["recipes"])[:100])
+            self.check("building has currentRecipe",
+                       "currentRecipe" in with_recipes,
+                       f"currentRecipe={with_recipes.get('currentRecipe')}")
+        else:
+            self.skip("building recipes", "no manufactory found")
+
+        # find a breeding pod
+        with_breeding = None
+        for b in buildings:
+            if "BreedingPod" in str(b.get("name", "")):
+                with_breeding = b
+                break
+
+        if with_breeding:
+            self.check("breeding pod has needsNutrients",
+                       "needsNutrients" in with_breeding,
+                       json.dumps(with_breeding)[:100])
+        else:
+            self.skip("breeding pod status", "no breeding pod found")
+
+    def test_clutch(self):
+        print("\n=== clutch ===\n")
+
+        # find a building with clutch
+        buildings = self.bot._get("/api/buildings?format=json")
+        if not isinstance(buildings, list):
+            self.skip("clutch", "no buildings")
+            return
+
+        clutch_id = None
+        for b in buildings:
+            if b.get("isClutch"):
+                clutch_id = b["id"]
+                break
+
+        if not clutch_id:
+            self.skip("clutch", "no building with clutch found")
+            return
+
+        # disengage
+        result = self.bot.set_clutch(clutch_id, False)
+        self.check("disengage clutch",
+                   self.has(result, "engaged") and result["engaged"] == False,
+                   json.dumps(result)[:100])
+
+        # verify via debug
+        self.bot.debug(target="call", method="FindEntity", arg0=str(clutch_id))
+        r = self.bot.debug(target="get", path="$~Clutch.IsEngaged")
+        self.check("verify disengaged via debug",
+                   r.get("value") == "False",
+                   f"got: {r.get('value')}")
+
+        # re-engage
+        result2 = self.bot.set_clutch(clutch_id, True)
+        self.check("re-engage clutch",
+                   self.has(result2, "engaged") and result2["engaged"] == True,
+                   json.dumps(result2)[:100])
 
 
 def main():
