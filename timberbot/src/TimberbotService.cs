@@ -46,6 +46,7 @@ using Timberborn.PowerManagement;
 using Timberborn.SoilContaminationSystem;
 using Timberborn.Hauling;
 using Timberborn.Workshops;
+using Timberborn.Reproduction;
 using Timberborn.Fields;
 using Timberborn.GameDistrictsMigration;
 using Timberborn.ToolButtonSystem;
@@ -909,6 +910,25 @@ namespace Timberbot
                 {
                     entry["isClutch"] = true;
                     entry["clutchEngaged"] = clutch.IsEngaged;
+                }
+
+                // manufactory recipes
+                var manufactory = ec.GetComponent<Manufactory>();
+                if (manufactory != null)
+                {
+                    var recipes = new List<string>();
+                    foreach (var r in manufactory.ProductionRecipes)
+                        recipes.Add(r.Id);
+                    entry["recipes"] = recipes;
+                    entry["currentRecipe"] = manufactory.HasCurrentRecipe ? manufactory.CurrentRecipe.Id : "";
+                }
+
+                // breeding pod status
+                var breedingPod = ec.GetComponent<BreedingPod>();
+                if (breedingPod != null)
+                {
+                    entry["needsNutrients"] = breedingPod.NeedsNutrients;
+                    try { entry["nutrients"] = breedingPod.Nutrients; } catch { }
                 }
 
                 if (format == "toon")
