@@ -69,13 +69,24 @@ Python client calls are synchronous (send, wait, send next), so only 1 request i
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **trees 25ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads. GetComponent eliminated. | pre-allocated result arrays or TOON serialization bypass |
-| 2 | **buildings full 13ms** | 522 items | per-item Dictionary alloc + inventory iteration. GetComponent eliminated. | same |
+| 1 | **trees 25ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads | pre-allocated result arrays or TOON serialization bypass |
+| 2 | **buildings full 13ms** | 522 items | per-item Dictionary alloc + inventory iteration | same |
 | 3 | **tree_clusters full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_naturalResourceIndex` |
 | 4 | **wellbeing full scan** | O(4161) | uses `_entityRegistry.Entities` | switch to `_beaverIndex` |
 | 5 | **find_placement full scan** | O(4161) | collects path/power tiles from all entities | switch to `_buildingIndex` |
 | 6 | **demolish_path_at full scan** | O(4161) x up to 6 | finds path at coordinate | use `_buildingIndex` |
 | 7 | **JSON on main thread** | ~1-3ms/response | `JsonConvert.SerializeObject` blocks | move serialization to listener thread |
+
+## Resolved bottlenecks
+
+| Bottleneck | Was | Fix applied |
+|---|---|---|
+| GetComponent per item (trees) | 5 calls x 2986 items/request | cached component refs in `CachedNaturalResource` struct |
+| GetComponent per item (buildings) | 18 calls x 522 items/request | cached component refs in `CachedBuilding` struct |
+| Full entity scan per endpoint | O(4161) every call | event-driven typed indexes via `EventBus` |
+| Per-frame index rebuild | O(4161) every frame | eliminated -- indexes update on entity add/remove only |
+| Per-frame entity cache rebuild | O(4161) every frame | eliminated -- `_entityCache` updates via EventBus |
+| Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 
 ## Optimization history
 
