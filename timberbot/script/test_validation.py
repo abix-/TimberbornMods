@@ -129,6 +129,7 @@ class TestRunner:
         self.test_carried_goods()
         self.test_bot_durability()
         self.test_power_networks()
+        self.test_webhooks()
         self.test_performance()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
@@ -1506,6 +1507,98 @@ class TestRunner:
                            "demand" in gen_nets[0])
             else:
                 self.skip("power_generator", "no networks with generators")
+
+    def test_webhooks(self):
+        """Test webhook registration, listing, event delivery, and unregistration."""
+        print("\n=== webhooks ===\n")
+
+        # spin up a tiny HTTP server to receive webhook events
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        received_events = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length).decode("utf-8") if length else ""
+                try:
+                    received_events.append(json.loads(body))
+                except Exception:
+                    received_events.append({"raw": body})
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"ok")
+            def log_message(self, *args):
+                pass  # silence logs
+
+        server = HTTPServer(("127.0.0.1", 19876), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            # register webhook for building events
+            result = self.bot.register_webhook("http://127.0.0.1:19876/test", ["building.placed", "building.demolished"])
+            self.check("register webhook", self.has(result, "id"),
+                       json.dumps(result)[:100] if not self.has(result, "id") else "")
+            wh_id = result.get("id", "")
+
+            # list webhooks
+            wh_list = self.bot.list_webhooks()
+            self.check("list webhooks", isinstance(wh_list, list) and len(wh_list) > 0,
+                       json.dumps(wh_list)[:100])
+
+            # trigger an event: place a building
+            spot = self.find_spot("Path")
+            if spot:
+                placed = self.bot.place_building("Path", spot["x"], spot["y"], spot["z"], spot.get("orientation", "south"))
+                if self.has(placed, "id"):
+                    # wait for webhook delivery
+                    time.sleep(2)
+                    placed_events = [e for e in received_events if e.get("event") == "building.placed"]
+                    self.check("webhook received building.placed",
+                               len(placed_events) > 0,
+                               f"received {len(received_events)} events: {[e.get('event') for e in received_events]}")
+
+                    if placed_events:
+                        evt = placed_events[-1]
+                        self.check("webhook has event field", "event" in evt)
+                        self.check("webhook has day field", "day" in evt)
+                        self.check("webhook has timestamp field", "timestamp" in evt)
+                        self.check("webhook has data field", "data" in evt)
+
+                    # demolish and check that event
+                    received_events.clear()
+                    self.bot.demolish_building(placed["id"])
+                    time.sleep(2)
+                    demo_events = [e for e in received_events if e.get("event") == "building.demolished"]
+                    self.check("webhook received building.demolished",
+                               len(demo_events) > 0,
+                               f"received {len(received_events)} events: {[e.get('event') for e in received_events]}")
+                else:
+                    self.skip("webhook event delivery", f"placement failed: {placed}")
+            else:
+                self.skip("webhook event delivery", "no valid spot")
+
+            # register a second webhook for all events
+            result2 = self.bot.register_webhook("http://127.0.0.1:19876/all")
+            self.check("register webhook (all events)", self.has(result2, "id"))
+
+            # unregister first webhook
+            unreg = self.bot.unregister_webhook(wh_id)
+            self.check("unregister webhook", unreg.get("removed", False))
+
+            # verify list shows only the second
+            wh_list2 = self.bot.list_webhooks()
+            self.check("list after unregister", isinstance(wh_list2, list) and len(wh_list2) == 1,
+                       f"expected 1, got {len(wh_list2) if isinstance(wh_list2, list) else '?'}")
+
+            # cleanup: unregister second
+            if self.has(result2, "id"):
+                self.bot.unregister_webhook(result2["id"])
+
+        finally:
+            server.shutdown()
 
     def test_building_detail(self):
         print("\n=== building detail ===\n")
