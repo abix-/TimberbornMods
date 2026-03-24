@@ -1397,7 +1397,10 @@ namespace Timberbot
             if (pausable == null)
                 return new { error = "building is not pausable", id = buildingId };
 
-            pausable.Paused = paused;
+            if (paused)
+                pausable.Pause();
+            else
+                pausable.Resume();
             return new { id = buildingId, name = CleanName(ec.GameObject.name), paused = pausable.Paused };
         }
 
