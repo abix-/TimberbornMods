@@ -121,7 +121,10 @@ class Timberbot:
 
     def beavers(self, limit=0, offset=0, detail="basic"):
         """All beavers with wellbeing and needs. detail:full shows all needs with group category."""
-        data = self._get(f"/api/beavers?detail={detail}")
+        params = {}
+        if detail != "basic":
+            params["detail"] = detail
+        data = self._get("/api/beavers", params=params)
         if offset: data = data[offset:]
         if limit: data = data[:limit]
         return data

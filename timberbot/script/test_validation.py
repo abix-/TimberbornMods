@@ -14,12 +14,19 @@ import time
 from timberbot import Timberbot
 
 
+REFRESH_WAIT = 1.5  # seconds to wait after POST for cache refresh (settings.json refreshIntervalSeconds + margin)
+
+
 class TestRunner:
     def __init__(self):
         self.bot = Timberbot()
         self.passed = 0
         self.failed = 0
         self.skipped = 0
+
+    def wait_for_refresh(self):
+        """Wait for the double-buffered cache to refresh after a write."""
+        time.sleep(REFRESH_WAIT)
 
     def check(self, name, ok, detail=""):
         if ok:
@@ -302,7 +309,8 @@ class TestRunner:
         result = self.bot.pause_building(dc_id)
         self.check("pause building", not self.err(result))
 
-        # verify via buildings endpoint
+        # verify via buildings endpoint (wait for cache refresh)
+        self.wait_for_refresh()
         buildings = self.bot.buildings()
         paused = False
         if isinstance(buildings, list):
@@ -316,6 +324,7 @@ class TestRunner:
         self.bot.unpause_building(dc_id)
 
         # verify unpaused
+        self.wait_for_refresh()
         buildings2 = self.bot.buildings()
         unpaused = True
         if isinstance(buildings2, list):
@@ -351,6 +360,7 @@ class TestRunner:
                    json.dumps(result)[:100] if self.err(result) else "")
 
         # verify via trees endpoint - some should be marked
+        self.wait_for_refresh()
         trees = self.bot.trees()
         marked = 0
         if isinstance(trees, list):
@@ -907,7 +917,7 @@ class TestRunner:
         print("\n=== beaver needs ===\n")
 
         # get beavers in JSON mode for full need data
-        result = self.bot._get("/api/beavers?format=json")
+        result = self.bot.beavers(detail="full")
         if not isinstance(result, list) or len(result) == 0:
             self.skip("beaver needs", "no beavers found")
             return
@@ -1043,7 +1053,7 @@ class TestRunner:
         print("\n=== building inventory ===\n")
 
         # find a tank or warehouse with stock/capacity
-        buildings = self.bot._get("/api/buildings?format=json")
+        buildings = self.bot.buildings(detail="full")
         if not isinstance(buildings, list):
             self.skip("building inventory", "no buildings")
             return
@@ -1076,7 +1086,7 @@ class TestRunner:
     def test_building_recipes(self):
         print("\n=== building recipes ===\n")
 
-        buildings = self.bot._get("/api/buildings?format=json")
+        buildings = self.bot.buildings(detail="full")
         if not isinstance(buildings, list):
             self.skip("building recipes", "no buildings")
             return
@@ -1115,7 +1125,7 @@ class TestRunner:
         print("\n=== clutch ===\n")
 
         # find a building with clutch
-        buildings = self.bot._get("/api/buildings?format=json")
+        buildings = self.bot.buildings(detail="full")
         if not isinstance(buildings, list):
             self.skip("clutch", "no buildings")
             return
@@ -1152,8 +1162,8 @@ class TestRunner:
 
     def test_beaver_detail(self):
         """Test detail mode shows all needs with group categories."""
-        # basic mode
-        basic = self.bot._get("/api/beavers?format=json")
+        # basic mode (default detail)
+        basic = self.bot.beavers()
         beavers_only = [b for b in basic if not b.get("isBot")]
         if not beavers_only:
             self.skip("beaver_detail", "no beavers")
@@ -1162,7 +1172,7 @@ class TestRunner:
         basic_needs = len(beaver.get("needs", []))
 
         # full detail mode
-        full = self.bot._get("/api/beavers?format=json&detail=full")
+        full = self.bot.beavers(detail="full")
         beaver_full = [b for b in full if b["id"] == beaver["id"]][0]
         full_needs = len(beaver_full.get("needs", []))
         self.check("full has more needs than basic",
@@ -1181,7 +1191,7 @@ class TestRunner:
                    f"groups: {groups_seen}")
 
         # single beaver by id
-        single = self.bot._get(f"/api/beavers?format=json&detail=id:{beaver['id']}")
+        single = self.bot.beavers(detail=f"id:{beaver['id']}")
         self.check("single beaver returns 1 result", len(single) == 1,
                    f"got {len(single)}")
         self.check("single has all needs",
@@ -1194,7 +1204,7 @@ class TestRunner:
 
     def test_bot_data(self):
         """Test bot-specific fields in beavers endpoint."""
-        beavers = self.bot._get("/api/beavers?format=json")
+        beavers = self.bot._get("/api/beavers", params={"detail": "full"})
         bots = [b for b in beavers if b.get("isBot")]
         if not bots:
             self.skip("bot_data", "no bots in colony")
@@ -1223,7 +1233,7 @@ class TestRunner:
         factories = [b for b in buildings if b.get("name") == "BotPartFactory"]
         if factories:
             fid = factories[0]["id"]
-            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{fid}")
+            detail = self.bot.buildings(detail=f"id:{fid}")
             if detail:
                 d = detail[0]
                 self.check("factory has recipes", "recipes" in d)
@@ -1238,7 +1248,7 @@ class TestRunner:
         assemblers = [b for b in buildings if b.get("name") == "BotAssembler"]
         if assemblers:
             aid = assemblers[0]["id"]
-            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{aid}")
+            detail = self.bot.buildings(detail=f"id:{aid}")
             if detail:
                 d = detail[0]
                 self.check("assembler has recipes", "recipes" in d)
@@ -1254,7 +1264,7 @@ class TestRunner:
         chargers = [b for b in buildings if b.get("name") == "ChargingStation"]
         if chargers:
             cid = chargers[0]["id"]
-            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{cid}")
+            detail = self.bot.buildings(detail=f"id:{cid}")
             if detail:
                 self.check("charger has powered field", "powered" in detail[0])
         else:
@@ -1287,7 +1297,7 @@ class TestRunner:
     def test_beaver_position(self):
         """Test beaver/bot x,y,z grid position."""
         print("\n=== beaver position ===\n")
-        beavers = self.bot._get("/api/beavers?format=json")
+        beavers = self.bot.beavers(detail="full")
         if not beavers:
             self.skip("beaver_position", "no beavers")
             return
@@ -1313,7 +1323,7 @@ class TestRunner:
     def test_beaver_district(self):
         """Test district field on beavers."""
         print("\n=== beaver district ===\n")
-        beavers = self.bot._get("/api/beavers?format=json")
+        beavers = self.bot.beavers(detail="full")
         if not beavers:
             self.skip("beaver_district", "no beavers")
             return
@@ -1367,7 +1377,7 @@ class TestRunner:
     def test_carried_goods(self):
         """Test carried goods fields on beavers."""
         print("\n=== carried goods ===\n")
-        beavers = self.bot._get("/api/beavers?format=json")
+        beavers = self.bot.beavers(detail="full")
         carriers = [b for b in beavers if "carrying" in b]
         if carriers:
             c = carriers[0]
@@ -1378,7 +1388,7 @@ class TestRunner:
             self.skip("carried_goods", "no beaver currently carrying")
 
         # detail:full should have liftingCapacity
-        full = self.bot._get("/api/beavers?format=json&detail=full")
+        full = self.bot.beavers(detail="full")
         beaver = [b for b in full if not b.get("isBot")][0]
         self.check("detail has liftingCapacity", "liftingCapacity" in beaver,
                    f"keys: {[k for k in beaver.keys() if 'lift' in k.lower() or 'carry' in k.lower()]}")
@@ -1388,7 +1398,7 @@ class TestRunner:
     def test_bot_durability(self):
         """Test deterioration field on bots."""
         print("\n=== bot durability ===\n")
-        beavers = self.bot._get("/api/beavers?format=json")
+        beavers = self.bot.beavers(detail="full")
         bots = [b for b in beavers if b.get("isBot")]
         if not bots:
             self.skip("bot_durability", "no bots in colony")
@@ -1570,8 +1580,15 @@ class TestRunner:
         # cache invalidation: place and demolish a building, verify index updates
         print("\n  cache invalidation: place + demolish to verify index tracks changes...")
         before_count = len(self.bot.buildings())
-        placed = self.bot.place_building("Path", 152, 141, 3, "west")
-        if not self.err(placed):
+        # find a valid spot dynamically
+        spots = self.bot.find_placement("Path", 120, 120, 130, 130)
+        placements = spots.get("placements", []) if isinstance(spots, dict) else []
+        placed = None
+        if placements:
+            s = placements[0]
+            placed = self.bot.place_building("Path", s["x"], s["y"], s["z"], s.get("orientation", "south"))
+        if placed and not self.err(placed):
+            self.wait_for_refresh()
             after_count = len(self.bot.buildings())
             self.check("index grew after place", after_count == before_count + 1,
                        f"before={before_count}, after={after_count}")
@@ -1580,13 +1597,14 @@ class TestRunner:
             placed_id = placed.get("id")
             if placed_id:
                 self.bot.demolish_building(placed_id)
+                self.wait_for_refresh()
                 final_count = len(self.bot.buildings())
                 self.check("index shrank after demolish", final_count == before_count,
                            f"before={before_count}, final={final_count}")
             else:
                 self.skip("demolish check", "no id in place result")
         else:
-            self.skip("cache invalidation", f"place failed: {placed}")
+            self.skip("cache invalidation", f"place failed: {placed}" if placed else "no valid spot")
 
         # serialization A/B test: dict vs anon vs sb for trees
         print("\n  serialization A/B test (trees)...\n")
