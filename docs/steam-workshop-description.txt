@@ -21,10 +21,17 @@ Or use it as a scripting API for your own tools, dashboards, and automation.
 
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
+[h1]Live dashboard[/h1]
+[code]
+timberbot.py top
+[/code]
+Real-time colony overview in your terminal. Population, resources, weather, drought countdown, wellbeing breakdown, alerts -- all updating live. No browser needed.
+
 [h1]How it works[/h1]
 Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
 timberbot.py summary                              # full colony snapshot
+timberbot.py top                                  # live colony dashboard
 timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
 timberbot.py visual x:120 y:140 radius:10         # ASCII map
@@ -46,6 +53,16 @@ Works with ChatGPT too. Paste docs/timberbot.md as a system prompt.
 2. Start a game. The API starts automatically on port 8085
 3. pip install requests toons
 4. Run: timberbot.py ping
+
+[h1]Configuration[/h1]
+Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
+[code]
+{
+  "refreshIntervalSeconds": 1.0,
+  "debugEndpointEnabled": false,
+  "httpPort": 8085
+}
+[/code]
 
 [h1]Docs[/h1]
 [url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
