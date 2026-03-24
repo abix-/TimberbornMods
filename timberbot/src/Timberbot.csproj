@@ -336,6 +336,22 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DeteriorationSystem.dll</HintPath>
     </Reference>
+    <!-- webhook event DLLs -->
+    <Reference Include="Timberborn.Population" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Population.dll</HintPath></Reference>
+    <Reference Include="Timberborn.Characters" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Characters.dll</HintPath></Reference>
+    <Reference Include="Timberborn.Beavers" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Beavers.dll</HintPath></Reference>
+    <Reference Include="Timberborn.BotsUpkeep" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.BotsUpkeep.dll</HintPath></Reference>
+    <Reference Include="Timberborn.Healthcare" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Healthcare.dll</HintPath></Reference>
+    <Reference Include="Timberborn.NaturalResources" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.NaturalResources.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameWonderCompletion" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameWonderCompletion.dll</HintPath></Reference>
+    <Reference Include="Timberborn.DeconstructionSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.DeconstructionSystem.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameOver" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameOver.dll</HintPath></Reference>
+    <Reference Include="Timberborn.Autosaving" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Autosaving.dll</HintPath></Reference>
+    <Reference Include="Timberborn.Explosions" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.Explosions.dll</HintPath></Reference>
+    <Reference Include="Timberborn.TerrainPhysics" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.TerrainPhysics.dll</HintPath></Reference>
+    <Reference Include="Timberborn.WindSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.WindSystem.dll</HintPath></Reference>
+    <Reference Include="Timberborn.ZiplineSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.ZiplineSystem.dll</HintPath></Reference>
+    <Reference Include="Timberborn.HazardousWeatherSystemUI" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystemUI.dll</HintPath></Reference>
 
     <Reference Include="System.Collections.Immutable">
       <Private>false</Private>

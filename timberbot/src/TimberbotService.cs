@@ -780,13 +780,81 @@ namespace Timberbot
             RemoveFromIndexes(e.Entity);
         }
 
-        // game event webhooks (one-liner per event -- add new events here)
+        // ================================================================
+        // WEBHOOK EVENT HANDLERS -- one line per event. Add new events here.
+        // All use PushEvent(name, data) which is fire-and-forget on background thread.
+        // ================================================================
+
+        // weather
         [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) => PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration });
         [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end", null);
+        [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching", null);
+        [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) => PushEvent("cycle.start", new { cycle = _gameCycleService.Cycle });
+        [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) => PushEvent("cycle.end", new { cycle = _gameCycleService.Cycle });
+        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) => PushEvent("cycle.day", new { cycle = _gameCycleService.Cycle, cycleDay = _gameCycleService.CycleDay });
+
+        // time
         [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) => PushEvent("day.start", new { day = _dayNightCycle.DayNumber });
         [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) => PushEvent("night.start", new { day = _dayNightCycle.DayNumber });
-        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var bo = e.BlockObject; var go = bo?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch { } }
+
+        // buildings (continued)
+        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch { } }
         [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
+
+        // population
+        [OnEvent] public void OnPopulationChanged(Timberborn.Population.PopulationChangedEvent e) => PushEvent("population.changed", null);
+        [OnEvent] public void OnCharacterCreated(Timberborn.Characters.CharacterCreatedEvent e) => PushEvent("character.created", null);
+        [OnEvent] public void OnCharacterKilled(Timberborn.Characters.CharacterKilledEvent e) => PushEvent("character.killed", null);
+        [OnEvent] public void OnBeaverBornEvt(Timberborn.Beavers.BeaverBornEvent e) => PushEvent("beaver.born.event", null);
+        [OnEvent] public void OnBotManufactured(Timberborn.BotUpkeep.BotManufacturedEvent e) => PushEvent("bot.manufactured", null);
+        [OnEvent] public void OnMigration(Timberborn.GameDistricts.MigrationEvent e) => PushEvent("migration", null);
+
+        // needs/wellbeing
+        [OnEvent] public void OnContaminationChanged(Timberborn.BeaverContaminationSystem.ContaminableContaminationChangedEvent e) => PushEvent("contamination.changed", null);
+        [OnEvent] public void OnTeethChipped(Timberborn.Healthcare.TeethChippedEvent e) => PushEvent("teeth.chipped", null);
+        [OnEvent] public void OnWellbeingHighscore(Timberborn.Wellbeing.NewWellbeingHighscoreEvent e) => PushEvent("wellbeing.highscore", null);
+        [OnEvent] public void OnStatusAlert(Timberborn.StatusSystem.StatusAlertAddedEvent e) => PushEvent("status.alert", null);
+
+        // trees/crops
+        [OnEvent] public void OnTreeCut(Timberborn.Forestry.TreeCutEvent e) => PushEvent("tree.cut", null);
+        [OnEvent] public void OnCuttableHarvested(Timberborn.Cutting.CuttableCutEvent e) => PushEvent("cuttable.cut", null);
+        [OnEvent] public void OnTreeCuttingAreaChanged(Timberborn.Forestry.TreeCuttingAreaChangedEvent e) => PushEvent("cutting.area.changed", null);
+        [OnEvent] public void OnTreeAddedToCuttingArea(Timberborn.Forestry.TreeAddedToCuttingAreaEvent e) => PushEvent("tree.marked", null);
+        [OnEvent] public void OnCropPlanted(Timberborn.NaturalResources.NaturalResourcePlantedEvent e) => PushEvent("crop.planted", null);
+        [OnEvent] public void OnPlantingMarked(Timberborn.Planting.PlantingAreaMarkedEvent e) => PushEvent("planting.marked", null);
+
+        // wonders
+        [OnEvent] public void OnWonderActivated(Timberborn.Wonders.WonderActivatedEvent e) => PushEvent("wonder.activated", null);
+        [OnEvent] public void OnWonderCompleted(Timberborn.GameWonderCompletion.WonderCompletedEvent e) => PushEvent("wonder.completed", null);
+        [OnEvent] public void OnWonderCountdown(Timberborn.GameWonderCompletion.WonderCompletionCountdownStartedEvent e) => PushEvent("wonder.countdown", null);
+
+        // power
+        [OnEvent] public void OnPowerNetworkCreated(Timberborn.MechanicalSystem.MechanicalGraphCreatedEvent e) => PushEvent("power.network.created", null);
+        [OnEvent] public void OnPowerNetworkRemoved(Timberborn.MechanicalSystem.MechanicalGraphRemovedEvent e) => PushEvent("power.network.removed", null);
+
+        // buildings
+        [OnEvent] public void OnBuildingUnlocked(Timberborn.ScienceSystem.BuildingUnlockedEvent e) => PushEvent("building.unlocked", null);
+        [OnEvent] public void OnBuildingDeconstructed(Timberborn.DeconstructionSystem.BuildingDeconstructedEvent e) => PushEvent("building.deconstructed", null);
+        [OnEvent] public void OnDemolishableMarked(Timberborn.Demolishing.DemolishableMarkedEvent e) => PushEvent("demolish.marked", null);
+        [OnEvent] public void OnDemolishableUnmarked(Timberborn.Demolishing.DemolishableUnmarkedEvent e) => PushEvent("demolish.unmarked", null);
+
+        // game state
+        [OnEvent] public void OnGameOver(Timberborn.GameOver.GameOverEvent e) => PushEvent("game.over", null);
+        [OnEvent] public void OnSpeedChanged(Timberborn.TimeSystem.CurrentSpeedChangedEvent e) => PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed });
+        [OnEvent] public void OnWorkHoursChanged(Timberborn.WorkSystem.WorkingHoursChangedEvent e) => PushEvent("workhours.changed", null);
+        [OnEvent] public void OnWorkHoursTransitioned(Timberborn.WorkSystem.WorkingHoursTransitionedEvent e) => PushEvent("workhours.transitioned", null);
+        [OnEvent] public void OnAutosave(Timberborn.Autosaving.AutosaveEvent e) => PushEvent("autosave", null);
+
+        // explosions
+        [OnEvent] public void OnDynamiteDetonated(Timberborn.Explosions.DynamiteDetonatedEvent e) => PushEvent("explosion", null);
+        [OnEvent] public void OnExplosionKill(Timberborn.Explosions.MortalDiedFromExplosionEvent e) => PushEvent("explosion.kill", null);
+
+        // terrain
+        [OnEvent] public void OnTerrainDestroyed(Timberborn.TerrainPhysics.TerrainDestroyedEvent e) => PushEvent("terrain.destroyed", null);
+        [OnEvent] public void OnWindChanged(Timberborn.WindSystem.WindChangedEvent e) => PushEvent("wind.changed", null);
+
+        // zipline
+        [OnEvent] public void OnZiplineActivated(Timberborn.ZiplineSystem.ZiplineConnectionActivatedEvent e) => PushEvent("zipline.activated", null);
 
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
