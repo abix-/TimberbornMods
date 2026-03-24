@@ -311,8 +311,15 @@ namespace Timberbot
                 if (reach != null && reach.IsAnyUnreachable())
                     alertUnreachable++;
             }
+            // count adults only (children can't work, shouldn't count as idle haulers)
+            int totalAdults = 0;
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                var pop = dc.GetComponent<DistrictPopulation>();
+                if (pop != null) totalAdults += pop.NumberOfAdults;
+            }
             int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
-            int unemployed = System.Math.Max(0, beaverCount - assignedWorkers);
+            int unemployed = System.Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
 
             if (format == "json")
