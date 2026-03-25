@@ -193,7 +193,7 @@ namespace Timberbot
                         c.Stock = totalStock;
                         c.Capacity = totalCapacity;
                     }
-                    _buildings.Write[i] = c;
+                    // class: modified in place, no write-back needed
                 }
                 catch (System.Exception _ex) { TimberbotLog.Error("cache.building", _ex); }
             }
@@ -211,7 +211,7 @@ namespace Timberbot
                     c.Alive = c.Living != null && !c.Living.IsDead;
                     c.Grown = c.Growable != null && c.Growable.IsGrown;
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
-                    _naturalResources.Write[i] = c;
+                    // class: modified in place, no write-back needed
                 }
                 catch (System.Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
             }
@@ -279,7 +279,7 @@ namespace Timberbot
                             if (need.IsBelowWarningThreshold) c.AnyCritical = true;
                         }
                     }
-                    _beavers.Write[i] = c;
+                    // class: modified in place, no write-back needed
                 }
                 catch (System.Exception _ex) { TimberbotLog.Error("cache.beaver", _ex); }
             }
@@ -298,10 +298,10 @@ namespace Timberbot
         //
         // Why structs instead of classes? Value types live inline in the List<T>
         // array, giving cache-friendly sequential memory access during refresh.
-        // We copy by value when writing back: _buildings.Write[i] = c;
+        // Classes: modified in place, no write-back needed. Clone() for double-buffer independence.
         // ================================================================
 
-        private struct CachedNaturalResource
+        private class CachedNaturalResource
         {
             // immutable refs (set at add-time, never change for the entity's lifetime)
             public int Id;
@@ -315,9 +315,11 @@ namespace Timberbot
             public int X, Y, Z;
             public bool Alive, Grown, Marked;
             public float Growth;
+
+            public CachedNaturalResource Clone() => (CachedNaturalResource)MemberwiseClone();
         }
 
-        private struct CachedBuilding
+        private class CachedBuilding
         {
             // immutable refs (set at add-time)
             public EntityComponent Entity;
@@ -370,6 +372,16 @@ namespace Timberbot
             public List<(int x, int y, int z)> OccupiedTiles;
             public bool HasEntrance;
             public int EntranceX, EntranceY;
+
+            public CachedBuilding Clone()
+            {
+                var c = (CachedBuilding)MemberwiseClone();
+                c.Recipes = null;
+                c.Inventory = null;
+                c.NutrientStock = null;
+                c.OccupiedTiles = OccupiedTiles; // immutable after add, safe to share
+                return c;
+            }
         }
 
         private struct CachedNeed
@@ -380,7 +392,7 @@ namespace Timberbot
             public bool Favorable, Critical, Active;
         }
 
-        private struct CachedBeaver
+        private class CachedBeaver
         {
             // immutable refs (add-time)
             public int Id;
@@ -410,6 +422,13 @@ namespace Timberbot
             public bool Overburdened;
             public bool AnyCritical;
             public List<CachedNeed> Needs;
+
+            public CachedBeaver Clone()
+            {
+                var c = (CachedBeaver)MemberwiseClone();
+                c.Needs = new List<CachedNeed>();
+                return c;
+            }
         }
 
         private readonly DoubleBuffer<CachedBuilding> _buildings = new DoubleBuffer<CachedBuilding>();
@@ -515,12 +534,8 @@ namespace Timberbot
                         catch (System.Exception _ex) { TimberbotLog.Error("cache.entrance", _ex); }
                     }
                 }
-                // separate reference-type instances per buffer to avoid shared mutation
-                var cbRead = cb;
-                cbRead.Recipes = null; // populated on first refresh
-                cbRead.Inventory = null;
-                cbRead.NutrientStock = null;
-                _buildings.Add(cb, cbRead);
+                // Clone() creates a separate instance with independent reference-type fields
+                _buildings.Add(cb, cb.Clone());
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
@@ -534,7 +549,7 @@ namespace Timberbot
                     Gatherable = ec.GetComponent<Gatherable>(),
                     Growable = ec.GetComponent<Timberborn.Growing.Growable>()
                 };
-                _naturalResources.Add(nr);
+                _naturalResources.Add(nr, nr.Clone());
             }
             else if (ec.GetComponent<NeedManager>() != null)
             {
@@ -555,9 +570,7 @@ namespace Timberbot
                     Citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>(),
                     Needs = new List<CachedNeed>()
                 };
-                var cbRead = cb;
-                cbRead.Needs = new List<CachedNeed>();
-                _beavers.Add(cb, cbRead);
+                _beavers.Add(cb, cb.Clone());
             }
         }
 
