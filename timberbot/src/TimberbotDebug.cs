@@ -247,20 +247,20 @@ namespace Timberbot
             results.Add(BenchCall("CollectGatherables", n, () => Service.Read.CollectGatherables()));
             results.Add(BenchCall("CollectPowerNetworks", n, () => Service.Read.CollectPowerNetworks()));
             results.Add(BenchCall("CollectAlerts", n, () => Service.Read.CollectAlerts()));
-            results.Add(BenchCall("CollectWellbeing", n, () => Service.CollectWellbeing(), nv));
-            results.Add(BenchCall("CollectScience", n, () => Service.CollectScience()));
+            results.Add(BenchCall("CollectWellbeing", n, () => Service.Write.CollectWellbeing(), nv));
+            results.Add(BenchCall("CollectScience", n, () => Service.Write.CollectScience()));
             results.Add(BenchCall("CollectResources", n, () => Service.Read.CollectResources("json")));
             results.Add(BenchCall("CollectPopulation", n, () => Service.Read.CollectPopulation(), nv));
             results.Add(BenchCall("CollectDistricts", n, () => Service.Read.CollectDistricts("json")));
-            results.Add(BenchCall("CollectDistribution", n, () => Service.CollectDistribution()));
+            results.Add(BenchCall("CollectDistribution", n, () => Service.Write.CollectDistribution()));
             results.Add(BenchCall("CollectTime", n, () => Service.Read.CollectTime()));
             results.Add(BenchCall("CollectWeather", n, () => Service.Read.CollectWeather()));
             results.Add(BenchCall("CollectSpeed", n, () => Service.Read.CollectSpeed()));
             results.Add(BenchCall("CollectWorkHours", n, () => Service.Read.CollectWorkHours()));
-            results.Add(BenchCall("CollectNotifications", n, () => Service.CollectNotifications()));
+            results.Add(BenchCall("CollectNotifications", n, () => Service.Write.CollectNotifications()));
             results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.Read.CollectTreeClusters()));
             results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.CollectPrefabs()));
-            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.CollectTiles(120, 130, 140, 150), 400));
+            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Write.CollectTiles(120, 130, 140, 150), 400));
             results.Add(BenchCall("FindPlacement", nHeavy, () => Service.FindPlacement("Path", 120, 135, 130, 145)));
 
             // metadata
@@ -542,10 +542,17 @@ namespace Timberbot
             void Add(string name, object cached, object live)
             {
                 bool match = Equals(cached, live);
-                if (!match && cached is float cf && live is float lf)
-                    match = System.Math.Abs(cf - lf) < 0.5f;
-                if (!match && cached is int ci && live is int li)
-                    match = ci == li;
+                // numeric comparison: convert both to double for cross-type matching (int vs float, etc)
+                if (!match && cached is System.IConvertible && live is System.IConvertible)
+                {
+                    try
+                    {
+                        double dc = System.Convert.ToDouble(cached);
+                        double dl = System.Convert.ToDouble(live);
+                        match = System.Math.Abs(dc - dl) < 0.5;
+                    }
+                    catch { }
+                }
                 fields[name] = new { cached, live, match };
                 total++;
                 if (!match) mismatches++;

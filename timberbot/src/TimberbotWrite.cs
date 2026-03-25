@@ -1,4 +1,4 @@
-// TimberbotService.Write.cs -- All state-modifying API endpoints.
+// TimberbotWrite.cs -- All state-modifying API endpoints.
 //
 // POST requests that change game state: speed, workers, priorities, crops, trees,
 // stockpiles, floodgates, recipes, science, distribution, migration, work hours.
@@ -77,8 +77,75 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    public partial class TimberbotService
+    public class TimberbotWrite
     {
+        private readonly ITerrainService _terrainService;
+        private readonly IThreadSafeWaterMap _waterMap;
+        private readonly MapIndexService _mapIndexService;
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;
+        private readonly ISoilContaminationService _soilContaminationService;
+        private readonly ISoilMoistureService _soilMoistureService;
+        private readonly SpeedManager _speedManager;
+        private readonly RecipeSpecService _recipeSpecService;
+        private readonly TreeCuttingArea _treeCuttingArea;
+        private readonly PlantingService _plantingService;
+        private readonly PlantingAreaValidator _plantingAreaValidator;
+        private readonly ScienceService _scienceService;
+        private readonly BuildingService _buildingService;
+        private readonly BuildingUnlockingService _buildingUnlockingService;
+        private readonly ToolButtonService _toolButtonService;
+        private readonly ToolUnlockingService _toolUnlockingService;
+        private readonly FactionNeedService _factionNeedService;
+        private readonly NotificationSaver _notificationSaver;
+        private readonly DistrictCenterRegistry _districtCenterRegistry;
+        private readonly TimberbotEntityCache _cache;
+
+        public TimberbotWrite(
+            ITerrainService terrainService,
+            IThreadSafeWaterMap waterMap,
+            MapIndexService mapIndexService,
+            IThreadSafeColumnTerrainMap terrainMap,
+            ISoilContaminationService soilContaminationService,
+            ISoilMoistureService soilMoistureService,
+            SpeedManager speedManager,
+            RecipeSpecService recipeSpecService,
+            TreeCuttingArea treeCuttingArea,
+            PlantingService plantingService,
+            PlantingAreaValidator plantingAreaValidator,
+            ScienceService scienceService,
+            BuildingService buildingService,
+            BuildingUnlockingService buildingUnlockingService,
+            ToolButtonService toolButtonService,
+            ToolUnlockingService toolUnlockingService,
+            FactionNeedService factionNeedService,
+            NotificationSaver notificationSaver,
+            DistrictCenterRegistry districtCenterRegistry,
+            TimberbotEntityCache cache)
+        {
+            _terrainService = terrainService;
+            _waterMap = waterMap;
+            _mapIndexService = mapIndexService;
+            _terrainMap = terrainMap;
+            _soilContaminationService = soilContaminationService;
+            _soilMoistureService = soilMoistureService;
+            _speedManager = speedManager;
+            _recipeSpecService = recipeSpecService;
+            _treeCuttingArea = treeCuttingArea;
+            _plantingService = plantingService;
+            _plantingAreaValidator = plantingAreaValidator;
+            _scienceService = scienceService;
+            _buildingService = buildingService;
+            _buildingUnlockingService = buildingUnlockingService;
+            _toolButtonService = toolButtonService;
+            _toolUnlockingService = toolUnlockingService;
+            _factionNeedService = factionNeedService;
+            _notificationSaver = notificationSaver;
+            _districtCenterRegistry = districtCenterRegistry;
+            _cache = cache;
+        }
+
+        private static readonly int[] SpeedScale = TimberbotRead.SpeedScale;
+
         public object CollectTiles(int x1, int y1, int x2, int y2)
         {
             var size = _terrainService.Size;
@@ -106,7 +173,7 @@ namespace Timberbot
             var deadTiles = new HashSet<long>();
 
             // buildings (multi-tile footprints cached at add-time)
-            var buildings = Cache.Buildings.Read;
+            var buildings = _cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -126,7 +193,7 @@ namespace Timberbot
             }
 
             // natural resources (1x1, all data cached)
-            var resources = Cache.NaturalResources.Read;
+            var resources = _cache.NaturalResources.Read;
             for (int i = 0; i < resources.Count; i++)
             {
                 var r = resources[i];
@@ -141,7 +208,7 @@ namespace Timberbot
                 }
             }
 
-            var jw = Cache.Jw.Reset().OpenObj();
+            var jw = _cache.Jw.Reset().OpenObj();
             jw.Key("mapSize").OpenObj().Key("x").Int(size.x).Key("y").Int(size.y).Key("z").Int(size.z).CloseObj();
             jw.Key("region").OpenObj().Key("x1").Int(x1).Key("y1").Int(y1).Key("x2").Int(x2).Key("y2").Int(y2).CloseObj();
             jw.Key("tiles").OpenArr();
@@ -212,14 +279,14 @@ namespace Timberbot
             if (speed < 0 || speed > 3)
                 return new { error = "speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)" };
 
-            _speedManager.ChangeSpeed(TimberbotRead.SpeedScale[speed]);
+            _speedManager.ChangeSpeed(SpeedScale[speed]);
             return new { speed };
         }
 
         // pause/unpause a building
         public object PauseBuilding(int buildingId, bool paused)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -237,7 +304,7 @@ namespace Timberbot
         // engage/disengage clutch on a building
         public object SetClutch(int buildingId, bool engaged)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -252,7 +319,7 @@ namespace Timberbot
         // adjust floodgate water gate height (clamped to max)
         public object SetFloodgateHeight(int buildingId, float height)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -274,7 +341,7 @@ namespace Timberbot
         // set construction or workplace priority (VeryLow/Normal/VeryHigh)
         public object SetBuildingPriority(int buildingId, string priorityStr, string type)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -307,7 +374,7 @@ namespace Timberbot
         // haulers deliver goods to this building first
         public object SetHaulPriority(int buildingId, bool prioritized)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -322,7 +389,7 @@ namespace Timberbot
         // set which recipe a manufactory produces
         public object SetRecipe(int buildingId, string recipeId)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -353,7 +420,7 @@ namespace Timberbot
         // prioritize planting vs default (harvest when ready)
         public object SetFarmhouseAction(int buildingId, string action)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -378,7 +445,7 @@ namespace Timberbot
         // forester/gatherer prioritizes this resource type
         public object SetPlantablePriority(int buildingId, string plantableName)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -419,7 +486,7 @@ namespace Timberbot
         // set desired worker count (0 to maxWorkers)
         public object SetWorkers(int buildingId, int count)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -472,7 +539,7 @@ namespace Timberbot
         // set max capacity on a stockpile building
         public object SetStockpileCapacity(int buildingId, int capacity)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -498,7 +565,7 @@ namespace Timberbot
         // set which good a single-good stockpile accepts
         public object SetStockpileGood(int buildingId, string goodId)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
@@ -558,12 +625,12 @@ namespace Timberbot
         {
             if (buildingId != 0)
             {
-                var ec = Cache.FindEntity(buildingId);
+                var ec = _cache.FindEntity(buildingId);
                 if (ec == null) return new { error = "building not found", id = buildingId };
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
                 if (inRange == null) return new { error = "building has no planting range", id = buildingId };
 
-                var jw = Cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
                 foreach (var c in inRange.GetCoordinates())
                 {
                     if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
@@ -574,7 +641,7 @@ namespace Timberbot
             }
             else
             {
-                var jw = Cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
                 for (int x = Mathf.Min(x1, x2); x <= Mathf.Max(x1, x2); x++)
                     for (int y = Mathf.Min(y1, y2); y <= Mathf.Max(y1, y2); y++)
                     {
@@ -619,7 +686,7 @@ namespace Timberbot
         // ================================================================
         public object CollectScience()
         {
-            var jw = Cache.Jw.Reset().OpenObj().Key("points").Int(_scienceService.SciencePoints);
+            var jw = _cache.Jw.Reset().OpenObj().Key("points").Int(_scienceService.SciencePoints);
             jw.Key("unlockables").OpenArr();
             foreach (var building in _buildingService.Buildings)
             {
@@ -704,7 +771,7 @@ namespace Timberbot
                     foreach (var ns in kvp.Value)
                         needToGroup[ns.Id] = kvp.Key;
 
-                foreach (var c in Cache.Beavers.Read)
+                foreach (var c in _cache.Beavers.Read)
                 {
                     if (c.Needs == null) continue;
                     beaverCount++;
@@ -734,7 +801,7 @@ namespace Timberbot
                 }
 
                 // build output
-                var jw = Cache.Jw.Reset().OpenObj().Key("beavers").Int(beaverCount).Key("categories").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Key("beavers").Int(beaverCount).Key("categories").OpenArr();
                 foreach (var kvp in groupNeeds)
                 {
                     var groupId = kvp.Key;
@@ -758,7 +825,7 @@ namespace Timberbot
 
         public object CollectNotifications()
         {
-            var jw = Cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.Reset().OpenArr();
             try
             {
                 foreach (var n in _notificationSaver.Notifications)
@@ -771,7 +838,7 @@ namespace Timberbot
 
         public object CollectDistribution()
         {
-            var jw = Cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
@@ -826,7 +893,7 @@ namespace Timberbot
         // building work range -- same green circle the player sees
         public object CollectBuildingRange(int buildingId)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 

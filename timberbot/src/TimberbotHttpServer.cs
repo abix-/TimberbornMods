@@ -215,13 +215,13 @@ namespace Timberbot
                     case "/api/beavers":
                         return _service.Read.CollectBeavers(format, detail);
                     case "/api/distribution":
-                        return _service.CollectDistribution();
+                        return _service.Write.CollectDistribution();
                     case "/api/science":
-                        return _service.CollectScience();
+                        return _service.Write.CollectScience();
                     case "/api/wellbeing":
-                        return _service.CollectWellbeing();
+                        return _service.Write.CollectWellbeing();
                     case "/api/notifications":
-                        return _service.CollectNotifications();
+                        return _service.Write.CollectNotifications();
                     case "/api/workhours":
                         return _service.Read.CollectWorkHours();
 
@@ -242,46 +242,46 @@ namespace Timberbot
                 switch (path)
                 {
                     case "/api/speed":
-                        return _service.SetSpeed(body?.Value<int>("speed") ?? 0);
+                        return _service.Write.SetSpeed(body?.Value<int>("speed") ?? 0);
                     case "/api/building/pause":
-                        return _service.PauseBuilding(
+                        return _service.Write.PauseBuilding(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("paused") ?? false);
                     case "/api/building/clutch":
-                        return _service.SetClutch(
+                        return _service.Write.SetClutch(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("engaged") ?? true);
                     case "/api/building/floodgate":
-                        return _service.SetFloodgateHeight(
+                        return _service.Write.SetFloodgateHeight(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<float>("height") ?? 0f);
                     case "/api/building/priority":
-                        return _service.SetBuildingPriority(
+                        return _service.Write.SetBuildingPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("priority") ?? "Normal",
                             body?.Value<string>("type") ?? "");
                     case "/api/building/hauling":
-                        return _service.SetHaulPriority(
+                        return _service.Write.SetHaulPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("prioritized") ?? true);
                     case "/api/building/recipe":
-                        return _service.SetRecipe(
+                        return _service.Write.SetRecipe(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("recipe") ?? "");
                     case "/api/building/farmhouse":
-                        return _service.SetFarmhouseAction(
+                        return _service.Write.SetFarmhouseAction(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("action") ?? "");
                     case "/api/building/plantable":
-                        return _service.SetPlantablePriority(
+                        return _service.Write.SetPlantablePriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("plantable") ?? "");
                     case "/api/building/workers":
-                        return _service.SetWorkers(
+                        return _service.Write.SetWorkers(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<int>("count") ?? 0);
                     case "/api/planting/mark":
-                        return _service.MarkPlanting(
+                        return _service.Write.MarkPlanting(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
@@ -289,7 +289,7 @@ namespace Timberbot
                             body?.Value<int>("z") ?? 0,
                             body?.Value<string>("crop") ?? "");
                     case "/api/planting/find":
-                        return _service.FindPlantingSpots(
+                        return _service.Write.FindPlantingSpots(
                             body?.Value<string>("crop") ?? "",
                             body?.Value<int>("building_id") ?? 0,
                             body?.Value<int>("x1") ?? 0,
@@ -298,17 +298,17 @@ namespace Timberbot
                             body?.Value<int>("y2") ?? 0,
                             body?.Value<int>("z") ?? 0);
                     case "/api/building/range":
-                        return _service.CollectBuildingRange(
+                        return _service.Write.CollectBuildingRange(
                             body?.Value<int>("id") ?? 0);
                     case "/api/planting/clear":
-                        return _service.UnmarkPlanting(
+                        return _service.Write.UnmarkPlanting(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0,
                             body?.Value<int>("z") ?? 0);
                     case "/api/cutting/area":
-                        return _service.MarkCuttingArea(
+                        return _service.Write.MarkCuttingArea(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
@@ -316,11 +316,11 @@ namespace Timberbot
                             body?.Value<int>("z") ?? 0,
                             body?.Value<bool>("marked") ?? true);
                     case "/api/stockpile/capacity":
-                        return _service.SetStockpileCapacity(
+                        return _service.Write.SetStockpileCapacity(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<int>("capacity") ?? 0);
                     case "/api/stockpile/good":
-                        return _service.SetStockpileGood(
+                        return _service.Write.SetStockpileGood(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
                     case "/api/workhours":
@@ -332,16 +332,16 @@ namespace Timberbot
                             body?.Value<string>("to") ?? "",
                             body?.Value<int>("count") ?? 1);
                     case "/api/science/unlock":
-                        return _service.UnlockBuilding(
+                        return _service.Write.UnlockBuilding(
                             body?.Value<string>("building") ?? "");
                     case "/api/distribution":
-                        return _service.SetDistribution(
+                        return _service.Write.SetDistribution(
                             body?.Value<string>("district") ?? "",
                             body?.Value<string>("good") ?? "",
                             body?.Value<string>("import") ?? "",
                             body?.Value<int>("exportThreshold") ?? -1);
                     case "/api/tiles":
-                        return _service.CollectTiles(
+                        return _service.Write.CollectTiles(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,

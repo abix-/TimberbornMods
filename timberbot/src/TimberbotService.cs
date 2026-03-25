@@ -126,6 +126,7 @@ namespace Timberbot
         private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
         public readonly TimberbotWebhook WebhookMgr;                      // batched webhook push notifications
         public readonly TimberbotRead Read;                                   // all GET read endpoints
+        public readonly TimberbotWrite Write;                                 // all POST write endpoints (tiles, science, etc)
         public readonly TimberbotDebug DebugTool;                              // benchmark + reflection inspector
         private TimberbotHttpServer _server;
 
@@ -177,6 +178,7 @@ namespace Timberbot
             EventBus eventBus,
             TimberbotWebhook webhookMgr,
             TimberbotRead read,
+            TimberbotWrite write,
             TimberbotDebug debug)
         {
             _goodService = goodService;
@@ -217,6 +219,7 @@ namespace Timberbot
             _eventBus = eventBus;
             WebhookMgr = webhookMgr;
             Read = read;
+            Write = write;
             DebugTool = debug;
         }
 
