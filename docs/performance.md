@@ -7,7 +7,7 @@ Single source of truth for Timberbot API performance. All optimization decisions
 Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame allocation, zero `GetComponent` calls per request, zero main-thread cost for reads.
 
 - **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
-- **Cached structs:** `CachedBuilding` (18 component refs + ~25 cached primitives), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + 14 primitives). Mutable state refreshed at 1Hz (configurable via settings.json).
+- **Cached classes:** `CachedBuilding` (18 component refs + ~25 cached primitives), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + 14 primitives). Modified in-place, `Clone()` for double-buffer. Refreshed at 1Hz (configurable via settings.json).
 - **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
 
 | Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
@@ -20,7 +20,7 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 ### Cached component refs
 
-`CachedBuilding`, `CachedNaturalResource`, and `CachedBeaver` structs resolve all component references once at entity-add time. Endpoints read cached primitives (refreshed at 1Hz) without calling `GetComponent<T>()`.
+`CachedBuilding`, `CachedNaturalResource`, and `CachedBeaver` classes resolve all component references once at entity-add time. Endpoints read cached primitives (refreshed at 1Hz) without calling `GetComponent<T>()`.
 
 | Struct | Fields cached | GetComponent calls saved per item |
 |---|---|---|
@@ -30,7 +30,7 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 ## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total, 100 iterations)
 
-### Optimized (cached struct indexes, double-buffered, background thread)
+### Optimized (cached class indexes, double-buffered, background thread)
 
 | Endpoint | Items | Min (ms) | GetComponent | Notes |
 |---|---|---|---|---|
@@ -91,7 +91,7 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | Source | Lines | Allocs/refresh | Severity | Status |
 |---|---|---|---|---|
 | ~~`Priority.ToString()` x2 per building~~ | 248-249 | ~~60K strings/sec~~ | **FIXED** | static `PriorityNames[]` lookup, zero alloc |
-| ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in struct, `.Clear()` + repopulate |
+| ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in class, `.Clear()` + repopulate |
 | ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
 | ~~60fps refresh~~ | UpdateSingleton | ~~60x/sec~~ | **FIXED** | cadenced to 1s (configurable) |
 | ~~`Orientation` from `OrientNames[]`~~ | ~~226~~ | ~~0~~ | **FIXED** | moved to add-time (immutable after placement) |
