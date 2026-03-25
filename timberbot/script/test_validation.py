@@ -379,7 +379,7 @@ class TestRunner:
             self.check("verify placement via map", has_path)
 
             # demolish
-            dem = self.bot.demolish_building(placed_id)
+            dem = self.write_and_wait(lambda: self.bot.demolish_building(placed_id))
             self.check("demolish", self.has(dem, "demolished") or not self.err(dem))
 
             # verify gone
@@ -1029,7 +1029,8 @@ class TestRunner:
     def test_summary_projection(self):
         print("\n=== summary projection ===\n")
 
-        result = self.bot.summary()
+        # toon summary has flat fields (foodDays, waterDays, etc)
+        result = self.toon_bot.summary()
         if isinstance(result, dict):
             self.check("foodDays present", "foodDays" in result)
             self.check("waterDays present", "waterDays" in result)
@@ -1043,6 +1044,13 @@ class TestRunner:
                        f"keys: {[k for k in result if 'Days' in k]}")
             self.check("plankDays present", "plankDays" in result)
             self.check("gearDays present", "gearDays" in result)
+
+        # json summary has nested structure
+        jresult = self.bot.summary()
+        if isinstance(jresult, dict):
+            self.check("json has time", "time" in jresult)
+            self.check("json has weather", "weather" in jresult)
+            self.check("json has districts", "districts" in jresult)
 
     def test_map_moisture(self):
         print("\n=== map moisture ===\n")
@@ -1608,7 +1616,7 @@ class TestRunner:
 
     def test_bot_in_summary(self):
         """Verify bots appear in summary and population counts."""
-        summary = self.bot.summary()
+        summary = self.toon_bot.summary()
         self.check("summary has bots field", "bots" in summary,
                    f"keys: {list(summary.keys())[:20]}")
 
