@@ -2018,11 +2018,13 @@ class TestRunner:
         self.check("schema: summary (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         buildings = jbot.buildings()
-        errs = validate(buildings, [{"id": int, "name": str, "x": int, "y": int, "z": int, "finished": bool, "paused": bool}])
-        self.check("schema: buildings (json)", len(errs) == 0, "; ".join(errs[:5]))
+        errs = validate(buildings, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                     "orientation": str, "finished": bool, "paused": bool, "priority": str, "workers": str}])
+        self.check("schema: buildings basic (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         buildings_full = jbot.buildings(detail="full")
-        errs = validate(buildings_full, [{"id": int, "name": str, "x": int, "orientation": str}])
+        errs = validate(buildings_full, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                          "orientation": str, "finished": bool, "paused": bool}])
         self.check("schema: buildings full (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         trees = jbot.trees()
@@ -2030,11 +2032,17 @@ class TestRunner:
         self.check("schema: trees (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         beavers = jbot.beavers()
-        errs = validate(beavers, [{"id": int, "name": str, "x": int, "wellbeing": float, "isBot": bool}])
-        self.check("schema: beavers (json)", len(errs) == 0, "; ".join(errs[:5]))
+        errs = validate(beavers, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                    "wellbeing": float, "isBot": bool, "tier": str, "workplace": str,
+                                    "critical": str, "unmet": str}])
+        self.check("schema: beavers basic (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         beavers_full = jbot.beavers(detail="full")
-        errs = validate(beavers_full, [{"id": int, "name": str, "anyCritical": bool, "needs": [{"id": str, "points": float, "critical": bool}]}])
+        errs = validate(beavers_full, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                         "wellbeing": float, "isBot": bool, "anyCritical": bool,
+                                         "hasHome": bool, "contaminated": bool,
+                                         "needs": [{"id": str, "points": float, "wellbeing": int,
+                                                    "favorable": bool, "critical": bool, "group": str}]}])
         self.check("schema: beavers full (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         time_data = jbot.time()
@@ -2096,17 +2104,32 @@ class TestRunner:
 
         tb = tbot.buildings()
         errs = validate(tb, [{"id": int, "name": str, "x": int, "y": int, "z": int,
-                              "finished": bool, "paused": bool, "priority": str, "workers": str}])
-        self.check("schema: buildings (toon)", len(errs) == 0, "; ".join(errs[:5]))
+                              "orientation": str, "finished": bool, "paused": bool, "priority": str, "workers": str}])
+        self.check("schema: buildings basic (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tbf = tbot.buildings(detail="full")
+        errs = validate(tbf, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                               "orientation": str, "finished": bool, "paused": bool}])
+        self.check("schema: buildings full (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         tt = tbot.trees()
-        errs = validate(tt, [{"id": int, "name": str, "x": int, "alive": bool, "grown": bool, "growth": float}])
+        errs = validate(tt, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                              "marked": bool, "alive": bool, "grown": bool, "growth": float}])
         self.check("schema: trees (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         tbv = tbot.beavers()
-        errs = validate(tbv, [{"id": int, "name": str, "x": int, "wellbeing": float, "isBot": bool,
-                               "tier": str, "workplace": str}])
-        self.check("schema: beavers (toon)", len(errs) == 0, "; ".join(errs[:5]))
+        errs = validate(tbv, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                               "wellbeing": float, "isBot": bool, "tier": str, "workplace": str,
+                               "critical": str, "unmet": str}])
+        self.check("schema: beavers basic (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tbvf = tbot.beavers(detail="full")
+        errs = validate(tbvf, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                "wellbeing": float, "isBot": bool, "anyCritical": bool,
+                                "hasHome": bool, "contaminated": bool,
+                                "needs": [{"id": str, "points": float, "wellbeing": int,
+                                           "favorable": bool, "critical": bool, "group": str}]}])
+        self.check("schema: beavers full (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         td = tbot.districts()
         errs = validate(td, [{"name": str, "adults": int, "children": int, "bots": int}])
