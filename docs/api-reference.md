@@ -1129,7 +1129,7 @@ Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
 
 ---
 
-### POST /api/floodgate
+### POST /api/building/floodgate
 
 Set floodgate water gate height. Value is clamped to max.
 
@@ -1156,7 +1156,7 @@ Set floodgate water gate height. Value is clamped to max.
 
 ---
 
-### POST /api/priority
+### POST /api/building/priority
 
 Set construction or workplace priority.
 
@@ -1188,7 +1188,7 @@ Set construction or workplace priority.
 
 ---
 
-### POST /api/workers
+### POST /api/building/workers
 
 Set desired worker count for a workplace.
 
@@ -1215,7 +1215,7 @@ Set desired worker count for a workplace.
 
 ---
 
-### POST /api/hauling/priority
+### POST /api/building/hauling
 
 Prioritize hauling deliveries to a building.
 
@@ -1242,7 +1242,7 @@ Prioritize hauling deliveries to a building.
 
 ---
 
-### POST /api/recipe
+### POST /api/building/recipe
 
 Set which recipe a manufactory produces.
 
@@ -1273,7 +1273,7 @@ Set which recipe a manufactory produces.
 
 ---
 
-### POST /api/farmhouse/action
+### POST /api/building/farmhouse
 
 Prioritize planting or harvesting for a farmhouse.
 
@@ -1308,7 +1308,7 @@ Prioritize planting or harvesting for a farmhouse.
 
 ---
 
-### POST /api/plantable/priority
+### POST /api/building/plantable
 
 Prioritize which tree/resource type a forester plants.
 
@@ -1517,7 +1517,7 @@ Get the work range tiles for a building. Same green circle the player sees when 
 
 ---
 
-### POST /api/path/route
+### POST /api/path/place
 
 Route a straight-line path from point A to point B, auto-placing stairs at z-level changes. Path must be axis-aligned (x1==x2 or y1==y2).
 
@@ -1729,7 +1729,7 @@ python timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
 
 ### place_path (CLI-only)
 
-Route a straight-line path with auto-stairs. Wraps `POST /api/path/route`.
+Route a straight-line path with auto-stairs. Wraps `POST /api/path/place`.
 
 ```bash
 python timberbot.py place_path x1:120 y1:130 x2:120 y2:145

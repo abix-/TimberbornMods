@@ -1,3 +1,18 @@
+// TimberbotHttpServer.cs -- HTTP server and request routing.
+//
+// Runs an HttpListener on a background thread (port 8085 by default).
+// Threading model:
+//   GET requests  -> served directly on the listener thread (reads cached data)
+//   POST requests -> queued to ConcurrentQueue, drained on Unity main thread (max 10/frame)
+//
+// This split exists because Unity game services are single-threaded. GET endpoints
+// only read from the double-buffered cache (thread-safe), while POST endpoints
+// call game services that must run on the main thread.
+//
+// All responses are JSON. The server serializes whatever object TimberbotService
+// returns using Newtonsoft.Json. TOON format is handled by TimberbotService returning
+// pre-built strings for endpoints that support it.
+
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -109,8 +124,10 @@ namespace Timberbot
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
                 var serial = ctx.Request.QueryString["serial"] ?? "dict";
 
-                // GET: serve reads directly on listener thread -- zero main-thread cost.
-                // Exception: endpoints that trigger nav mesh recalc (Reachability) must use main thread.
+                // GET requests: handled RIGHT HERE on the background listener thread.
+                // This is the key performance trick -- reads never block the game.
+                // All CollectX() methods read from double-buffered cached data, so they're
+                // thread-safe without locks. The game keeps running at full speed.
                 if (method == "GET")
                 {
                     try
@@ -125,7 +142,10 @@ namespace Timberbot
                     continue;
                 }
 
-                // POST: queue writes to main thread
+                // POST requests: can't execute on this thread because Unity game services
+                // are single-threaded. Instead, we parse the JSON body here, then queue the
+                // request to a ConcurrentQueue. The main thread drains up to 10 queued requests
+                // per frame in DrainRequests() (called from UpdateSingleton).
                 JObject body = null;
                 if (ctx.Request.HasEntityBody)
                 {
@@ -229,32 +249,32 @@ namespace Timberbot
                         return _service.SetClutch(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("engaged") ?? true);
-                    case "/api/floodgate":
+                    case "/api/building/floodgate":
                         return _service.SetFloodgateHeight(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<float>("height") ?? 0f);
-                    case "/api/priority":
+                    case "/api/building/priority":
                         return _service.SetBuildingPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("priority") ?? "Normal",
                             body?.Value<string>("type") ?? "");
-                    case "/api/hauling/priority":
+                    case "/api/building/hauling":
                         return _service.SetHaulPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("prioritized") ?? true);
-                    case "/api/recipe":
+                    case "/api/building/recipe":
                         return _service.SetRecipe(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("recipe") ?? "");
-                    case "/api/farmhouse/action":
+                    case "/api/building/farmhouse":
                         return _service.SetFarmhouseAction(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("action") ?? "");
-                    case "/api/plantable/priority":
+                    case "/api/building/plantable":
                         return _service.SetPlantablePriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("plantable") ?? "");
-                    case "/api/workers":
+                    case "/api/building/workers":
                         return _service.SetWorkers(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<int>("count") ?? 0);
@@ -346,7 +366,7 @@ namespace Timberbot
                         if (!_debugEnabled) return new { error = "benchmark endpoint disabled in settings.json" };
                         return _service.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
-                    case "/api/path/route":
+                    case "/api/path/place":
                         return _service.RoutePath(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,

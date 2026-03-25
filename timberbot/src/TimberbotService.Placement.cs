@@ -101,52 +101,43 @@ namespace Timberbot
 
         public object CollectPrefabs()
         {
-            var results = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                 var blockSpec = building.GetSpec<BlockObjectSpec>();
-
-                var entry = new Dictionary<string, object>
-                {
-                    ["name"] = templateSpec?.TemplateName ?? "unknown"
-                };
-
+                jw.OpenObj().Key("name").Str(templateSpec?.TemplateName ?? "unknown");
                 if (blockSpec != null)
                 {
                     var size = blockSpec.Size;
-                    entry["sizeX"] = size.x;
-                    entry["sizeY"] = size.y;
-                    entry["sizeZ"] = size.z;
+                    jw.Key("sizeX").Int(size.x).Key("sizeY").Int(size.y).Key("sizeZ").Int(size.z);
                 }
-
                 var bs = building.GetSpec<BuildingSpec>();
                 if (bs != null)
                 {
                     if (bs.ScienceCost > 0)
-                    {
-                        entry["scienceCost"] = bs.ScienceCost;
-                        entry["unlocked"] = _buildingUnlockingService.Unlocked(bs);
-                    }
-                    var costs = new List<object>();
+                        jw.Key("scienceCost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs));
                     try
                     {
+                        bool hasCost = false;
                         foreach (var ga in bs.BuildingCost)
                         {
                             var goodProp = ga.GetType().GetProperty("GoodId") ?? ga.GetType().GetProperty("Id");
                             var amtProp = ga.GetType().GetProperty("Amount");
                             if (goodProp != null && amtProp != null)
-                                costs.Add(new { good = goodProp.GetValue(ga)?.ToString(), amount = amtProp.GetValue(ga) });
+                            {
+                                if (!hasCost) { jw.Key("cost").OpenArr(); hasCost = true; }
+                                jw.OpenObj().Key("good").Str(goodProp.GetValue(ga)?.ToString()).Key("amount").Int((int)amtProp.GetValue(ga)).CloseObj();
+                            }
                         }
+                        if (hasCost) jw.CloseArr();
                     }
-                    catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
-                    if (costs.Count > 0)
-                        entry["cost"] = costs;
+                    catch (System.Exception _ex) { TimberbotLog.Error("prefabs.cost", _ex); }
                 }
-
-                results.Add(entry);
+                jw.CloseObj();
             }
-            return results;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // remove a building from the world
@@ -378,7 +369,7 @@ namespace Timberbot
             }
 
             var orientNames = new[] { "south", "west", "north", "east" };
-            var results = new List<object>();
+            var results = new List<(int x, int y, int z, int orient, bool pathAccess, int pathCount, bool reachable, bool nearPower, bool flooded)>();
 
             // PERF: create ONE preview, reuse with Reposition for each candidate
             var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
@@ -510,13 +501,7 @@ namespace Timberbot
                                 catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
                             }
 
-                        results.Add(new { x = tx, y = ty, z = tz,
-                                          orientation = orientNames[bestOrient],
-                                          pathAccess = bestPathCount > 0,
-                                          pathCount = bestPathCount,
-                                          reachable,
-                                          nearPower,
-                                          flooded });
+                        results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded));
                     }
                 }
             }
@@ -524,23 +509,11 @@ namespace Timberbot
             // sort: non-flooded > reachable > path access > power > path count
             results.Sort((a, b) =>
             {
-                var aType = a.GetType();
-                var bType = b.GetType();
-                bool fa = (bool)aType.GetProperty("flooded").GetValue(a);
-                bool fb = (bool)bType.GetProperty("flooded").GetValue(b);
-                if (fa != fb) return fa ? 1 : -1;
-                bool ra = (bool)aType.GetProperty("reachable").GetValue(a);
-                bool rb = (bool)bType.GetProperty("reachable").GetValue(b);
-                if (ra != rb) return rb ? 1 : -1;
-                bool pa = (bool)aType.GetProperty("pathAccess").GetValue(a);
-                bool pb = (bool)bType.GetProperty("pathAccess").GetValue(b);
-                if (pa != pb) return pb ? 1 : -1;
-                bool pwa = (bool)aType.GetProperty("nearPower").GetValue(a);
-                bool pwb = (bool)bType.GetProperty("nearPower").GetValue(b);
-                if (pwa != pwb) return pwb ? 1 : -1;
-                int ca = (int)aType.GetProperty("pathCount").GetValue(a);
-                int cb = (int)bType.GetProperty("pathCount").GetValue(b);
-                return cb - ca;
+                if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
+                if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
+                if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
+                if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
+                return b.pathCount - a.pathCount;
             });
 
             } // end try
@@ -550,10 +523,27 @@ namespace Timberbot
                     UnityEngine.Object.Destroy(cachedPreview.GameObject);
             }
 
-            if (results.Count > 10) results = results.GetRange(0, 10);
+            int count = results.Count > 10 ? 10 : results.Count;
 
-            return new { prefab = prefabName, sizeX = size.x, sizeY = size.y,
-                         placements = results };
+            var jw = _jw.Reset().OpenObj()
+                .Key("prefab").Str(prefabName)
+                .Key("sizeX").Int(size.x).Key("sizeY").Int(size.y)
+                .Key("placements").OpenArr();
+            for (int i = 0; i < count; i++)
+            {
+                var r = results[i];
+                jw.OpenObj()
+                    .Key("x").Int(r.x).Key("y").Int(r.y).Key("z").Int(r.z)
+                    .Key("orientation").Str(orientNames[r.orient])
+                    .Key("pathAccess").Bool(r.pathAccess)
+                    .Key("pathCount").Int(r.pathCount)
+                    .Key("reachable").Bool(r.reachable)
+                    .Key("nearPower").Bool(r.nearPower)
+                    .Key("flooded").Bool(r.flooded)
+                    .CloseObj();
+            }
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
         }
 
         // place with full validation before calling Place():

@@ -141,25 +141,26 @@ namespace Timberbot
                 }
             }
 
-            var tiles = new List<object>();
+            var jw = _jw.Reset().OpenObj();
+            jw.Key("mapSize").OpenObj().Key("x").Int(size.x).Key("y").Int(size.y).Key("z").Int(size.z).CloseObj();
+            jw.Key("region").OpenObj().Key("x1").Int(x1).Key("y1").Int(y1).Key("x2").Int(x2).Key("y2").Int(y2).CloseObj();
+            jw.Key("tiles").OpenArr();
             for (int x = x1; x <= x2; x++)
             {
                 for (int y = y1; y <= y2; y++)
                 {
                     var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
                     var columnCount = _terrainMap.ColumnCounts[index2D];
-
                     int terrainHeight = 0;
                     if (columnCount > 0)
                     {
                         var topIndex = index2D + (columnCount - 1) * stride;
                         terrainHeight = _terrainMap.GetColumnCeiling(topIndex);
                     }
-
                     float waterHeight = 0f;
                     float waterContamination = 0f;
                     var waterCoord = new Vector3Int(x, y, terrainHeight);
-                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
+                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("map.water", _ex); }
                     try
                     {
                         int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
@@ -168,65 +169,37 @@ namespace Timberbot
                         {
                             int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
                             var col = _waterMap.WaterColumns[wIdx3D];
-                            if (col.WaterDepth > 0 && col.Contamination > 0)
-                            {
-                                waterContamination = col.Contamination;
-                                break;
-                            }
+                            if (col.WaterDepth > 0 && col.Contamination > 0) { waterContamination = col.Contamination; break; }
                         }
                     }
-                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
+                    catch (System.Exception _ex) { TimberbotLog.Error("map.badwater", _ex); }
 
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occList);
-                    bool isEntrance = entrances.Contains(key);
-                    bool isSeedling = seedlings.Contains(key);
 
-                    var tile = new Dictionary<string, object>
-                    {
-                        ["x"] = x, ["y"] = y,
-                        ["terrain"] = terrainHeight,
-                        ["water"] = waterHeight
-                    };
-                    if (waterContamination > 0)
-                        tile["badwater"] = Math.Round(waterContamination, 2);
+                    jw.OpenObj().Key("x").Int(x).Key("y").Int(y).Key("terrain").Int(terrainHeight).Key("water").Float(waterHeight, "F1");
+                    if (waterContamination > 0) jw.Key("badwater").Float((float)Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
                         if (occList.Count == 1)
-                            tile["occupant"] = occList[0].name;
+                            jw.Key("occupant").Str(occList[0].name);
                         else
                         {
-                            var stacked = new List<object>(occList.Count);
-                            foreach (var o in occList)
-                                stacked.Add(new Dictionary<string, object> { ["name"] = o.name, ["z"] = o.z });
-                            tile["occupants"] = stacked;
+                            jw.Key("occupants").OpenArr();
+                            foreach (var o in occList) jw.OpenObj().Key("name").Str(o.name).Key("z").Int(o.z).CloseObj();
+                            jw.CloseArr();
                         }
                     }
-                    if (isEntrance) tile["entrance"] = true;
-                    if (isSeedling) tile["seedling"] = true;
-                    if (deadTiles.Contains(key)) tile["dead"] = true;
-                    try
-                    {
-                        if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)))
-                            tile["contaminated"] = true;
-                    }
-                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
-                    try
-                    {
-                        if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)))
-                            tile["moist"] = true;
-                    }
-                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
-                    tiles.Add(tile);
+                    if (entrances.Contains(key)) jw.Key("entrance").Bool(true);
+                    if (seedlings.Contains(key)) jw.Key("seedling").Bool(true);
+                    if (deadTiles.Contains(key)) jw.Key("dead").Bool(true);
+                    try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Key("contaminated").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                    try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Key("moist").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    jw.CloseObj();
                 }
             }
-
-            return new
-            {
-                mapSize = new { x = size.x, y = size.y, z = size.z },
-                region = new { x1, y1, x2, y2 },
-                tiles
-            };
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
         }
 
         // ================================================================
@@ -585,44 +558,35 @@ namespace Timberbot
         // find valid planting spots in an area or within a building's range
         public object FindPlantingSpots(string crop, int buildingId, int x1, int y1, int x2, int y2, int z)
         {
-            var spots = new List<object>();
-
             if (buildingId != 0)
             {
-                // building mode: get planting coords from building's InRangePlantingCoordinates
                 var ec = FindEntity(buildingId);
-                if (ec == null)
-                    return new { error = "building not found", id = buildingId };
-
+                if (ec == null) return new { error = "building not found", id = buildingId };
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
-                if (inRange == null)
-                    return new { error = "building has no planting range", id = buildingId };
+                if (inRange == null) return new { error = "building has no planting range", id = buildingId };
 
+                var jw = _jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
                 foreach (var c in inRange.GetCoordinates())
                 {
                     if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
-                    bool moist = _soilMoistureService.SoilIsMoist(c);
-                    bool planted = _plantingService.IsResourceAt(c);
-                    spots.Add(new { x = c.x, y = c.y, z = c.z, moist, planted });
+                    jw.OpenObj().Key("x").Int(c.x).Key("y").Int(c.y).Key("z").Int(c.z).Key("moist").Bool(_soilMoistureService.SoilIsMoist(c)).Key("planted").Bool(_plantingService.IsResourceAt(c)).CloseObj();
                 }
+                jw.CloseArr().CloseObj();
+                return jw.ToString();
             }
             else
             {
-                // area mode: scan rectangle
+                var jw = _jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
                 for (int x = Mathf.Min(x1, x2); x <= Mathf.Max(x1, x2); x++)
-                {
                     for (int y = Mathf.Min(y1, y2); y <= Mathf.Max(y1, y2); y++)
                     {
                         var c = new Vector3Int(x, y, z);
                         if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
-                        bool moist = _soilMoistureService.SoilIsMoist(c);
-                        bool planted = _plantingService.IsResourceAt(c);
-                        spots.Add(new { x, y, z, moist, planted });
+                        jw.OpenObj().Key("x").Int(x).Key("y").Int(y).Key("z").Int(z).Key("moist").Bool(_soilMoistureService.SoilIsMoist(c)).Key("planted").Bool(_plantingService.IsResourceAt(c)).CloseObj();
                     }
-                }
+                jw.CloseArr().CloseObj();
+                return jw.ToString();
             }
-
-            return new { crop, spots };
         }
 
         public object UnmarkPlanting(int x1, int y1, int x2, int y2, int z)
@@ -657,22 +621,18 @@ namespace Timberbot
         // ================================================================
         public object CollectScience()
         {
-            var unlockables = new List<object>();
+            var jw = _jw.Reset().OpenObj().Key("points").Int(_scienceService.SciencePoints);
+            jw.Key("unlockables").OpenArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var bs = building.GetSpec<BuildingSpec>();
                 if (bs == null || bs.ScienceCost <= 0) continue;
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                 var name = templateSpec?.TemplateName ?? "unknown";
-                var unlocked = _buildingUnlockingService.Unlocked(bs);
-                unlockables.Add(new { name, cost = bs.ScienceCost, unlocked });
+                jw.OpenObj().Key("name").Str(name).Key("cost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs)).CloseObj();
             }
-
-            return new
-            {
-                points = _scienceService.SciencePoints,
-                unlockables
-            };
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
         }
 
         // unlock via ToolUnlockingService.TryToUnlock -- matches the exact UI flow
@@ -775,31 +735,20 @@ namespace Timberbot
                 }
 
                 // build output
-                var categories = new List<object>();
+                var jw = _jw.Reset().OpenObj().Key("beavers").Int(beaverCount).Key("categories").OpenArr();
                 foreach (var kvp in groupNeeds)
                 {
                     var groupId = kvp.Key;
                     float avgCurrent = beaverCount > 0 ? groupTotals.GetValueOrDefault(groupId) / beaverCount : 0;
                     float avgMax = beaverCount > 0 ? groupMaxTotals.GetValueOrDefault(groupId) / beaverCount : 0;
-
-                    var needs = new List<object>();
+                    jw.OpenObj().Key("group").Str(groupId).Key("current").Float((float)System.Math.Round(avgCurrent, 1), "F1").Key("max").Float((float)System.Math.Round(avgMax, 1), "F1");
+                    jw.Key("needs").OpenArr();
                     foreach (var ns in kvp.Value)
-                        needs.Add(new { id = ns.Id, favorableWellbeing = ns.FavorableWellbeing, unfavorableWellbeing = ns.UnfavorableWellbeing });
-
-                    categories.Add(new
-                    {
-                        group = groupId,
-                        current = System.Math.Round(avgCurrent, 1),
-                        max = System.Math.Round(avgMax, 1),
-                        needs
-                    });
+                        jw.OpenObj().Key("id").Str(ns.Id).Key("favorableWellbeing").Float(ns.FavorableWellbeing, "F1").Key("unfavorableWellbeing").Float(ns.UnfavorableWellbeing, "F1").CloseObj();
+                    jw.CloseArr().CloseObj();
                 }
-
-                return new
-                {
-                    beavers = beaverCount,
-                    categories
-                };
+                jw.CloseArr().CloseObj();
+                return jw.ToString();
             }
             catch (System.Exception ex)
             {
@@ -809,54 +758,35 @@ namespace Timberbot
 
         public object CollectNotifications()
         {
-            var results = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             try
             {
                 foreach (var n in _notificationSaver.Notifications)
-                {
-                    results.Add(new
-                    {
-                        subject = n.Subject,
-                        description = n.Description,
-                        cycle = n.Cycle,
-                        cycleDay = n.CycleDay
-                    });
-                }
+                    jw.OpenObj().Key("subject").Str(n.Subject.ToString()).Key("description").Str(n.Description.ToString()).Key("cycle").Int(n.Cycle).Key("cycleDay").Int(n.CycleDay).CloseObj();
             }
-            catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
-            return results;
+            catch (System.Exception _ex) { TimberbotLog.Error("notifications", _ex); }
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         public object CollectDistribution()
         {
-            var results = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
                 if (distSetting == null) continue;
-
-                var goods = new List<object>();
+                jw.OpenObj().Key("district").Str(dc.DistrictName).Key("goods").OpenArr();
                 try
                 {
                     foreach (var gs in distSetting.GoodDistributionSettings)
-                    {
-                        goods.Add(new
-                        {
-                            good = gs.GoodId,
-                            importOption = gs.ImportOption.ToString(),
-                            exportThreshold = gs.ExportThreshold
-                        });
-                    }
+                        jw.OpenObj().Key("good").Str(gs.GoodId).Key("importOption").Str(gs.ImportOption.ToString()).Key("exportThreshold").Float(gs.ExportThreshold, "F0").CloseObj();
                 }
-                catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
-
-                results.Add(new
-                {
-                    district = dc.DistrictName,
-                    goods
-                });
+                catch (System.Exception _ex) { TimberbotLog.Error("distribution", _ex); }
+                jw.CloseArr().CloseObj();
             }
-            return results;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // set import/export settings for a good in a district

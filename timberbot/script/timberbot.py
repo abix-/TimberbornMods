@@ -239,31 +239,31 @@ class Timberbot:
 
     def set_priority(self, building_id, priority, type=""):
         """Set building priority. Values: VeryLow, Normal, VeryHigh. Type: workplace (finished) or construction (building)."""
-        return self._post("/api/priority", {"id": building_id, "priority": priority, "type": type})
+        return self._post("/api/building/priority", {"id": building_id, "priority": priority, "type": type})
 
     def set_haul_priority(self, building_id, prioritized=True):
         """Set hauler priority on a building. Haulers will deliver goods here first."""
-        return self._post("/api/hauling/priority", {"id": building_id, "prioritized": prioritized})
+        return self._post("/api/building/hauling", {"id": building_id, "prioritized": prioritized})
 
     def set_recipe(self, building_id, recipe):
         """Set manufactory recipe. Use 'none' to clear. Lists available recipes on error."""
-        return self._post("/api/recipe", {"id": building_id, "recipe": recipe})
+        return self._post("/api/building/recipe", {"id": building_id, "recipe": recipe})
 
     def set_farmhouse_action(self, building_id, action):
         """Set farmhouse priority action: 'planting' or 'harvesting'."""
-        return self._post("/api/farmhouse/action", {"id": building_id, "action": action})
+        return self._post("/api/building/farmhouse", {"id": building_id, "action": action})
 
     def set_plantable_priority(self, building_id, plantable):
         """Set prioritized plantable on forester/gatherer. Use 'none' to clear."""
-        return self._post("/api/plantable/priority", {"id": building_id, "plantable": plantable})
+        return self._post("/api/building/plantable", {"id": building_id, "plantable": plantable})
 
     def set_workers(self, building_id, count):
         """Set desired worker count (0 to maxWorkers)."""
-        return self._post("/api/workers", {"id": building_id, "count": count})
+        return self._post("/api/building/workers", {"id": building_id, "count": count})
 
     def set_floodgate(self, building_id, height):
         """Set floodgate height (clamped to min/max)."""
-        return self._post("/api/floodgate", {"id": building_id, "height": height})
+        return self._post("/api/building/floodgate", {"id": building_id, "height": height})
 
     def debug(self, target="help", **kwargs):
         """Debug inspect game internals. Targets: help, fields, inspect, preview, entity. Pass extra key:value args."""
@@ -331,7 +331,7 @@ class Timberbot:
 
     def place_path(self, x1, y1, x2, y2, z=0):
         """Route a straight-line path with auto-stairs at z-level changes. z param ignored (auto-detected)."""
-        return self._post("/api/path/route", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return self._post("/api/path/place", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     # -- helpers --
 

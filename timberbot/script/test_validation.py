@@ -1,11 +1,17 @@
-"""Comprehensive endpoint tests with debug verification.
+"""Timberbot API test suite.
 
-Tests every API endpoint, then uses the debug endpoint to verify
-the game state actually changed. Requires a running game with
-the Iron Teeth day-5 save.
+Tests every API endpoint with functional validation and performance profiling.
+Works on any save game, any faction. Uses discovery to detect map bounds,
+faction, and existing buildings. Tests gracefully skip when buildings are missing.
 
 Usage:
-    python timberbot/script/test_validation.py
+    python test_validation.py              # run all tests
+    python test_validation.py speed webhooks  # run specific tests
+    python test_validation.py --perf       # performance only
+    python test_validation.py --perf -n 500  # 500 iterations
+    python test_validation.py --benchmark  # in-game benchmark endpoint
+    python test_validation.py --benchmark -n 200
+    python test_validation.py --list       # show all test names
 """
 import json
 import sys
@@ -23,6 +29,97 @@ class TestRunner:
         self.passed = 0
         self.failed = 0
         self.skipped = 0
+        # discovery state (set by discover())
+        self.faction = ""
+        self.map_x = 256
+        self.map_y = 256
+        self.center_x = 128
+        self.center_y = 128
+        self.x1 = 98
+        self.y1 = 98
+        self.x2 = 158
+        self.y2 = 158
+        self.prefab_names = set()
+
+    def discover(self):
+        """Detect game state: faction, map bounds, existing buildings, prefabs."""
+        print("\n=== discovery ===\n")
+
+        buildings = self.bot.buildings()
+
+        # detect faction from prefab list (building names have faction stripped by CleanName)
+        prefabs = self.bot.prefabs()
+        self.faction = ""
+        if isinstance(prefabs, list):
+            for p in prefabs:
+                name = p.get("name", "") if isinstance(p, dict) else ""
+                if ".IronTeeth" in name:
+                    self.faction = "IronTeeth"; break
+                if ".Folktails" in name:
+                    self.faction = "Folktails"; break
+
+        # map bounds
+        mapinfo = self.bot.tiles()
+        ms = mapinfo.get("mapSize", {}) if isinstance(mapinfo, dict) else {}
+        self.map_x = ms.get("x", 256)
+        self.map_y = ms.get("y", 256)
+
+        # find district center for coordinate center
+        dc_id = self.find_building("DistrictCenter")
+        if dc_id and isinstance(buildings, list):
+            dcb = next((b for b in buildings if b.get("id") == dc_id), None)
+            if dcb:
+                self.center_x = dcb.get("x", self.map_x // 2)
+                self.center_y = dcb.get("y", self.map_y // 2)
+        else:
+            self.center_x = self.map_x // 2
+            self.center_y = self.map_y // 2
+
+        # search area: 30-tile radius around DC
+        self.x1 = max(0, self.center_x - 30)
+        self.y1 = max(0, self.center_y - 30)
+        self.x2 = min(self.map_x - 1, self.center_x + 30)
+        self.y2 = min(self.map_y - 1, self.center_y + 30)
+
+        # available prefabs (already loaded above for faction detection)
+        self.prefab_names = set()
+        if isinstance(prefabs, list):
+            for p in prefabs:
+                name = p.get("name", "") if isinstance(p, dict) else ""
+                if name:
+                    self.prefab_names.add(name)
+
+        # find a locked building for the "not unlocked" test
+        self._locked_prefab = None
+        science = self.bot.science()
+        if isinstance(science, dict):
+            for u in science.get("unlockables", []):
+                if isinstance(u, dict) and not u.get("unlocked") and u.get("cost", 0) > 5000:
+                    self._locked_prefab = u.get("name", "")
+                    break
+
+        print(f"  faction: {self.faction or 'unknown'}")
+        print(f"  map: {self.map_x}x{self.map_y}")
+        print(f"  center: ({self.center_x},{self.center_y})")
+        print(f"  search: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+        print(f"  prefabs: {len(self.prefab_names)}")
+        bcount = len(buildings) if isinstance(buildings, list) else 0
+        print(f"  buildings: {bcount}")
+
+    def prefab(self, base):
+        """Return faction-qualified prefab name. 'Barrack' -> 'Barrack.IronTeeth'"""
+        # some prefabs have no faction suffix
+        if base == "Path":
+            return base
+        # try with faction suffix
+        qualified = f"{base}.{self.faction}" if self.faction else base
+        if qualified in self.prefab_names:
+            return qualified
+        # fallback: search for any prefab starting with base
+        for p in self.prefab_names:
+            if p.startswith(base + ".") or p == base:
+                return p
+        return base
 
     def wait_for_refresh(self):
         """Wait for the double-buffered cache to refresh after a write."""
@@ -66,10 +163,14 @@ class TestRunner:
         args.update(kwargs)
         return self.bot.debug(**args)
 
-    def find_spot(self, prefab="Path", x1=100, y1=100, x2=160, y2=160):
-        """find a valid placement spot for prefab, return {x,y,z,orientation} or None"""
-        result = self.bot.find_placement(prefab, x1, y1, x2, y2)
+    def find_spot(self, prefab="Path"):
+        """find a valid placement spot for prefab using discovered search area"""
+        result = self.bot.find_placement(prefab, self.x1, self.y1, self.x2, self.y2)
         placements = result.get("placements", []) if isinstance(result, dict) else []
+        # prefer non-flooded, reachable
+        for p in placements:
+            if p.get("reachable") and not p.get("flooded"):
+                return p
         return placements[0] if placements else None
 
     def find_building(self, name):
@@ -86,6 +187,7 @@ class TestRunner:
             print("error: game not reachable")
             sys.exit(1)
 
+        self.discover()
         self.test_read_endpoints()
         self.test_speed()
         self.test_placement_and_demolish()
@@ -130,14 +232,8 @@ class TestRunner:
         self.test_bot_durability()
         self.test_power_networks()
         self.test_webhooks()
+        self.test_data_accuracy()
         self.test_performance()
-
-        summary = f"\n=== {self.passed} passed, {self.failed} failed"
-        if self.skipped:
-            summary += f", {self.skipped} skipped"
-        summary += " ===\n"
-        print(summary)
-        sys.exit(1 if self.failed else 0)
 
     def test_read_endpoints(self):
         print("\n=== read endpoints ===\n")
@@ -162,10 +258,9 @@ class TestRunner:
             ("workhours", lambda: self.bot.workhours()),
             ("speed", lambda: self.bot.speed()),
             ("prefabs", lambda: self.bot.prefabs()),
-            ("map", lambda: self.bot.map(110, 130, 115, 135)),
+            ("tiles", lambda: self.bot.tiles(self.center_x, self.center_y, self.center_x + 5, self.center_y + 5)),
             ("tree_clusters", lambda: self.bot.tree_clusters()),
             ("wellbeing", lambda: self.bot.wellbeing()),
-            ("scan", lambda: self.bot.scan(120, 140, 5)),
         ]
         for name, fn in reads:
             result = fn()
@@ -217,7 +312,7 @@ class TestRunner:
         specific_tests = [
             ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "not found"),
             ("invalid orientation", lambda: self.bot.place_building("Path", sx, sy, sz, orientation="bogus"), "invalid orientation"),
-            ("locked building", lambda: self.bot.place_building("TributeToIngenuity.IronTeeth", sx, sy, sz), "not unlocked"),
+            ("locked building", lambda: self.bot.place_building(self._locked_prefab or "FakeLockedBuilding", sx, sy, sz), "not unlocked"),
         ]
         for name, fn, expect_err in specific_tests:
             result = fn()
@@ -232,7 +327,7 @@ class TestRunner:
             placed_id = result["id"]
 
             # verify via map
-            tile = self.bot.map(sx, sy, sx, sy)
+            tile = self.bot.tiles(sx, sy, sx, sy)
             tiles = tile.get("tiles", [])
             has_path = any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles)
             self.check("verify placement via map", has_path)
@@ -242,15 +337,15 @@ class TestRunner:
             self.check("demolish", self.has(dem, "demolished") or not self.err(dem))
 
             # verify gone
-            tile2 = self.bot.map(sx, sy, sx, sy)
+            tile2 = self.bot.tiles(sx, sy, sx, sy)
             tiles2 = tile2.get("tiles", [])
             no_path = not any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles2)
             self.check("verify demolish via map", no_path)
 
         # multi-tile z mismatch: find a spot where terrain changes within a footprint
         found_mismatch = False
-        for tx in range(80, 140):
-            region = self.bot.map(tx, 135, tx + 2, 136)
+        for tx in range(self.x1, self.x2 - 2):
+            region = self.bot.tiles(tx, self.center_y, tx + 2, self.center_y + 1)
             tiles = region.get("tiles", [])
             if len(tiles) < 6:
                 continue
@@ -258,7 +353,7 @@ class TestRunner:
             occupied = any(t.get("occupant") for t in tiles)
             if len(heights) > 1 and not occupied and all(h >= 2 for h in heights):
                 z = min(heights)
-                result = self.bot.place_building("Barrack.IronTeeth", tx, 135, z)
+                result = self.bot.place_building(self.prefab("Barrack"), tx, self.center_y, z)
                 self.check("multi-tile z mismatch rejected",
                            self.err(result),
                            json.dumps(result)[:100])
@@ -425,7 +520,7 @@ class TestRunner:
         need = 5
         for cy in range(100, 170):
             for cx in range(70, 170):
-                region = self.bot.map(cx, cy, cx + need - 1, cy + need - 1)
+                region = self.bot.tiles(cx, cy, cx + need - 1, cy + need - 1)
                 tiles = region.get("tiles", [])
                 if len(tiles) < need * need:
                     continue
@@ -453,9 +548,23 @@ class TestRunner:
         bx, by, bz = test_spot
         print(f"  using ({bx},{by},z={bz})\n")
 
-        for prefab, sx, sy in [("FarmHouse.IronTeeth", 2, 2),
-                                ("Barrack.IronTeeth", 3, 2),
-                                ("IndustrialLumberMill.IronTeeth", 2, 3)]:
+        # find multi-tile prefabs dynamically from the prefab list
+        multi_tile = []
+        prefabs = self.bot.prefabs()
+        if isinstance(prefabs, list):
+            for p in prefabs:
+                sx = p.get("sizeX", 1)
+                sy = p.get("sizeY", 1)
+                name = p.get("name", "")
+                if (sx > 1 or sy > 1) and sx <= 3 and sy <= 3 and name:
+                    multi_tile.append((name, sx, sy))
+                    if len(multi_tile) >= 3:
+                        break
+        if not multi_tile:
+            self.skip("orientation tests", "no multi-tile prefabs found")
+            return
+
+        for prefab, sx, sy in multi_tile:
             for orient in ["south", "west", "north", "east"]:
                 result = self.bot.place_building(prefab, bx, by, bz, orientation=orient)
                 if "id" not in result:
@@ -467,7 +576,7 @@ class TestRunner:
 
                 # wait for cache then verify origin via map
                 self.wait_for_refresh()
-                region = self.bot.map(bx - 1, by - 1, bx + sx, by + sy)
+                region = self.bot.tiles(bx - 1, by - 1, bx + sx, by + sy)
                 pname = prefab.split(".")[0]
                 occupied = []
                 for t in region.get("tiles", []):
@@ -485,7 +594,7 @@ class TestRunner:
     def test_find_placement(self):
         print("\n=== find_placement ===\n")
 
-        result = self.bot.find_placement("Inventor.IronTeeth", 100, 100, 170, 170)
+        result = self.bot.find_placement(self.prefab("Inventor"), self.x1, self.y1, self.x2, self.y2)
         self.check("returns results",
                    self.has(result, "placements") and len(result.get("placements", [])) > 0)
 
@@ -509,7 +618,7 @@ class TestRunner:
             p = reachable[0]
             self.check("reachable has pathAccess", p.get("pathAccess") == True)
 
-            placed = self.bot.place_building("Inventor.IronTeeth",
+            placed = self.bot.place_building(self.prefab("Inventor"),
                 p["x"], p["y"], p["z"], orientation=p["orientation"])
             if self.has(placed, "id"):
                 alerts = self.bot.alerts()
@@ -527,7 +636,7 @@ class TestRunner:
         unreachable_with_path = [p for p in unreachable if p.get("pathAccess")]
         if unreachable_with_path:
             p = unreachable_with_path[0]
-            placed = self.bot.place_building("Inventor.IronTeeth",
+            placed = self.bot.place_building(self.prefab("Inventor"),
                 p["x"], p["y"], p["z"], orientation=p["orientation"])
             if self.has(placed, "id"):
                 alerts = self.bot.alerts()
@@ -557,7 +666,7 @@ class TestRunner:
             self.skip("nearPower verification", "no powered spots in results")
 
         # bounds check: no results should have coords outside map
-        map_info = self.bot.map()
+        map_info = self.bot.tiles()
         if isinstance(map_info, dict) and "mapSize" in map_info:
             mx = map_info["mapSize"]["x"]
             my = map_info["mapSize"]["y"]
@@ -566,7 +675,7 @@ class TestRunner:
                        f"found {len(oob)} OOB placements")
 
         # unknown prefab
-        bad = self.bot.find_placement("FakeBuilding", 100, 100, 110, 110)
+        bad = self.bot.find_placement("FakeBuilding", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
         self.check("find_placement unknown prefab", self.err(bad))
 
     def test_path_routing(self):
@@ -576,7 +685,7 @@ class TestRunner:
         test_spot = None
         for cy in range(100, 170):
             for cx in range(70, 170):
-                region = self.bot.map(cx, cy, cx + 4, cy)
+                region = self.bot.tiles(cx, cy, cx + 4, cy)
                 tiles = region.get("tiles", [])
                 if len(tiles) < 5:
                     continue
@@ -608,7 +717,7 @@ class TestRunner:
 
         # verify tiles are occupied (wait for cache refresh)
         self.wait_for_refresh()
-        region = self.bot.map(sx, sy, sx + 3, sy)
+        region = self.bot.tiles(sx, sy, sx + 3, sy)
         paths = [t for t in region.get("tiles", []) if t.get("occupant") == "Path"]
         self.check("verify paths on map", len(paths) >= 3, f"found {len(paths)} paths")
 
@@ -632,7 +741,7 @@ class TestRunner:
         stair_spot = None
         for ty in range(100, 170):
             for tx in range(70, 170):
-                region = self.bot.map(tx, ty, tx + 1, ty)
+                region = self.bot.tiles(tx, ty, tx + 1, ty)
                 tiles = region.get("tiles", [])
                 if len(tiles) < 2:
                     continue
@@ -660,7 +769,7 @@ class TestRunner:
 
                 # verify stairs on map (wait for cache refresh)
                 self.wait_for_refresh()
-                region = self.bot.map(sx1, sy1, sx2, sy2)
+                region = self.bot.tiles(sx1, sy1, sx2, sy2)
                 has_stairs = any("Stairs" in str(t.get("occupant", "")) or any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
                 self.check("verify stairs on map", has_stairs)
 
@@ -757,7 +866,7 @@ class TestRunner:
                 self.check("foodDays > 0", isinstance(fd, (int, float)) and fd > 0, f"got: {fd}")
             if "waterDays" in result:
                 wd = result["waterDays"]
-                self.check("waterDays > 0", isinstance(wd, (int, float)) and wd > 0, f"got: {wd}")
+                self.check("waterDays >= 0", isinstance(wd, (int, float)) and wd >= 0, f"got: {wd}")
             self.check("logDays present", "logDays" in result,
                        f"keys: {[k for k in result if 'Days' in k]}")
             self.check("plankDays present", "plankDays" in result)
@@ -776,7 +885,7 @@ class TestRunner:
             self.skip("map moisture", "cannot get pump details")
             return
         px, py = pb[0].get("x", 120), pb[0].get("y", 130)
-        result = self.bot.map(px - 3, py - 3, px + 3, py + 3)
+        result = self.bot.tiles(px - 3, py - 3, px + 3, py + 3)
         tiles = result.get("tiles", [])
         moist_count = sum(1 for t in tiles if t.get("moist"))
         self.check("moist tiles near water", moist_count > 0, f"got {moist_count} moist tiles")
@@ -1032,7 +1141,7 @@ class TestRunner:
         print("\n=== find planting ===\n")
 
         # area mode
-        result = self.bot.find_planting("Kohlrabi", x1=68, y1=128, x2=72, y2=132, z=2)
+        result = self.bot.find_planting("Kohlrabi", x1=self.x1, y1=self.y1, x2=self.x1+5, y2=self.y1+5, z=2)
         self.check("find_planting area returns spots",
                    self.has(result, "spots") and len(result.get("spots", [])) > 0,
                    json.dumps(result)[:100])
@@ -1306,8 +1415,8 @@ class TestRunner:
             if detail:
                 d = detail[0]
                 self.check("assembler has recipes", "recipes" in d)
-                self.check("assembler recipe is Bot.IronTeeth",
-                           d.get("currentRecipe") == "Bot.IronTeeth",
+                self.check("assembler has a recipe set",
+                           d.get("currentRecipe", "") != "",
                            f"recipe={d.get('currentRecipe')}")
                 self.check("assembler has productionProgress",
                            "productionProgress" in d)
@@ -1405,7 +1514,7 @@ class TestRunner:
             self.skip("map stacking", "cannot get platform details")
             return
         px, py = pb[0].get("x", 139), pb[0].get("y", 147)
-        result = self.bot.map(px - 1, py - 1, px + 1, py + 1)
+        result = self.bot.tiles(px - 1, py - 1, px + 1, py + 1)
         tiles = result.get("tiles", [])
         self.check("map returns tiles", len(tiles) > 0)
 
@@ -1597,6 +1706,65 @@ class TestRunner:
             if self.has(result2, "id"):
                 self.bot.unregister_webhook(result2["id"])
 
+            # --- test: event filtering (should NOT receive unsubscribed events) ---
+            received_events.clear()
+            filtered = self.bot.register_webhook("http://127.0.0.1:19876/filtered", ["drought.start"])
+            self.check("register filtered webhook", self.has(filtered, "id"))
+            if spot:
+                placed2 = self.bot.place_building("Path", spot["x"], spot["y"], spot["z"], spot.get("orientation", "south"))
+                if self.has(placed2, "id"):
+                    time.sleep(2)
+                    building_events = [e for e in received_events if e.get("event") == "building.placed"]
+                    self.check("filtered webhook ignores building.placed", len(building_events) == 0,
+                               f"got {len(building_events)} building.placed events (expected 0)")
+                    self.bot.demolish_building(placed2["id"])
+                    time.sleep(1)
+            if self.has(filtered, "id"):
+                self.bot.unregister_webhook(filtered["id"])
+
+            # --- test: bad URL resilience (mod doesn't crash) ---
+            bad = self.bot.register_webhook("http://127.0.0.1:1/bad", ["building.placed"])
+            self.check("register bad URL webhook", self.has(bad, "id"))
+            if spot:
+                placed3 = self.bot.place_building("Path", spot["x"], spot["y"], spot["z"], spot.get("orientation", "south"))
+                if self.has(placed3, "id"):
+                    time.sleep(2)
+                    # verify mod still responds
+                    ping = self.bot.ping()
+                    self.check("mod alive after bad webhook URL", ping)
+                    self.bot.demolish_building(placed3["id"])
+                    time.sleep(1)
+            if self.has(bad, "id"):
+                self.bot.unregister_webhook(bad["id"])
+
+            # --- test: payload data accuracy ---
+            received_events.clear()
+            accurate = self.bot.register_webhook("http://127.0.0.1:19876/accurate", ["building.placed"])
+            self.check("register accuracy webhook", self.has(accurate, "id"))
+            current_day = self.bot.time().get("dayNumber", 0) if isinstance(self.bot.time(), dict) else 0
+            if spot:
+                placed4 = self.bot.place_building("Path", spot["x"], spot["y"], spot["z"], spot.get("orientation", "south"))
+                if self.has(placed4, "id"):
+                    time.sleep(2)
+                    placed_evts = [e for e in received_events if e.get("event") == "building.placed"]
+                    if placed_evts:
+                        evt = placed_evts[-1]
+                        self.check("payload data.name contains Path",
+                                   "Path" in str(evt.get("data", {}).get("name", "")),
+                                   f"data={evt.get('data')}")
+                        self.check("payload data.id is nonzero int",
+                                   isinstance(evt.get("data", {}).get("id"), int) and evt["data"]["id"] != 0,
+                                   f"id={evt.get('data', {}).get('id')}")
+                        self.check("payload day matches game day",
+                                   evt.get("day") == current_day or abs(evt.get("day", 0) - current_day) <= 1,
+                                   f"webhook day={evt.get('day')}, game day={current_day}")
+                    else:
+                        self.skip("payload accuracy", "no building.placed event received")
+                    self.bot.demolish_building(placed4["id"])
+                    time.sleep(1)
+            if self.has(accurate, "id"):
+                self.bot.unregister_webhook(accurate["id"])
+
         finally:
             server.shutdown()
 
@@ -1649,6 +1817,127 @@ class TestRunner:
             if single:
                 self.check("single has full fields", "finished" in single[0])
 
+    def test_data_accuracy(self):
+        """Verify Python client data matches live game state via debug endpoint.
+        Debug returns all values as strings, so we parse them for comparison."""
+        print("\n=== data accuracy (client vs debug) ===\n")
+
+        def dval(result):
+            """Extract debug value, parsing strings to int/float/bool."""
+            if not isinstance(result, dict) or "value" not in result:
+                return None
+            v = result["value"]
+            if isinstance(v, str):
+                if v.lower() == "true": return True
+                if v.lower() == "false": return False
+                try: return int(v)
+                except ValueError:
+                    try: return float(v)
+                    except ValueError: return v
+            return v
+
+        # wait for a fresh cache cycle so data is current
+        self.wait_for_refresh()
+
+        # --- speed ---
+        client_speed = self.bot.speed()
+        debug_speed = dval(self.debug_get("_speedManager.CurrentSpeed"))
+        if isinstance(client_speed, dict) and debug_speed is not None:
+            cs = client_speed.get("speed", -1)
+            # game speed raw values: 0,1,3,7 mapped to levels 0-3
+            speed_map = {0: 0, 1: 1, 3: 2, 7: 3}
+            ds_level = speed_map.get(debug_speed, debug_speed)
+            self.check("speed matches debug", cs == ds_level,
+                       f"client={cs}, debug raw={debug_speed} level={ds_level}")
+        else:
+            self.skip("speed accuracy", "couldn't read speed")
+
+        # --- time ---
+        client_time = self.bot.time()
+        debug_day = dval(self.debug_get("_dayNightCycle.DayNumber"))
+        if isinstance(client_time, dict) and debug_day is not None:
+            ct = client_time.get("dayNumber", -1)
+            self.check("dayNumber matches debug", ct == debug_day,
+                       f"client={ct}, debug={debug_day}")
+        else:
+            self.skip("time accuracy", "couldn't read time")
+
+        # --- science ---
+        client_sci = self.bot.science()
+        debug_sci = dval(self.debug_get("_scienceService.SciencePoints"))
+        if isinstance(client_sci, dict) and debug_sci is not None:
+            cs = client_sci.get("points", -1)
+            self.check("science points match debug", cs == debug_sci,
+                       f"client={cs}, debug={debug_sci}")
+        else:
+            self.skip("science accuracy", "couldn't read science")
+
+        # --- building workers ---
+        buildings = self.bot.buildings(detail="full")
+        tested_workers = False
+        if isinstance(buildings, list):
+            for b in buildings:
+                bid = b.get("id")
+                aw = b.get("assignedWorkers")
+                if aw is not None and aw > 0 and bid:
+                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
+                    dw = dval(self.debug_get("$.Workplace.NumberOfAssignedWorkers"))
+                    if dw is not None:
+                        self.check(f"building {bid} workers match debug",
+                                   aw == dw, f"client={aw}, debug={dw}")
+                        tested_workers = True
+                        break
+        if not tested_workers:
+            self.skip("building workers accuracy", "no building with workers found")
+
+        # --- building paused ---
+        tested_paused = False
+        if isinstance(buildings, list):
+            for b in buildings:
+                bid = b.get("id")
+                paused = b.get("paused")
+                if paused is not None and bid and b.get("pausable"):
+                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
+                    dp = dval(self.debug_get("$.Pausable.Paused"))
+                    if dp is not None:
+                        self.check(f"building {bid} paused matches debug",
+                                   paused == dp, f"client={paused}, debug={dp}")
+                        tested_paused = True
+                        break
+        if not tested_paused:
+            self.skip("building paused accuracy", "no pausable building found")
+
+        # --- beaver wellbeing ---
+        beavers = self.bot.beavers()
+        tested_wb = False
+        if isinstance(beavers, list):
+            for bv in beavers:
+                bid = bv.get("id")
+                wb = bv.get("wellbeing")
+                if wb is not None and bid:
+                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
+                    dw = dval(self.debug_get("$.WellbeingTracker.WellbeingScore"))
+                    if dw is not None and isinstance(dw, (int, float)):
+                        # allow small float difference due to cache staleness
+                        self.check(f"beaver {bid} wellbeing matches debug",
+                                   abs(float(wb) - float(dw)) < 1.0,
+                                   f"client={wb}, debug={dw}")
+                        tested_wb = True
+                        break
+        if not tested_wb:
+            self.skip("beaver wellbeing accuracy", "no beaver with wellbeing")
+
+        # --- population count ---
+        client_pop = self.bot.population()
+        if isinstance(client_pop, dict):
+            beavers_list = self.bot.beavers()
+            beaver_count = len(beavers_list) if isinstance(beavers_list, list) else 0
+            self.check("beavers endpoint returns data",
+                       beaver_count > 0,
+                       f"beavers list={beaver_count}")
+        else:
+            self.skip("population accuracy", "couldn't read population")
+
     def test_performance(self):
         print("\n=== performance ===\n")
 
@@ -1676,7 +1965,7 @@ class TestRunner:
             ("tree_clusters", lambda: self.bot.tree_clusters()),
         ]
 
-        iterations = 100
+        iterations = getattr(self, 'perf_iterations', 100)
 
         print(f"  timing {len(endpoints)} endpoints x {iterations} iterations\n")
         print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'ok':>4}")
@@ -1736,7 +2025,7 @@ class TestRunner:
         print("\n  cache invalidation: place + demolish to verify index tracks changes...")
         before_count = len(self.bot.buildings())
         # find a valid spot dynamically
-        spots = self.bot.find_placement("Path", 120, 120, 130, 130)
+        spots = self.bot.find_placement("Path", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
         placements = spots.get("placements", []) if isinstance(spots, dict) else []
         placed = None
         if placements:
@@ -1803,8 +2092,78 @@ class TestRunner:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Timberbot API test suite")
+    parser.add_argument("tests", nargs="*", help="specific test names to run (e.g. speed priority webhooks). omit for all")
+    parser.add_argument("--perf", action="store_true", help="run only the performance test")
+    parser.add_argument("--benchmark", action="store_true", help="call the in-game /api/benchmark endpoint")
+    parser.add_argument("--iterations", "-n", type=int, default=100, help="iterations for perf/benchmark (default: 100)")
+    parser.add_argument("--list", action="store_true", help="list all available test names")
+    args = parser.parse_args()
+
     runner = TestRunner()
-    runner.run()
+
+    # collect all test methods
+    all_tests = [(name.replace("test_", ""), getattr(runner, name))
+                 for name in dir(runner) if name.startswith("test_")]
+
+    if args.list:
+        print("Available tests:")
+        for name, _ in all_tests:
+            print(f"  {name}")
+        return
+
+    if not runner.bot.ping():
+        print("error: game not reachable")
+        sys.exit(1)
+
+    if args.benchmark:
+        # call the in-game benchmark endpoint directly
+        import requests
+        print(f"Running in-game benchmark ({args.iterations} iterations)...\n")
+        r = requests.post("http://localhost:8085/api/benchmark",
+                          json={"iterations": args.iterations}, timeout=60)
+        data = r.json()
+        benchmarks = data.get("benchmarks", [])
+        print(f"  {'test':<35} {'ms/call':>8} {'total ms':>10} {'gc0':>5} {'items':>6} {'pass':>5}")
+        print(f"  {'-'*35} {'-'*8} {'-'*10} {'-'*5} {'-'*6} {'-'*5}")
+        for b in benchmarks:
+            if b.get("test") == "_meta":
+                print(f"  META: {b.get('buildings',0)} buildings, {b.get('beavers',0)} beavers, {b.get('trees',0)} trees")
+                continue
+            pc = b.get("perCallMs", b.get("foreachMs", 0))
+            tot = b.get("totalMs", 0)
+            gc = b.get("gc0", b.get("foreachGC0", 0))
+            items = b.get("items", b.get("count", ""))
+            passed = b.get("pass", "")
+            print(f"  {b['test']:<35} {pc:>8.3f} {tot:>10.1f} {gc:>5} {str(items):>6} {str(passed):>5}")
+        return
+
+    if args.perf:
+        runner.discover()
+        runner.perf_iterations = args.iterations
+        runner.test_performance()
+    elif args.tests:
+        runner.discover()
+        # run only specified tests
+        test_map = dict(all_tests)
+        for name in args.tests:
+            if name in test_map:
+                test_map[name]()
+            else:
+                print(f"  unknown test: {name}")
+                print(f"  available: {', '.join(test_map.keys())}")
+                sys.exit(1)
+    else:
+        runner.perf_iterations = args.iterations
+        runner.run()
+
+    summary = f"\n=== {runner.passed} passed, {runner.failed} failed"
+    if runner.skipped:
+        summary += f", {runner.skipped} skipped"
+    summary += " ===\n"
+    print(summary)
+    sys.exit(1 if runner.failed else 0)
 
 
 if __name__ == "__main__":

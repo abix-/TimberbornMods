@@ -177,35 +177,36 @@ namespace Timberbot
             }
 
             // build flat summary matching TOON output format
-            var flat = new Dictionary<string, object>();
+            var jw = _jw.Reset().OpenObj();
 
             // time
-            flat["day"] = _dayNightCycle.DayNumber;
-            flat["dayProgress"] = System.Math.Round(_dayNightCycle.DayProgress, 2);
+            jw.Key("day").Int(_dayNightCycle.DayNumber);
+            jw.Key("dayProgress").Float((float)_dayNightCycle.DayProgress);
 
             // weather
-            flat["cycle"] = _gameCycleService.Cycle;
-            flat["cycleDay"] = _gameCycleService.CycleDay;
-            flat["isHazardous"] = _weatherService.IsHazardousWeather;
-            flat["tempDays"] = _weatherService.TemperateWeatherDuration;
-            flat["hazardDays"] = _weatherService.HazardousWeatherDuration;
+            jw.Key("cycle").Int(_gameCycleService.Cycle);
+            jw.Key("cycleDay").Int(_gameCycleService.CycleDay);
+            jw.Key("isHazardous").Bool(_weatherService.IsHazardousWeather);
+            jw.Key("tempDays").Int(_weatherService.TemperateWeatherDuration);
+            jw.Key("hazardDays").Int(_weatherService.HazardousWeatherDuration);
 
             // trees (actual trees only, not crops)
-            flat["markedGrown"] = treeMarkedGrown;
-            flat["markedSeedling"] = treeMarkedSeedling;
-            flat["unmarkedGrown"] = treeUnmarkedGrown;
+            jw.Key("markedGrown").Int(treeMarkedGrown);
+            jw.Key("markedSeedling").Int(treeMarkedSeedling);
+            jw.Key("unmarkedGrown").Int(treeUnmarkedGrown);
             // crops
-            flat["cropReady"] = cropReady;
-            flat["cropGrowing"] = cropGrowing;
+            jw.Key("cropReady").Int(cropReady);
+            jw.Key("cropGrowing").Int(cropGrowing);
 
             // population + resources (first district)
+            int totalFood = 0, totalWater = 0, logStock = 0, plankStock = 0, gearStock = 0;
             var goods = _goodService.Goods;
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var pop = dc.DistrictPopulation;
-                flat["adults"] = pop.NumberOfAdults;
-                flat["children"] = pop.NumberOfChildren;
-                flat["bots"] = pop.NumberOfBots;
+                jw.Key("adults").Int(pop.NumberOfAdults);
+                jw.Key("children").Int(pop.NumberOfChildren);
+                jw.Key("bots").Int(pop.NumberOfBots);
                 var counter = dc.GetComponent<DistrictResourceCounter>();
                 if (counter != null)
                 {
@@ -213,7 +214,18 @@ namespace Timberbot
                     {
                         var rc = counter.GetResourceCount(goodId);
                         if (rc.AllStock > 0)
-                            flat[goodId] = rc.AvailableStock;
+                        {
+                            int stock = rc.AvailableStock;
+                            jw.Key(goodId).Int(stock);
+                            if (goodId == "Water") totalWater += stock;
+                            else if (goodId == "Berries" || goodId == "Kohlrabi" || goodId == "Carrot" || goodId == "Potato"
+                                  || goodId == "Wheat" || goodId == "Bread" || goodId == "Cassava" || goodId == "Corn"
+                                  || goodId == "Eggplant" || goodId == "Soybean" || goodId == "MapleSyrup")
+                                totalFood += stock;
+                            else if (goodId == "Log") logStock = stock;
+                            else if (goodId == "Plank") plankStock = stock;
+                            else if (goodId == "Gear") gearStock = stock;
+                        }
                     }
                 }
             }
@@ -222,56 +234,43 @@ namespace Timberbot
             int totalPop = beaverCount;
             if (totalPop > 0)
             {
-                int totalFood = 0;
-                int totalWater = 0;
-                foreach (var kv in flat)
-                {
-                    if (kv.Value is int stock && stock > 0)
-                    {
-                        var g = kv.Key;
-                        if (g == "Water") totalWater += stock;
-                        else if (g == "Berries" || g == "Kohlrabi" || g == "Carrot" || g == "Potato"
-                              || g == "Wheat" || g == "Bread" || g == "Cassava" || g == "Corn"
-                              || g == "Eggplant" || g == "Soybean" || g == "MapleSyrup")
-                            totalFood += stock;
-                    }
-                }
-                flat["foodDays"] = System.Math.Round((double)totalFood / totalPop, 1);
-                flat["waterDays"] = System.Math.Round((double)totalWater / (totalPop * 2.0), 1);
-
-                // material projection -- stock / pop, same rough estimate as food/water
-                int logs = flat.ContainsKey("Log") && flat["Log"] is int ls ? ls : 0;
-                int planks = flat.ContainsKey("Plank") && flat["Plank"] is int ps ? ps : 0;
-                int gears = flat.ContainsKey("Gear") && flat["Gear"] is int gs ? gs : 0;
-                flat["logDays"] = System.Math.Round((double)logs / totalPop, 1);
-                flat["plankDays"] = System.Math.Round((double)planks / totalPop, 1);
-                flat["gearDays"] = System.Math.Round((double)gears / totalPop, 1);
+                jw.Key("foodDays").Float((float)((double)totalFood / totalPop), "F1");
+                jw.Key("waterDays").Float((float)((double)totalWater / (totalPop * 2.0)), "F1");
+                jw.Key("logDays").Float((float)((double)logStock / totalPop), "F1");
+                jw.Key("plankDays").Float((float)((double)plankStock / totalPop), "F1");
+                jw.Key("gearDays").Float((float)((double)gearStock / totalPop), "F1");
             }
 
             // housing
-            flat["beds"] = $"{occupiedBeds}/{totalBeds}";
-            flat["homeless"] = homeless;
+            jw.Key("beds").Str($"{occupiedBeds}/{totalBeds}");
+            jw.Key("homeless").Int(homeless);
 
             // employment
-            flat["workers"] = $"{assignedWorkers}/{totalVacancies}";
-            flat["unemployed"] = unemployed;
+            jw.Key("workers").Str($"{assignedWorkers}/{totalVacancies}");
+            jw.Key("unemployed").Int(unemployed);
 
             // wellbeing
-            flat["wellbeing"] = System.Math.Round(avgWellbeing, 1);
-            flat["miserable"] = miserable;
-            flat["critical"] = critical;
+            jw.Key("wellbeing").Float((float)avgWellbeing, "F1");
+            jw.Key("miserable").Int(miserable);
+            jw.Key("critical").Int(critical);
 
             // science
-            flat["science"] = _scienceService.SciencePoints;
+            jw.Key("science").Int(_scienceService.SciencePoints);
 
             // alerts
-            var alertParts = new List<string>();
-            if (alertUnstaffed > 0) alertParts.Add($"{alertUnstaffed} unstaffed");
-            if (alertUnpowered > 0) alertParts.Add($"{alertUnpowered} unpowered");
-            if (alertUnreachable > 0) alertParts.Add($"{alertUnreachable} unreachable");
-            flat["alerts"] = alertParts.Count > 0 ? string.Join(", ", alertParts) : "none";
+            string alertStr = "none";
+            if (alertUnstaffed > 0 || alertUnpowered > 0 || alertUnreachable > 0)
+            {
+                var parts = new List<string>();
+                if (alertUnstaffed > 0) parts.Add($"{alertUnstaffed} unstaffed");
+                if (alertUnpowered > 0) parts.Add($"{alertUnpowered} unpowered");
+                if (alertUnreachable > 0) parts.Add($"{alertUnreachable} unreachable");
+                alertStr = string.Join(", ", parts);
+            }
+            jw.Key("alerts").Str(alertStr);
 
-            return flat;
+            jw.CloseObj();
+            return jw.ToString();
         }
 
         // PERF: iterates _buildings.Read instead of all entities.
@@ -354,69 +353,53 @@ namespace Timberbot
         public object CollectDistricts(string format = "toon")
         {
             var goods = _goodService.Goods;
-            var results = new List<object>();
-
+            var jw = _jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var counter = dc.GetComponent<DistrictResourceCounter>();
                 var pop = dc.DistrictPopulation;
-
+                jw.OpenObj().Key("name").Str(dc.DistrictName);
                 if (format == "toon")
                 {
-                    var row = new Dictionary<string, object>
-                    {
-                        ["name"] = dc.DistrictName,
-                        ["adults"] = pop != null ? pop.NumberOfAdults : 0,
-                        ["children"] = pop != null ? pop.NumberOfChildren : 0,
-                        ["bots"] = pop != null ? pop.NumberOfBots : 0
-                    };
+                    jw.Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
+                      .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
+                      .Key("bots").Int(pop != null ? pop.NumberOfBots : 0);
                     if (counter != null)
-                    {
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
-                            if (rc.AllStock > 0)
-                                row[goodId] = rc.AvailableStock;
+                            if (rc.AllStock > 0) jw.Key(goodId).Int(rc.AvailableStock);
                         }
-                    }
-                    results.Add(row);
                 }
                 else
                 {
-                    var resources = new Dictionary<string, object>();
+                    jw.Key("population").OpenObj()
+                        .Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
+                        .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
+                        .Key("bots").Int(pop != null ? pop.NumberOfBots : 0)
+                        .CloseObj();
+                    jw.Key("resources").OpenObj();
                     if (counter != null)
-                    {
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
-                            if (rc.AllStock > 0)
-                                resources[goodId] = new { available = rc.AvailableStock, all = rc.AllStock };
+                            if (rc.AllStock > 0) jw.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
                         }
-                    }
-                    results.Add(new
-                    {
-                        name = dc.DistrictName,
-                        population = new
-                        {
-                            adults = pop != null ? pop.NumberOfAdults : 0,
-                            children = pop != null ? pop.NumberOfChildren : 0,
-                            bots = pop != null ? pop.NumberOfBots : 0
-                        },
-                        resources
-                    });
+                    jw.CloseObj();
                 }
+                jw.CloseObj();
             }
-
-            return results;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         public object CollectResources(string format = "toon")
         {
             var goods = _goodService.Goods;
-
+            var jw = _jw.Reset();
             if (format == "toon")
             {
-                var flat = new List<object>();
+                jw.OpenArr();
                 foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
                 {
                     var counter = dc.GetComponent<DistrictResourceCounter>();
@@ -425,27 +408,30 @@ namespace Timberbot
                     {
                         var rc = counter.GetResourceCount(goodId);
                         if (rc.AllStock > 0)
-                            flat.Add(new { district = dc.DistrictName, good = goodId, available = rc.AvailableStock, all = rc.AllStock });
+                            jw.OpenObj().Key("district").Str(dc.DistrictName).Key("good").Str(goodId).Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
                     }
                 }
-                return flat;
+                jw.CloseArr();
             }
-
-            var results = new Dictionary<string, object>();
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            else
             {
-                var counter = dc.GetComponent<DistrictResourceCounter>();
-                if (counter == null) continue;
-                var distResources = new Dictionary<string, object>();
-                foreach (var goodId in goods)
+                jw.OpenObj();
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
                 {
-                    var rc = counter.GetResourceCount(goodId);
-                    if (rc.AllStock > 0)
-                        distResources[goodId] = new { available = rc.AvailableStock, all = rc.AllStock };
+                    var counter = dc.GetComponent<DistrictResourceCounter>();
+                    if (counter == null) continue;
+                    jw.Key(dc.DistrictName).OpenObj();
+                    foreach (var goodId in goods)
+                    {
+                        var rc = counter.GetResourceCount(goodId);
+                        if (rc.AllStock > 0)
+                            jw.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
+                    }
+                    jw.CloseObj();
                 }
-                results[dc.DistrictName] = distResources;
+                jw.CloseObj();
             }
-            return results;
+            return jw.ToString();
         }
 
         public object CollectPopulation()
@@ -731,10 +717,12 @@ namespace Timberbot
             return sb.ToString();
         }
 
+        private struct PowerNetwork { public int Id, Supply, Demand; public List<int> BuildingIndices; }
+
         public object CollectPowerNetworks()
         {
             // group buildings by power network using cached PowerNetworkId
-            var networks = new Dictionary<int, Dictionary<string, object>>();
+            var networks = new Dictionary<int, PowerNetwork>();
             var buildings = _buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
@@ -742,26 +730,23 @@ namespace Timberbot
                 if (c.PowerNode == null || c.PowerNetworkId == 0) continue;
                 int netId = c.PowerNetworkId;
                 if (!networks.ContainsKey(netId))
-                {
-                    networks[netId] = new Dictionary<string, object>
-                    {
-                        ["id"] = netId,
-                        ["supply"] = c.PowerSupply,
-                        ["demand"] = c.PowerDemand,
-                        ["buildings"] = new List<object>()
-                    };
-                }
-                var list = (List<object>)networks[netId]["buildings"];
-                list.Add(new Dictionary<string, object>
-                {
-                    ["name"] = c.Name,
-                    ["id"] = c.Id,
-                    ["isGenerator"] = c.IsGenerator,
-                    ["nominalOutput"] = c.NominalPowerOutput,
-                    ["nominalInput"] = c.NominalPowerInput
-                });
+                    networks[netId] = new PowerNetwork { Id = netId, Supply = c.PowerSupply, Demand = c.PowerDemand, BuildingIndices = new List<int>() };
+                networks[netId].BuildingIndices.Add(i);
             }
-            return networks.Values.ToList();
+            var jw = _jw.Reset().OpenArr();
+            foreach (var net in networks.Values)
+            {
+                jw.OpenObj().Key("id").Int(net.Id).Key("supply").Int(net.Supply).Key("demand").Int(net.Demand);
+                jw.Key("buildings").OpenArr();
+                foreach (var idx in net.BuildingIndices)
+                {
+                    var c = buildings[idx];
+                    jw.OpenObj().Key("name").Str(c.Name).Key("id").Int(c.Id).Key("isGenerator").Bool(c.IsGenerator).Key("nominalOutput").Int(c.NominalPowerOutput).Key("nominalInput").Int(c.NominalPowerInput).CloseObj();
+                }
+                jw.CloseArr().CloseObj();
+            }
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         public object CollectSpeed()
