@@ -12,6 +12,7 @@ namespace Timberbot
     {
         public override void Configure()
         {
+            Bind<TimberbotEntityCache>().AsSingleton();
             Bind<TimberbotWebhook>().AsSingleton();
             Bind<TimberbotService>().AsSingleton();
         }

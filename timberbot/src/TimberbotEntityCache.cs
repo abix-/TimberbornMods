@@ -1,9 +1,6 @@
-// TimberbotService.Cache.cs -- Double-buffered entity caching system.
+// TimberbotEntityCache.cs -- Double-buffered entity caching system.
 //
-// The mod needs to serve GET requests on a background HTTP thread without touching
-// Unity's main thread. This file implements the solution: a double buffer.
-//
-// Main thread (UpdateSingleton, every 1s):
+// Main thread (RefreshCachedState, every 1s):
 //   1. Walk all cached entities, read their mutable state into the Write buffer
 //   2. Swap Write and Read buffers atomically
 //
@@ -11,98 +8,113 @@
 //   Read from the Read buffer. Never modified during reads. Zero contention.
 //
 // Entity lifecycle:
-//   EntityInitializedEvent -> AddToIndexes() caches the entity + immutable data (coords, size, components)
+//   EntityInitializedEvent -> AddToIndexes() caches the entity + immutable data
 //   EntityDeletedEvent     -> RemoveFromIndexes() removes from both buffers
-//
-// Structs: CachedBuilding, CachedBeaver, CachedNaturalResource hold pre-resolved
-// component references so RefreshCachedState never calls GetComponent<T>().
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using Timberborn.BaseComponentSystem;
 using Timberborn.BlockSystem;
+using Timberborn.Bots;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
-using Timberborn.BaseComponentSystem;
-using Timberborn.BlockObjectTools;
-using Timberborn.Coordinates;
+using Timberborn.BuildingsNavigation;
+using Timberborn.BuildingsReachability;
+using Timberborn.Carrying;
+using Timberborn.ConstructionSites;
 using Timberborn.Cutting;
-using Timberborn.TemplateInstantiation;
-using Timberborn.MapIndexSystem;
-using Timberborn.TerrainSystem;
-using Timberborn.WaterSystem;
+using Timberborn.DeteriorationSystem;
+using Timberborn.DwellingSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
-using Timberborn.Planting;
 using Timberborn.Gathering;
-using Timberborn.GameCycleSystem;
-using Timberborn.GameDistricts;
-using Timberborn.Goods;
 using Timberborn.InventorySystem;
-using Timberborn.NaturalResourcesLifecycle;
-using Timberborn.PrioritySystem;
-using Timberborn.ResourceCountingSystem;
-using Timberborn.SingletonSystem;
-using Timberborn.Stockpiles;
-using Timberborn.TimeSystem;
-using Timberborn.WaterBuildings;
-using Timberborn.WeatherSystem;
-using Timberborn.WorkSystem;
-using Timberborn.NeedSystem;
 using Timberborn.LifeSystem;
-using Timberborn.Wellbeing;
-using Timberborn.BuildingsReachability;
-using Timberborn.ConstructionSites;
 using Timberborn.MechanicalSystem;
-using Timberborn.ScienceSystem;
-using Timberborn.BeaverContaminationSystem;
-using Timberborn.Bots;
-using Timberborn.Carrying;
-using Timberborn.DeteriorationSystem;
-using Timberborn.Wonders;
-using Timberborn.NotificationSystem;
-using Timberborn.StatusSystem;
-using Timberborn.DwellingSystem;
+using Timberborn.NaturalResourcesLifecycle;
+using Timberborn.NeedSystem;
+using Timberborn.PrioritySystem;
 using Timberborn.PowerManagement;
-using Timberborn.SoilContaminationSystem;
-using Timberborn.Hauling;
-using Timberborn.Workshops;
-using Timberborn.Reproduction;
-using Timberborn.Fields;
-using Timberborn.GameDistrictsMigration;
-using Timberborn.ToolButtonSystem;
-using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
-using Timberborn.BuildingsNavigation;
-using Timberborn.SoilMoistureSystem;
-using Timberborn.NeedSpecs;
-using Timberborn.GameFactionSystem;
 using Timberborn.RangedEffectSystem;
+using Timberborn.Reproduction;
+using Timberborn.SingletonSystem;
+using Timberborn.StatusSystem;
+using Timberborn.WaterBuildings;
+using Timberborn.Wellbeing;
+using Timberborn.Wonders;
+using Timberborn.WorkSystem;
+using Timberborn.Workshops;
 using UnityEngine;
 
 namespace Timberbot
 {
-    public partial class TimberbotService
+    public class TimberbotEntityCache
     {
-        // Called every 1 second on the main thread (cadence set by refreshIntervalSeconds).
-        // Reads mutable fields from live game components into the Write buffer.
-        // After the loop, Swap() makes the new data available to the background HTTP thread.
-        //
-        // Why not just read game objects on the HTTP thread?
-        // Unity components can only be accessed from the main thread. This refresh loop
-        // snapshots everything once per second so HTTP GETs never touch Unity directly.
-        private void RefreshCachedState()
+        private readonly EntityRegistry _entityRegistry;
+        private readonly TreeCuttingArea _treeCuttingArea;
+        private readonly EventBus _eventBus;
+
+        // set by TimberbotService in Load() before use
+        public TimberbotWebhook WebhookMgr;
+
+        public readonly TimberbotDoubleBuffer<CachedBuilding> Buildings = new TimberbotDoubleBuffer<CachedBuilding>();
+        public readonly TimberbotDoubleBuffer<CachedNaturalResource> NaturalResources = new TimberbotDoubleBuffer<CachedNaturalResource>();
+        public readonly TimberbotDoubleBuffer<CachedBeaver> Beavers = new TimberbotDoubleBuffer<CachedBeaver>();
+        private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
+        public readonly TimberbotJw Jw = new TimberbotJw(300000);
+
+        public static readonly HashSet<string> TreeSpecies = new HashSet<string>
+            { "Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove" };
+        public static readonly HashSet<string> CropSpecies = new HashSet<string>
+            { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
+
+        public static readonly string[] OrientNames = { "south", "west", "north", "east" };
+        public static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
+
+        public TimberbotEntityCache(
+            EntityRegistry entityRegistry,
+            TreeCuttingArea treeCuttingArea,
+            EventBus eventBus)
         {
-            // --- Buildings: read mutable state from each cached building's components ---
-            for (int i = 0; i < _buildings.Write.Count; i++)
+            _entityRegistry = entityRegistry;
+            _treeCuttingArea = treeCuttingArea;
+            _eventBus = eventBus;
+        }
+
+        public void Register() => _eventBus.Register(this);
+        public void Unregister() => _eventBus.Unregister(this);
+
+        public static string GetPriorityName(Priority p)
+        {
+            int i = (int)p;
+            return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
+        }
+
+        public static string CleanName(string name) =>
+            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+
+        public static bool RefChanged(ref object cached, object current)
+        {
+            if (ReferenceEquals(cached, current)) return false;
+            cached = current;
+            return true;
+        }
+
+        public EntityComponent FindEntity(int id)
+        {
+            _entityCache.TryGetValue(id, out var result);
+            return result;
+        }
+
+        public void RefreshCachedState()
+        {
+            for (int i = 0; i < Buildings.Write.Count; i++)
             {
-                var c = _buildings.Write[i];
+                var c = Buildings.Write[i];
                 try
                 {
-                    // BlockObject.IsFinished changes from false->true when construction completes
                     if (c.BlockObject != null)
                         c.Finished = c.BlockObject.IsFinished;
-                    // X, Y, Z, Orientation set at add-time (immutable after placement)
                     c.Paused = c.Pausable != null && c.Pausable.Paused;
                     c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable();
                     c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered;
@@ -118,9 +130,7 @@ namespace Timberbot
                         c.MaxDwellers = c.Dwelling.MaxBeavers;
                     }
                     if (c.Floodgate != null)
-                    {
                         c.FloodgateHeight = c.Floodgate.Height;
-                    }
                     c.ConstructionPriority = c.BuilderPrio != null ? GetPriorityName(c.BuilderPrio.Priority) : null;
                     c.WorkplacePriorityStr = c.WorkplacePrio != null ? GetPriorityName(c.WorkplacePrio.Priority) : null;
                     if (c.Site != null)
@@ -133,7 +143,7 @@ namespace Timberbot
                     if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
                     if (c.PowerNode != null)
                     {
-                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (System.Exception _ex) { TimberbotLog.Error("cache.power", _ex); }
+                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (Exception _ex) { TimberbotLog.Error("cache.power", _ex); }
                     }
                     if (c.Manufactory != null)
                     {
@@ -157,10 +167,8 @@ namespace Timberbot
                             foreach (var ga in c.BreedingPod.Nutrients)
                                 if (ga.Amount > 0) c.NutrientStock[ga.GoodId] = ga.Amount;
                         }
-                        catch (System.Exception _ex) { TimberbotLog.Error("cache.nutrients", _ex); }
+                        catch (Exception _ex) { TimberbotLog.Error("cache.nutrients", _ex); }
                     }
-                    // EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate,
-                    // HasClutch, HasWonder, FloodgateMaxHeight set at add-time (static values)
                     if (c.Inventories != null)
                     {
                         int totalStock = 0, totalCapacity = 0;
@@ -189,17 +197,16 @@ namespace Timberbot
                                 }
                             }
                         }
-                        catch (System.Exception _ex) { TimberbotLog.Error("cache.inventory", _ex); }
+                        catch (Exception _ex) { TimberbotLog.Error("cache.inventory", _ex); }
                         c.Stock = totalStock;
                         c.Capacity = totalCapacity;
                     }
-                    // class: modified in place, no write-back needed
                 }
-                catch (System.Exception _ex) { TimberbotLog.Error("cache.building", _ex); }
+                catch (Exception _ex) { TimberbotLog.Error("cache.building", _ex); }
             }
-            for (int i = 0; i < _naturalResources.Write.Count; i++)
+            for (int i = 0; i < NaturalResources.Write.Count; i++)
             {
-                var c = _naturalResources.Write[i];
+                var c = NaturalResources.Write[i];
                 try
                 {
                     if (c.BlockObject != null)
@@ -211,14 +218,12 @@ namespace Timberbot
                     c.Alive = c.Living != null && !c.Living.IsDead;
                     c.Grown = c.Growable != null && c.Growable.IsGrown;
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
-                    // class: modified in place, no write-back needed
                 }
-                catch (System.Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
+                catch (Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
             }
-            // beavers
-            for (int i = 0; i < _beavers.Write.Count; i++)
+            for (int i = 0; i < Beavers.Write.Count; i++)
             {
-                var c = _beavers.Write[i];
+                var c = Beavers.Write[i];
                 try
                 {
                     if (c.WbTracker != null)
@@ -240,7 +245,7 @@ namespace Timberbot
                     c.HasHome = c.Dweller != null && c.Dweller.HasHome;
                     c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
                     if (c.Life != null) c.LifeProgress = c.Life.LifeProgress;
-                    if (c.Deteriorable != null) c.DeteriorationProgress = (float)System.Math.Round(c.Deteriorable.DeteriorationProgress, 3);
+                    if (c.Deteriorable != null) c.DeteriorationProgress = (float)Math.Round(c.Deteriorable.DeteriorationProgress, 3);
                     if (c.Carrier != null)
                     {
                         c.LiftingCapacity = c.Carrier.LiftingCapacity;
@@ -253,11 +258,8 @@ namespace Timberbot
                             c.CarryAmount = ga.Amount;
                         }
                         else
-                        {
                             c.IsCarrying = false;
-                        }
                     }
-                    // needs
                     if (c.Needs == null) c.Needs = new List<CachedNeed>();
                     c.Needs.Clear();
                     c.AnyCritical = false;
@@ -269,7 +271,7 @@ namespace Timberbot
                             c.Needs.Add(new CachedNeed
                             {
                                 Id = ns.Id,
-                                Points = (float)System.Math.Round(need.Points, 2),
+                                Points = (float)Math.Round(need.Points, 2),
                                 Wellbeing = c.NeedMgr.GetNeedWellbeing(ns.Id),
                                 Favorable = need.IsFavorable,
                                 Critical = need.IsCritical,
@@ -279,193 +281,28 @@ namespace Timberbot
                             if (need.IsBelowWarningThreshold) c.AnyCritical = true;
                         }
                     }
-                    // class: modified in place, no write-back needed
                 }
-                catch (System.Exception _ex) { TimberbotLog.Error("cache.beaver", _ex); }
+                catch (Exception _ex) { TimberbotLog.Error("cache.beaver", _ex); }
             }
-            // swap: background thread gets the freshly updated buffer
-            _buildings.Swap();
-            _naturalResources.Swap();
-            _beavers.Swap();
+            Buildings.Swap();
+            NaturalResources.Swap();
+            Beavers.Swap();
         }
 
-        // ================================================================
-        // CACHED STRUCTS
-        //
-        // Each struct holds both:
-        //   - Component references (set once in AddToIndexes, never change)
-        //   - Mutable state (refreshed every 1s in RefreshCachedState)
-        //
-        // Why structs instead of classes? Value types live inline in the List<T>
-        // array, giving cache-friendly sequential memory access during refresh.
-        // Classes: modified in place, no write-back needed. Clone() for double-buffer independence.
-        // ================================================================
-
-        private class CachedNaturalResource
+        public void BuildAllIndexes()
         {
-            // immutable refs (set at add-time, never change for the entity's lifetime)
-            public int Id;
-            public string Name;
-            public BlockObject BlockObject;
-            public LivingNaturalResource Living;
-            public Cuttable Cuttable;
-            public Gatherable Gatherable;
-            public Timberborn.Growing.Growable Growable;
-            // mutable state (refreshed on main thread)
-            public int X, Y, Z;
-            public bool Alive, Grown, Marked;
-            public float Growth;
-
-            public CachedNaturalResource Clone() => (CachedNaturalResource)MemberwiseClone();
-        }
-
-        private class CachedBuilding
-        {
-            // immutable refs (set at add-time)
-            public EntityComponent Entity;
-            public int Id;
-            public string Name;
-            public BlockObject BlockObject;
-            public PausableBuilding Pausable;
-            public Floodgate Floodgate;
-            public BuilderPrioritizable BuilderPrio;
-            public Workplace Workplace;
-            public WorkplacePriority WorkplacePrio;
-            public EntityReachabilityStatus Reachability;
-            public MechanicalBuilding Mechanical;
-            public StatusSubject Status;
-            public MechanicalNode PowerNode;
-            public ConstructionSite Site;
-            public Inventories Inventories;
-            public Wonder Wonder;
-            public Dwelling Dwelling;
-            public Clutch Clutch;
-            public Manufactory Manufactory;
-            public BreedingPod BreedingPod;
-            public RangedEffectBuildingSpec RangedEffect;
-            // mutable state (refreshed on main thread, safe to read from background)
-            public bool Finished, Paused, Unreachable, Powered;
-            public int X, Y, Z;
-            public string Orientation;
-            public int AssignedWorkers, DesiredWorkers, MaxWorkers;
-            public int Dwellers, MaxDwellers;
-            public bool HasFloodgate;
-            public float FloodgateHeight, FloodgateMaxHeight;
-            public string ConstructionPriority, WorkplacePriorityStr;
-            public float BuildProgress, MaterialProgress;
-            public bool HasMaterials;
-            public bool ClutchEngaged, HasClutch;
-            public bool WonderActive, HasWonder;
-            public bool IsGenerator, IsConsumer;
-            public int NominalPowerInput, NominalPowerOutput;
-            public int PowerDemand, PowerSupply, PowerNetworkId;
-            public string CurrentRecipe;
-            public List<string> Recipes;
-            public float ProductionProgress;
-            public bool ReadyToProduce;
-            public bool NeedsNutrients;
-            public Dictionary<string, int> NutrientStock;
-            public Dictionary<string, int> Inventory;
-            public int EffectRadius;
-            public int Stock, Capacity;
-            // spatial footprint (set once at add-time, immutable)
-            public List<(int x, int y, int z)> OccupiedTiles;
-            public bool HasEntrance;
-            public int EntranceX, EntranceY;
-
-            public CachedBuilding Clone()
-            {
-                var c = (CachedBuilding)MemberwiseClone();
-                c.Recipes = null;
-                c.Inventory = null;
-                c.NutrientStock = null;
-                c.OccupiedTiles = OccupiedTiles; // immutable after add, safe to share
-                return c;
-            }
-        }
-
-        private struct CachedNeed
-        {
-            public string Id, Group;
-            public float Points;
-            public int Wellbeing;
-            public bool Favorable, Critical, Active;
-        }
-
-        private class CachedBeaver
-        {
-            // immutable refs (add-time)
-            public int Id;
-            public string Name;
-            public bool IsBot;
-            public GameObject Go;
-            public NeedManager NeedMgr;
-            public WellbeingTracker WbTracker;
-            public Worker Worker;
-            public LifeProgressor Life;
-            public GoodCarrier Carrier;
-            public Deteriorable Deteriorable;
-            public Contaminable Contaminable;
-            public Dweller Dweller;
-            public Timberborn.GameDistricts.Citizen Citizen;
-            // mutable (refreshed on main thread)
-            public float Wellbeing;
-            public int X, Y, Z;
-            public string Workplace, District;
-            public object LastWorkplaceRef; // reference comparison to avoid CleanName per refresh
-            public object LastDistrictRef; // reference comparison to avoid DistrictName per refresh
-            public bool HasHome, Contaminated;
-            public float LifeProgress, DeteriorationProgress;
-            public bool IsCarrying;
-            public string CarryingGood;
-            public int CarryAmount, LiftingCapacity;
-            public bool Overburdened;
-            public bool AnyCritical;
-            public List<CachedNeed> Needs;
-
-            public CachedBeaver Clone()
-            {
-                var c = (CachedBeaver)MemberwiseClone();
-                c.Needs = new List<CachedNeed>();
-                return c;
-            }
-        }
-
-        private readonly DoubleBuffer<CachedBuilding> _buildings = new DoubleBuffer<CachedBuilding>();
-        private readonly DoubleBuffer<CachedNaturalResource> _naturalResources = new DoubleBuffer<CachedNaturalResource>();
-        private readonly DoubleBuffer<CachedBeaver> _beavers = new DoubleBuffer<CachedBeaver>();
-        private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
-        // single JwWriter shared by all endpoints (serial on listener thread, never concurrent)
-        private readonly JwWriter _jw = new JwWriter(300000);
-        private static readonly System.Collections.Generic.HashSet<string> _treeSpecies = new System.Collections.Generic.HashSet<string>
-            { "Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove" };
-        private static readonly System.Collections.Generic.HashSet<string> _cropSpecies = new System.Collections.Generic.HashSet<string>
-            { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
-
-        private void BuildAllIndexes()
-        {
-            _buildings.Clear();
-            _naturalResources.Clear();
-            _beavers.Clear();
+            Buildings.Clear();
+            NaturalResources.Clear();
+            Beavers.Clear();
             _entityCache.Clear();
             foreach (var ec in _entityRegistry.Entities)
                 AddToIndexes(ec);
         }
 
-        // Called when any entity is created (building placed, beaver born, tree grown).
-        // We check what kind of entity it is using GetComponent<T>() -- this is the ONLY
-        // time we call GetComponent per entity. The results are stored in the cached struct
-        // so RefreshCachedState never needs to resolve components again.
-        //
-        // Timberborn entities are Unity GameObjects with components attached via their
-        // entity system. A "building" has Building + BlockObject + maybe Workplace, etc.
-        // A "beaver" has NeedManager + Citizen + maybe Worker, etc.
         private void AddToIndexes(EntityComponent ec)
         {
-            // Cache the entity for O(1) lookup by ID in write commands
             _entityCache[ec.GameObject.GetInstanceID()] = ec;
 
-            // Is it a building? (has Building component)
             if (ec.GetComponent<Building>() != null)
             {
                 var cb = new CachedBuilding
@@ -491,7 +328,6 @@ namespace Timberbot
                     Manufactory = ec.GetComponent<Manufactory>(),
                     BreedingPod = ec.GetComponent<BreedingPod>(),
                     RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>(),
-                    // static values -- set once at add-time, never refreshed
                     HasFloodgate = ec.GetComponent<Floodgate>() != null,
                     FloodgateMaxHeight = ec.GetComponent<Floodgate>()?.MaxHeight ?? 0f,
                     HasClutch = ec.GetComponent<Clutch>() != null,
@@ -502,11 +338,9 @@ namespace Timberbot
                     NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
                     EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
                 };
-                // spatial footprint (immutable after placement)
                 var bo = cb.BlockObject;
                 if (bo != null)
                 {
-                    // immutable after placement -- set once at add-time
                     var coords = bo.Coordinates;
                     cb.X = coords.x; cb.Y = coords.y; cb.Z = coords.z;
                     cb.Orientation = OrientNames[(int)bo.Orientation];
@@ -519,7 +353,7 @@ namespace Timberbot
                             cb.OccupiedTiles.Add((tc.x, tc.y, tc.z));
                         }
                     }
-                    catch { cb.OccupiedTiles.Add((cb.Id, 0, 0)); } // fallback shouldn't happen
+                    catch { cb.OccupiedTiles.Add((cb.Id, 0, 0)); }
                     if (bo.HasEntrance)
                     {
                         try
@@ -529,11 +363,10 @@ namespace Timberbot
                             cb.EntranceX = ent.x;
                             cb.EntranceY = ent.y;
                         }
-                        catch (System.Exception _ex) { TimberbotLog.Error("cache.entrance", _ex); }
+                        catch (Exception _ex) { TimberbotLog.Error("cache.entrance", _ex); }
                     }
                 }
-                // Clone() creates a separate instance with independent reference-type fields
-                _buildings.Add(cb, cb.Clone());
+                Buildings.Add(cb, cb.Clone());
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
@@ -547,7 +380,7 @@ namespace Timberbot
                     Gatherable = ec.GetComponent<Gatherable>(),
                     Growable = ec.GetComponent<Timberborn.Growing.Growable>()
                 };
-                _naturalResources.Add(nr, nr.Clone());
+                NaturalResources.Add(nr, nr.Clone());
             }
             else if (ec.GetComponent<NeedManager>() != null)
             {
@@ -563,12 +396,12 @@ namespace Timberbot
                     Life = ec.GetComponent<LifeProgressor>(),
                     Carrier = ec.GetComponent<GoodCarrier>(),
                     Deteriorable = ec.GetComponent<Deteriorable>(),
-                    Contaminable = ec.GetComponent<Contaminable>(),
+                    Contaminable = ec.GetComponent<Timberborn.BeaverContaminationSystem.Contaminable>(),
                     Dweller = ec.GetComponent<Dweller>(),
                     Citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>(),
                     Needs = new List<CachedNeed>()
                 };
-                _beavers.Add(cb, cb.Clone());
+                Beavers.Add(cb, cb.Clone());
             }
         }
 
@@ -576,17 +409,16 @@ namespace Timberbot
         {
             int id = ec.GameObject.GetInstanceID();
             _entityCache.Remove(id);
-            _buildings.RemoveAll(b => b.Id == id);
-            _naturalResources.RemoveAll(n => n.Id == id);
-            _beavers.RemoveAll(b => b.Id == id);
+            Buildings.RemoveAll(b => b.Id == id);
+            NaturalResources.RemoveAll(n => n.Id == id);
+            Beavers.RemoveAll(b => b.Id == id);
         }
 
         [OnEvent]
         public void OnEntityInitialized(EntityInitializedEvent e)
         {
             AddToIndexes(e.Entity);
-            // webhooks (guarded -- no alloc if 0 subscribers)
-            if (WebhookMgr.Count > 0)
+            if (WebhookMgr != null && WebhookMgr.Count > 0)
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
@@ -599,8 +431,7 @@ namespace Timberbot
         [OnEvent]
         public void OnEntityDeleted(EntityDeletedEvent e)
         {
-            // webhooks (guarded -- no alloc if 0 subscribers)
-            if (WebhookMgr.Count > 0)
+            if (WebhookMgr != null && WebhookMgr.Count > 0)
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
@@ -611,23 +442,128 @@ namespace Timberbot
             RemoveFromIndexes(e.Entity);
         }
 
-        private static string CleanName(string name) =>
-            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+        // ================================================================
+        // CACHED CLASSES
+        // ================================================================
 
-        // ref-compare helper: returns true (and updates cached ref) only when the reference changes.
-        // use to skip expensive string derivation (CleanName, DistrictName) when the source object hasn't changed.
-        private static bool RefChanged(ref object cached, object current)
+        public class CachedNaturalResource
         {
-            if (ReferenceEquals(cached, current)) return false;
-            cached = current;
-            return true;
+            public int Id;
+            public string Name;
+            public BlockObject BlockObject;
+            public LivingNaturalResource Living;
+            public Cuttable Cuttable;
+            public Gatherable Gatherable;
+            public Timberborn.Growing.Growable Growable;
+            public int X, Y, Z;
+            public bool Alive, Grown, Marked;
+            public float Growth;
+            public CachedNaturalResource Clone() => (CachedNaturalResource)MemberwiseClone();
         }
 
-        private EntityComponent FindEntity(int id)
+        public class CachedBuilding
         {
-            _entityCache.TryGetValue(id, out var result);
-            return result;
+            public EntityComponent Entity;
+            public int Id;
+            public string Name;
+            public BlockObject BlockObject;
+            public PausableBuilding Pausable;
+            public Floodgate Floodgate;
+            public BuilderPrioritizable BuilderPrio;
+            public Workplace Workplace;
+            public WorkplacePriority WorkplacePrio;
+            public EntityReachabilityStatus Reachability;
+            public MechanicalBuilding Mechanical;
+            public StatusSubject Status;
+            public MechanicalNode PowerNode;
+            public ConstructionSite Site;
+            public Inventories Inventories;
+            public Wonder Wonder;
+            public Dwelling Dwelling;
+            public Clutch Clutch;
+            public Manufactory Manufactory;
+            public BreedingPod BreedingPod;
+            public RangedEffectBuildingSpec RangedEffect;
+            public bool Finished, Paused, Unreachable, Powered;
+            public int X, Y, Z;
+            public string Orientation;
+            public int AssignedWorkers, DesiredWorkers, MaxWorkers;
+            public int Dwellers, MaxDwellers;
+            public bool HasFloodgate;
+            public float FloodgateHeight, FloodgateMaxHeight;
+            public string ConstructionPriority, WorkplacePriorityStr;
+            public float BuildProgress, MaterialProgress;
+            public bool HasMaterials;
+            public bool ClutchEngaged, HasClutch;
+            public bool WonderActive, HasWonder;
+            public bool IsGenerator, IsConsumer;
+            public int NominalPowerInput, NominalPowerOutput;
+            public int PowerDemand, PowerSupply, PowerNetworkId;
+            public string CurrentRecipe;
+            public List<string> Recipes;
+            public float ProductionProgress;
+            public bool ReadyToProduce;
+            public bool NeedsNutrients;
+            public Dictionary<string, int> NutrientStock;
+            public Dictionary<string, int> Inventory;
+            public int EffectRadius;
+            public int Stock, Capacity;
+            public List<(int x, int y, int z)> OccupiedTiles;
+            public bool HasEntrance;
+            public int EntranceX, EntranceY;
+            public CachedBuilding Clone()
+            {
+                var c = (CachedBuilding)MemberwiseClone();
+                c.Recipes = null;
+                c.Inventory = null;
+                c.NutrientStock = null;
+                c.OccupiedTiles = OccupiedTiles;
+                return c;
+            }
         }
 
+        public struct CachedNeed
+        {
+            public string Id, Group;
+            public float Points;
+            public int Wellbeing;
+            public bool Favorable, Critical, Active;
+        }
+
+        public class CachedBeaver
+        {
+            public int Id;
+            public string Name;
+            public bool IsBot;
+            public GameObject Go;
+            public NeedManager NeedMgr;
+            public WellbeingTracker WbTracker;
+            public Worker Worker;
+            public LifeProgressor Life;
+            public GoodCarrier Carrier;
+            public Deteriorable Deteriorable;
+            public Timberborn.BeaverContaminationSystem.Contaminable Contaminable;
+            public Dweller Dweller;
+            public Timberborn.GameDistricts.Citizen Citizen;
+            public float Wellbeing;
+            public int X, Y, Z;
+            public string Workplace, District;
+            public object LastWorkplaceRef;
+            public object LastDistrictRef;
+            public bool HasHome, Contaminated;
+            public float LifeProgress, DeteriorationProgress;
+            public bool IsCarrying;
+            public string CarryingGood;
+            public int CarryAmount, LiftingCapacity;
+            public bool Overburdened;
+            public bool AnyCritical;
+            public List<CachedNeed> Needs;
+            public CachedBeaver Clone()
+            {
+                var c = (CachedBeaver)MemberwiseClone();
+                c.Needs = new List<CachedNeed>();
+                return c;
+            }
+        }
     }
 }

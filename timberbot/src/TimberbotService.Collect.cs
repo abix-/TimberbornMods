@@ -5,7 +5,7 @@
 // JSON by TimberbotHttpServer) or a StringBuilder of pre-built TOON output.
 //
 // These methods never touch game services directly -- they only read from
-// _buildings.Read, _beavers.Read, _naturalResources.Read, and the thread-safe
+// Cache.Buildings.Read, Cache.Beavers.Read, Cache.NaturalResources.Read, and the thread-safe
 // water/terrain maps.
 //
 // format param: "toon" = compact tabular (default, token-efficient for AI)
@@ -102,7 +102,7 @@ namespace Timberbot
             // natural resources: split into trees vs crops
             var _cropNames = new System.Collections.Generic.HashSet<string>
                 { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
-            foreach (var c in _naturalResources.Read)
+            foreach (var c in Cache.NaturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
                 if (!c.Alive) continue;
@@ -120,7 +120,7 @@ namespace Timberbot
             }
 
             // buildings (read cached primitives only -- zero Unity calls)
-            foreach (var c in _buildings.Read)
+            foreach (var c in Cache.Buildings.Read)
             {
                 if (c.Dwelling != null)
                 {
@@ -141,7 +141,7 @@ namespace Timberbot
             }
 
             // beavers: cached wellbeing + critical needs
-            foreach (var c in _beavers.Read)
+            foreach (var c in Cache.Beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
                 beaverCount++;
@@ -177,7 +177,7 @@ namespace Timberbot
             }
 
             // build flat summary matching TOON output format
-            var jw = _jw.Reset().OpenObj();
+            var jw = Cache.Jw.Reset().OpenObj();
 
             // time
             jw.Key("day").Int(_dayNightCycle.DayNumber);
@@ -273,11 +273,11 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // PERF: iterates _buildings.Read instead of all entities.
+        // PERF: iterates Cache.Buildings.Read instead of all entities.
         public object CollectAlerts()
         {
-            var jw = _jw.Reset().OpenArr();
-            foreach (var c in _buildings.Read)
+            var jw = Cache.Jw.Reset().OpenArr();
+            foreach (var c in Cache.Buildings.Read)
             {
                 if (c.Workplace != null && c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
                     jw.OpenObj().Key("type").Str("unstaffed").Key("id").Int(c.Id).Key("name").Str(c.Name).Key("workers").Str($"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
@@ -296,7 +296,7 @@ namespace Timberbot
         public object CollectTreeClusters(int cellSize = 10, int top = 5)
         {
             var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
-            foreach (var nr in _naturalResources.Read)
+            foreach (var nr in Cache.NaturalResources.Read)
             {
                 if (nr.Cuttable == null) continue;
                 if (nr.Living == null || nr.Living.IsDead) continue;
@@ -317,7 +317,7 @@ namespace Timberbot
 
             var sorted = new List<int[]>(cells.Values);
             sorted.Sort((a, b) => b[0].CompareTo(a[0]));
-            var jw = _jw.Reset().OpenArr();
+            var jw = Cache.Jw.Reset().OpenArr();
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
                 var s = sorted[i];
@@ -353,7 +353,7 @@ namespace Timberbot
         public object CollectDistricts(string format = "toon")
         {
             var goods = _goodService.Goods;
-            var jw = _jw.Reset().OpenArr();
+            var jw = Cache.Jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var counter = dc.GetComponent<DistrictResourceCounter>();
@@ -396,7 +396,7 @@ namespace Timberbot
         public object CollectResources(string format = "toon")
         {
             var goods = _goodService.Goods;
-            var jw = _jw.Reset();
+            var jw = Cache.Jw.Reset();
             if (format == "toon")
             {
                 jw.OpenArr();
@@ -436,7 +436,7 @@ namespace Timberbot
 
         public object CollectPopulation()
         {
-            var jw = _jw.Reset().OpenArr();
+            var jw = Cache.Jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var pop = dc.DistrictPopulation;
@@ -462,8 +462,8 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var jw = _jw.Reset().OpenArr();
-            foreach (var c in _buildings.Read)
+            var jw = Cache.Jw.Reset().OpenArr();
+            foreach (var c in Cache.Buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
@@ -547,10 +547,10 @@ namespace Timberbot
         // PERF: cached component refs -- zero GetComponent per item.
         // serial param: dict (default), anon, sb -- for A/B testing serialization methods
         // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
-        private object CollectNaturalResourcesJw(JwWriter jw, System.Collections.Generic.HashSet<string> species)
+        private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species)
         {
             jw.Reset().OpenArr();
-            foreach (var c in _naturalResources.Read)
+            foreach (var c in Cache.NaturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
                 if (!species.Contains(c.Name)) continue;
@@ -568,13 +568,13 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        public object CollectTrees() => CollectNaturalResourcesJw(_jw, _treeSpecies);
-        public object CollectCrops() => CollectNaturalResourcesJw(_jw, _cropSpecies);
+        public object CollectTrees() => CollectNaturalResourcesJw(Cache.Jw, TimberbotEntityCache.TreeSpecies);
+        public object CollectCrops() => CollectNaturalResourcesJw(Cache.Jw, TimberbotEntityCache.CropSpecies);
 
         public object CollectGatherables()
         {
-            var jw = _jw.Reset().OpenArr();
-            foreach (var c in _naturalResources.Read)
+            var jw = Cache.Jw.Reset().OpenArr();
+            foreach (var c in Cache.NaturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
                 jw.OpenObj()
@@ -599,8 +599,8 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var jw = _jw.Reset().OpenArr();
-            foreach (var c in _beavers.Read)
+            var jw = Cache.Jw.Reset().OpenArr();
+            foreach (var c in Cache.Beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
@@ -671,7 +671,7 @@ namespace Timberbot
         {
             // group buildings by power network using cached PowerNetworkId
             var networks = new Dictionary<int, PowerNetwork>();
-            var buildings = _buildings.Read;
+            var buildings = Cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -681,7 +681,7 @@ namespace Timberbot
                     networks[netId] = new PowerNetwork { Id = netId, Supply = c.PowerSupply, Demand = c.PowerDemand, BuildingIndices = new List<int>() };
                 networks[netId].BuildingIndices.Add(i);
             }
-            var jw = _jw.Reset().OpenArr();
+            var jw = Cache.Jw.Reset().OpenArr();
             foreach (var net in networks.Values)
             {
                 jw.OpenObj().Key("id").Int(net.Id).Key("supply").Int(net.Supply).Key("demand").Int(net.Demand);

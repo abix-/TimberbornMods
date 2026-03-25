@@ -101,7 +101,7 @@ namespace Timberbot
 
         public object CollectPrefabs()
         {
-            var jw = _jw.Reset().OpenArr();
+            var jw = Cache.Jw.Reset().OpenArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
@@ -147,11 +147,11 @@ namespace Timberbot
         // remove a building from the world
         public object DemolishBuilding(int buildingId)
         {
-            var ec = FindEntity(buildingId);
+            var ec = Cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "entity not found", id = buildingId };
 
-            var name = CleanName(ec.GameObject.name);
+            var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
             return new { id = buildingId, name, demolished = true };
         }
@@ -197,7 +197,7 @@ namespace Timberbot
                     // O(n) scan but only called once per z-level change (max ~6 times per route)
                     void DemolishPathAt(int px, int py, int pz)
                     {
-                        foreach (var cb in _buildings.Read)
+                        foreach (var cb in Cache.Buildings.Read)
                         {
                             if (cb.BlockObject == null) continue;
                             var c = cb.BlockObject.Coordinates;
@@ -246,7 +246,7 @@ namespace Timberbot
 
                         // place stair on top
                         int stairZ = baseZ + step;
-                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
+                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, TimberbotEntityCache.OrientNames[rampOrient]);
                         if (stairResult.GetType().GetProperty("id") != null)
                             stairs++;
                         else
@@ -351,7 +351,7 @@ namespace Timberbot
             // collect path and power tile positions for placement scoring
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
-            foreach (var cb in _buildings.Read)
+            foreach (var cb in Cache.Buildings.Read)
             {
                 if (cb.BlockObject == null) continue;
                 if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
@@ -529,7 +529,7 @@ namespace Timberbot
 
             int count = results.Count > 10 ? 10 : results.Count;
 
-            var jw = _jw.Reset().OpenObj()
+            var jw = Cache.Jw.Reset().OpenObj()
                 .Key("prefab").Str(prefabName)
                 .Key("sizeX").Int(size.x).Key("sizeY").Int(size.y)
                 .Key("placements").OpenArr();
@@ -555,14 +555,7 @@ namespace Timberbot
         // 2. origin correction (user coords = bottom-left regardless of orientation)
         // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
         // 4. Place() only after all checks pass
-        private static readonly string[] OrientNames = { "south", "west", "north", "east" };
-        private static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
-
-        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p)
-        {
-            int i = (int)p;
-            return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
-        }
+        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
 
         private static int ParseOrientation(string orient)
         {
@@ -616,7 +609,7 @@ namespace Timberbot
             // validate using the game's own preview system (same as player UI)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
                 return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
-                             prefab = prefabName, x, y, z, orientation = OrientNames[orientation] };
+                             prefab = prefabName, x, y, z, orientation = TimberbotEntityCache.OrientNames[orientation] };
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
@@ -629,7 +622,7 @@ namespace Timberbot
             placer.Place(blockObjectSpec, placement, (entity) =>
             {
                 placedId = entity.GameObject.GetInstanceID();
-                placedName = CleanName(entity.GameObject.name);
+                placedName = TimberbotEntityCache.CleanName(entity.GameObject.name);
             });
 
             if (placedId == 0)
@@ -644,7 +637,7 @@ namespace Timberbot
                 };
             }
 
-            return new { id = placedId, name = placedName, x, y, z, orientation = OrientNames[orientation] };
+            return new { id = placedId, name = placedName, x, y, z, orientation = TimberbotEntityCache.OrientNames[orientation] };
         }
     }
 }

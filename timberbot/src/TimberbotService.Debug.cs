@@ -71,6 +71,8 @@ using Timberborn.NeedSpecs;
 using Timberborn.GameFactionSystem;
 using Timberborn.RangedEffectSystem;
 using UnityEngine;
+using CachedBuilding = Timberbot.TimberbotEntityCache.CachedBuilding;
+using CachedBeaver = Timberbot.TimberbotEntityCache.CachedBeaver;
 
 namespace Timberbot
 {
@@ -79,7 +81,7 @@ namespace Timberbot
         public object RunBenchmark(int iterations)
         {
             var results = new List<object>();
-            var buildings = _buildings.Read;
+            var buildings = Cache.Buildings.Read;
 
             // --- Test 1: BreedingPod.Nutrients foreach vs for ---
             var breedingPods = new List<CachedBuilding>();
@@ -156,7 +158,7 @@ namespace Timberbot
 
             // --- Test: NeedMgr.GetNeeds() allocation ---
             var beaversWithNeeds = new List<CachedBeaver>();
-            var beaverBuf = _beavers.Read;
+            var beaverBuf = Cache.Beavers.Read;
             for (int i = 0; i < beaverBuf.Count; i++)
                 if (beaverBuf[i].NeedMgr != null) beaversWithNeeds.Add(beaverBuf[i]);
 
@@ -223,9 +225,9 @@ namespace Timberbot
             }
 
             int nHeavy = System.Math.Max(n / 10, 1);
-            int nb = _buildings.Read.Count;
-            int nv = _beavers.Read.Count;
-            int nr = _naturalResources.Read.Count;
+            int nb = Cache.Buildings.Read.Count;
+            int nv = Cache.Beavers.Read.Count;
+            int nr = Cache.NaturalResources.Read.Count;
 
             results.Add(BenchCall("CollectSummary", n, () => CollectSummary("json")));
             results.Add(BenchCall("CollectBuildings", n, () => CollectBuildings("json", "basic"), nb));
@@ -255,9 +257,9 @@ namespace Timberbot
 
             // metadata
             results.Insert(0, new { test = "_meta",
-                buildings = _buildings.Read.Count,
-                beavers = _beavers.Read.Count,
-                trees = _naturalResources.Read.Count });
+                buildings = Cache.Buildings.Read.Count,
+                beavers = Cache.Beavers.Read.Count,
+                trees = Cache.NaturalResources.Read.Count });
 
             return new { benchmarks = results };
         }
@@ -556,7 +558,7 @@ namespace Timberbot
 
         // ================================================================
         // VALIDATE -- compare cached double-buffer data against live game components.
-        // Reads the cached struct from _buildings.Read/_beavers.Read AND the live
+        // Reads the cached struct from Cache.Buildings.Read/Cache.Beavers.Read AND the live
         // Unity component in the same call. Reports per-field match/mismatch.
         // ================================================================
 
@@ -578,7 +580,7 @@ namespace Timberbot
             }
 
             // check buildings
-            var buildings = _buildings.Read;
+            var buildings = Cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -615,13 +617,13 @@ namespace Timberbot
                     Add("clutchEngaged", c.ClutchEngaged, c.Clutch.IsEngaged);
                 if (c.Wonder != null)
                     Add("wonderActive", c.WonderActive, c.Wonder.IsActive);
-                Add("name", c.Name, c.Entity != null ? CleanName(c.Entity.GameObject.name) : "?");
+                Add("name", c.Name, c.Entity != null ? TimberbotEntityCache.CleanName(c.Entity.GameObject.name) : "?");
 
                 return new { id, type = "building", name = c.Name, fields, mismatches, total };
             }
 
             // check beavers
-            var beavers = _beavers.Read;
+            var beavers = Cache.Beavers.Read;
             for (int i = 0; i < beavers.Count; i++)
             {
                 var c = beavers[i];
@@ -639,7 +641,7 @@ namespace Timberbot
                     Add("z", c.Z, Mathf.FloorToInt(pos.y));
                 }
                 var wp = c.Worker?.Workplace;
-                Add("workplace", c.Workplace ?? "", wp != null ? CleanName(wp.GameObject.name) : "");
+                Add("workplace", c.Workplace ?? "", wp != null ? TimberbotEntityCache.CleanName(wp.GameObject.name) : "");
 
                 return new { id, type = "beaver", name = c.Name, fields, mismatches, total };
             }
@@ -653,7 +655,7 @@ namespace Timberbot
             int totalEntities = 0, totalFields = 0, totalMismatches = 0;
 
             // validate all buildings
-            var buildings = _buildings.Read;
+            var buildings = Cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var result = ValidateEntity(buildings[i].Id);
@@ -668,7 +670,7 @@ namespace Timberbot
             }
 
             // validate all beavers
-            var beavers = _beavers.Read;
+            var beavers = Cache.Beavers.Read;
             for (int i = 0; i < beavers.Count; i++)
             {
                 var result = ValidateEntity(beavers[i].Id);

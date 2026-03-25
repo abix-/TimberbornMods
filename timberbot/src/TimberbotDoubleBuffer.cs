@@ -21,7 +21,7 @@ using System.Collections.Generic;
 
 namespace Timberbot
 {
-    class DoubleBuffer<T>
+    public class TimberbotDoubleBuffer<T>
     {
         private List<T> _write = new List<T>();  // main thread writes here
         private List<T> _read = new List<T>();   // background thread reads here

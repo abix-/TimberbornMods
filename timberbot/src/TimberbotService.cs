@@ -94,7 +94,7 @@ namespace Timberbot
         private readonly WeatherService _weatherService;                    // drought/temperate durations
         private readonly IDayNightCycle _dayNightCycle;                     // day number, progress (0-1)
         private readonly SpeedManager _speedManager;                        // game speed (raw values: 0,1,3,7 mapped to levels 0-3)
-        private readonly EntityRegistry _entityRegistry;                    // ALL entities in game -- buildings, beavers, trees, everything
+        public readonly TimberbotEntityCache Cache;                          // double-buffered entity indexes
         private readonly TreeCuttingArea _treeCuttingArea;                  // which tiles are marked for tree cutting
         private readonly PlantingService _plantingService;                  // mark/clear crop planting areas
         private readonly BuildingService _buildingService;                  // building templates/specs (not placed buildings)
@@ -143,7 +143,7 @@ namespace Timberbot
             WeatherService weatherService,
             IDayNightCycle dayNightCycle,
             SpeedManager speedManager,
-            EntityRegistry entityRegistry,
+            TimberbotEntityCache cache,
             TreeCuttingArea treeCuttingArea,
             PlantingService plantingService,
             BuildingService buildingService,
@@ -181,7 +181,7 @@ namespace Timberbot
             _weatherService = weatherService;
             _dayNightCycle = dayNightCycle;
             _speedManager = speedManager;
-            _entityRegistry = entityRegistry;
+            Cache = cache;
             _treeCuttingArea = treeCuttingArea;
             _plantingService = plantingService;
             _buildingService = buildingService;
@@ -225,9 +225,11 @@ namespace Timberbot
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
             TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
+            Cache.WebhookMgr = WebhookMgr;
             _eventBus.Register(this);
             WebhookMgr.Register();
-            BuildAllIndexes();
+            Cache.Register();
+            Cache.BuildAllIndexes();
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -270,6 +272,7 @@ namespace Timberbot
 
         public void Unload()
         {
+            Cache.Unregister();
             WebhookMgr.Unregister();
             _eventBus.Unregister(this);
             _server?.Stop();
@@ -285,7 +288,7 @@ namespace Timberbot
             if (now - _lastRefreshTime >= _refreshInterval)
             {
                 _lastRefreshTime = now;
-                RefreshCachedState();
+                Cache.RefreshCachedState();
             }
             _server?.DrainRequests();
             WebhookMgr.FlushWebhooks(now);
