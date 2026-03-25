@@ -19,9 +19,8 @@ namespace Timberbot
 
         public static void Error(string context, Exception ex)
         {
-            var msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERROR {context}: {ex.GetType().Name}: {ex.Message}";
             Debug.LogWarning($"[Timberbot] {context}: {ex.GetType().Name}: {ex.Message}");
-            Append(msg);
+            Append($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERROR {context}: {ex}");
         }
 
         public static void Info(string msg)

@@ -751,6 +751,7 @@ namespace Timberbot
             }
             catch (System.Exception ex)
             {
+                TimberbotLog.Error("migration", ex);
                 return new { error = ex.Message, from = fromDistrict, to = toDistrict };
             }
         }

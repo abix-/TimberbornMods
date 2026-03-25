@@ -256,7 +256,7 @@ namespace Timberbot
             }
             catch (System.Exception ex)
             {
-                Debug.Log($"[Timberbot] settings.json load failed, using defaults: {ex.Message}");
+                TimberbotLog.Error("settings.json load failed, using defaults", ex);
             }
         }
 

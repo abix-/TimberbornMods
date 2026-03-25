@@ -90,6 +90,7 @@ namespace Timberbot
                 }
                 catch (Exception ex)
                 {
+                    TimberbotLog.Error("route.post", ex);
                     Respond(req.Context, 500, new { error = ex.Message });
                 }
             }
@@ -137,6 +138,7 @@ namespace Timberbot
                     }
                     catch (Exception ex)
                     {
+                        TimberbotLog.Error("route.get", ex);
                         Respond(ctx, 500, new { error = ex.Message });
                     }
                     continue;
@@ -435,7 +437,7 @@ namespace Timberbot
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[Timberbot] response failed: {ex.Message}");
+                TimberbotLog.Error("response", ex);
             }
         }
     }

@@ -449,8 +449,19 @@ namespace Timberbot
                         break;
                     }
 
+                    case "validate":
+                    {
+                        int valId = int.Parse(Arg("id", "0"));
+                        return ValidateEntity(valId);
+                    }
+
+                    case "validate_all":
+                    {
+                        return ValidateAll();
+                    }
+
                     default:
-                        info["error"] = $"unknown target '{target}'. use: help, get, fields, call";
+                        info["error"] = $"unknown target '{target}'. use: help, get, fields, call, validate, validate_all";
                         break;
                 }
             }
@@ -489,7 +500,7 @@ namespace Timberbot
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[Timberbot] ValidatePlacement error at ({x},{y},{z}): {ex.Message}\n{ex.StackTrace}");
+                TimberbotLog.Error($"ValidatePlacement at ({x},{y},{z})", ex);
                 return false;
             }
             finally
@@ -499,7 +510,137 @@ namespace Timberbot
             }
         }
 
-        // PERF: O(n) entity scan for path/power tiles + O(area * 4) preview validation loop.
-        // Cached preview reused via Reposition for each candidate. Called once per bot turn.
+        // ================================================================
+        // VALIDATE -- compare cached double-buffer data against live game components.
+        // Reads the cached struct from _buildings.Read/_beavers.Read AND the live
+        // Unity component in the same call. Reports per-field match/mismatch.
+        // ================================================================
+
+        private object ValidateEntity(int id)
+        {
+            var fields = new Dictionary<string, object>();
+            int mismatches = 0, total = 0;
+
+            void Add(string name, object cached, object live)
+            {
+                bool match = Equals(cached, live);
+                if (!match && cached is float cf && live is float lf)
+                    match = System.Math.Abs(cf - lf) < 0.5f;
+                if (!match && cached is int ci && live is int li)
+                    match = ci == li;
+                fields[name] = new { cached, live, match };
+                total++;
+                if (!match) mismatches++;
+            }
+
+            // check buildings
+            var buildings = _buildings.Read;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var c = buildings[i];
+                if (c.Id != id) continue;
+
+                // found cached building -- now read live state from components
+                var bo = c.BlockObject;
+                if (bo != null)
+                {
+                    var coords = bo.Coordinates;
+                    Add("x", c.X, coords.x);
+                    Add("y", c.Y, coords.y);
+                    Add("z", c.Z, coords.z);
+                    Add("finished", c.Finished, bo.IsFinished);
+                }
+                if (c.Pausable != null)
+                    Add("paused", c.Paused, c.Pausable.Paused);
+                if (c.Workplace != null)
+                {
+                    Add("assignedWorkers", c.AssignedWorkers, c.Workplace.NumberOfAssignedWorkers);
+                    Add("desiredWorkers", c.DesiredWorkers, c.Workplace.DesiredWorkers);
+                    Add("maxWorkers", c.MaxWorkers, c.Workplace.MaxWorkers);
+                }
+                if (c.Dwelling != null)
+                {
+                    Add("dwellers", c.Dwellers, c.Dwelling.NumberOfDwellers);
+                    Add("maxDwellers", c.MaxDwellers, c.Dwelling.MaxBeavers);
+                }
+                if (c.Mechanical != null)
+                    Add("powered", c.Powered, c.Mechanical.ActiveAndPowered);
+                if (c.Floodgate != null)
+                    Add("floodgateHeight", c.FloodgateHeight, c.Floodgate.Height);
+                if (c.Clutch != null)
+                    Add("clutchEngaged", c.ClutchEngaged, c.Clutch.IsEngaged);
+                if (c.Wonder != null)
+                    Add("wonderActive", c.WonderActive, c.Wonder.IsActive);
+                Add("name", c.Name, c.Entity != null ? CleanName(c.Entity.GameObject.name) : "?");
+
+                return new { id, type = "building", name = c.Name, fields, mismatches, total };
+            }
+
+            // check beavers
+            var beavers = _beavers.Read;
+            for (int i = 0; i < beavers.Count; i++)
+            {
+                var c = beavers[i];
+                if (c.Id != id) continue;
+
+                if (c.WbTracker != null)
+                    Add("wellbeing", c.Wellbeing, c.WbTracker.Wellbeing);
+                if (c.Citizen != null && c.Citizen.AssignedDistrict != null)
+                    Add("district", c.District, c.Citizen.AssignedDistrict.DistrictName);
+                if (c.Go != null)
+                {
+                    var pos = c.Go.transform.position;
+                    Add("x", c.X, Mathf.FloorToInt(pos.x));
+                    Add("y", c.Y, Mathf.FloorToInt(pos.z));
+                    Add("z", c.Z, Mathf.FloorToInt(pos.y));
+                }
+                var wp = c.Worker?.Workplace;
+                Add("workplace", c.Workplace ?? "", wp != null ? CleanName(wp.GameObject.name) : "");
+
+                return new { id, type = "beaver", name = c.Name, fields, mismatches, total };
+            }
+
+            return new { error = "entity not found in cache", id };
+        }
+
+        private object ValidateAll()
+        {
+            var results = new List<object>();
+            int totalEntities = 0, totalFields = 0, totalMismatches = 0;
+
+            // validate all buildings
+            var buildings = _buildings.Read;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var result = ValidateEntity(buildings[i].Id);
+                totalEntities++;
+                if (result is Dictionary<string, object>) continue; // error
+                var rt = result.GetType();
+                var mm = (int)rt.GetProperty("mismatches").GetValue(result);
+                var tf = (int)rt.GetProperty("total").GetValue(result);
+                totalFields += tf;
+                totalMismatches += mm;
+                if (mm > 0) results.Add(result);
+            }
+
+            // validate all beavers
+            var beavers = _beavers.Read;
+            for (int i = 0; i < beavers.Count; i++)
+            {
+                var result = ValidateEntity(beavers[i].Id);
+                totalEntities++;
+                var rt = result.GetType();
+                var mmProp = rt.GetProperty("mismatches");
+                if (mmProp == null) continue;
+                var mm = (int)mmProp.GetValue(result);
+                var tf = (int)rt.GetProperty("total").GetValue(result);
+                totalFields += tf;
+                totalMismatches += mm;
+                if (mm > 0) results.Add(result);
+            }
+
+            return new { entities = totalEntities, fields = totalFields,
+                         mismatches = totalMismatches, failures = results };
+        }
     }
 }

@@ -670,6 +670,7 @@ namespace Timberbot
             }
             catch (System.Exception ex)
             {
+                TimberbotLog.Error("unlock", ex);
                 return new { error = ex.Message, building = buildingName };
             }
         }
@@ -752,6 +753,7 @@ namespace Timberbot
             }
             catch (System.Exception ex)
             {
+                TimberbotLog.Error("wellbeing", ex);
                 return new { error = ex.Message };
             }
         }
@@ -814,6 +816,7 @@ namespace Timberbot
                 }
                 catch (System.Exception ex)
                 {
+                    TimberbotLog.Error("distribution", ex);
                     return new { error = ex.Message, district = districtName, good = goodId };
                 }
 
