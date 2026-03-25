@@ -123,6 +123,22 @@ All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated f
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity GC freezes all threads. Reduced alloc pressure but unavoidable from mod |
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string. Unavoidable, once per request |
 
+## Backlog
+
+### Soon
+
+| # | Issue | Effort | Details |
+|---|---|---|---|
+| 1 | Migrate high-volume endpoints to JwWriter | 2 hr | buildings, trees, crops, gatherables, beavers still use old `Jw` static helper. Convert to `JwWriter` then delete `Jw` class |
+
+### Later
+
+| # | Issue | Effort | Details |
+|---|---|---|---|
+| 2 | Webhook rate limiting | 2 hr | ThreadPool exhaustion if user subscribes to all events. Batch per 200ms or per-type throttle |
+| 3 | Webhook circuit breaker | 30 min | Dead URL burns 5s ThreadPool thread per event. After 5 failures, disable webhook + log |
+| 4 | TimberbotService.cs split | 3 hr | God object. Extract WebhookService, CacheService, DebugService |
+
 ## Optimization history
 
 | Change | trees | buildings | buildings full | burst (7 calls) |
