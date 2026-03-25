@@ -12,7 +12,9 @@
 - [fix] top dashboard crash when district resources default to 0
 - [fix] map renderer: handle occupants list (multiple z-level stacking)
 - [fix] place_path counting: paths/stairs were miscounted due to reflection on JSON strings
-- [feature] place_building errors include specific reason from game validators (occupied, terrain conflict, blocked)
+- [breaking] place_path response: placed is now {paths, stairs?, platforms?} object instead of flat counts
+- [feature] place_building errors include specific reason from game validators (occupied by X, terrain conflict, blocked)
 - [feature] place_path two-pass plan-then-execute: no demolishing, structured error objects in errors array
+- [fix] stair placement: stairs always on lower z tile, skip path on tiles planned for stairs
 - [internal] PlaceBuildingResult struct with rich context (prefab, scienceCost, occupant), ToJson at HTTP boundary
 - [internal] Removed CHANGELOG.md -- GitHub releases are the single source

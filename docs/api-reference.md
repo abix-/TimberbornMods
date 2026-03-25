@@ -1124,7 +1124,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 ```
 
 ```json
-{"error": "occupied at (120,130,2)", "x": 120, "y": 130, "z": 2, "prefab": "LumberjackFlag.IronTeeth"}
+{"error": "occupied by Path at (120,130,2)", "x": 120, "y": 130, "z": 2, "prefab": "LumberjackFlag.IronTeeth"}
 ```
 
 ---
@@ -1589,13 +1589,13 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 #### Response (success)
 
 ```json
-{"placed": 12, "stairs": 1, "skipped": 0}
+{"placed": {"paths": 12, "stairs": 1}, "skipped": 0}
 ```
 
 #### Response (partial -- with errors)
 
 ```json
-{"placed": 8, "stairs": 0, "skipped": 2, "errors": [{"prefab": "Path", "error": "occupied at (120,130,2)"}, {"error": "z-change at (120,135): stairs not unlocked (need Stairs.IronTeeth)"}]}
+{"placed": {"paths": 8}, "skipped": 2, "errors": [{"prefab": "Path", "error": "occupied by LumberjackFlag at (120,130,2)"}, {"error": "z-change at (120,135): stairs not unlocked (need Stairs.IronTeeth)"}]}
 ```
 
 #### Response (error -- not straight)
