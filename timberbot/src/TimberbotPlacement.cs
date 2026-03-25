@@ -410,7 +410,9 @@ namespace Timberbot
         // Returns top 10 candidates.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {
-            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            BuildingSpec buildingSpec;
+            try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
+            catch { return _jw.Error("not_found", ("prefab", prefabName)); }
             if (buildingSpec == null)
                 return _jw.Error("not_found", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
@@ -702,7 +704,9 @@ namespace Timberbot
             if (orientation < 0)
                 return _jw.Error("invalid_param: invalid orientation, use south, west, north, east", ("prefab", prefabName));
 
-            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            BuildingSpec buildingSpec;
+            try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
+            catch { return _jw.Error("not_found", ("prefab", prefabName)); }
             if (buildingSpec == null)
                 return _jw.Error("not_found", ("prefab", prefabName));
 
@@ -736,15 +740,7 @@ namespace Timberbot
             // validate using the game's own preview system -- identical to what the player
             // sees when placing a building (green = valid, red = invalid)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
-                return new
-                {
-                    error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
-                    prefab = prefabName,
-                    x,
-                    y,
-                    z,
-                    orientation = OrientNames[orientation]
-                };
+                return _jw.Error($"invalid_param: cannot place at ({gx}, {gy}, {z})", ("prefab", prefabName), ("x", x), ("y", y), ("z", z));
 
             // Validation passed -- create the real building.
             // GetMatchingPlacer returns the right placer for the block type (regular,
@@ -766,19 +762,7 @@ namespace Timberbot
 
             if (placedId == 0)
             {
-                return new
-                {
-                    error = "placement rejected by game engine",
-                    prefab = prefabName,
-                    x,
-                    y,
-                    z,
-                    orientation,
-                    sizeX = size.x,
-                    sizeY = size.y,
-                    sizeZ = size.z,
-                    hint = "passed pre-validation but game rejected it"
-                };
+                return _jw.Error("operation_failed: placement rejected by game engine", ("prefab", prefabName), ("x", x), ("y", y), ("z", z));
             }
 
             return _jw.Result(("id", placedId), ("name", placedName), ("x", x), ("y", y), ("z", z), ("orientation", (OrientNames[orientation])));

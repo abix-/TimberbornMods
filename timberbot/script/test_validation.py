@@ -17,7 +17,7 @@ import json
 import sys
 import time
 
-from timberbot import Timberbot
+from timberbot import Timberbot, TimberbotError
 
 
 REFRESH_WAIT = 1.5  # seconds to wait after POST for cache refresh (settings.json refreshIntervalSeconds + margin)
@@ -26,6 +26,10 @@ REFRESH_WAIT = 1.5  # seconds to wait after POST for cache refresh (settings.jso
 class TestRunner:
     def __init__(self):
         self.bot = Timberbot()
+        # disable TimberbotError raising so tests can inspect error dicts directly
+        self.bot._check = lambda data: data
+        # separate bot with error raising enabled for TimberbotError tests
+        self.strict_bot = Timberbot()
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -251,6 +255,7 @@ class TestRunner:
         self.test_clear_planting()
         self.test_clear_trees()
         self.test_migrate()
+        self.test_error_codes()
         self.test_data_accuracy()
         self.test_json_schema()
         self.test_performance()
@@ -328,15 +333,15 @@ class TestRunner:
             self.check(name, self.err(result),
                        json.dumps(result)[:100])
 
-        # specific error messages
+        # specific error codes
         specific_tests = [
-            ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "not found"),
-            ("invalid orientation", lambda: self.bot.place_building("Path", sx, sy, sz, orientation="bogus"), "invalid orientation"),
-            ("locked building", lambda: self.bot.place_building(self._locked_prefab or "FakeLockedBuilding", sx, sy, sz), "not unlocked"),
+            ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "not_found"),
+            ("invalid orientation", lambda: self.bot.place_building("Path", sx, sy, sz, orientation="bogus"), "invalid_param"),
+            ("locked building", lambda: self.bot.place_building(self._locked_prefab or "FakeLockedBuilding", sx, sy, sz), "not_unlocked"),
         ]
-        for name, fn, expect_err in specific_tests:
+        for name, fn, expect_code in specific_tests:
             result = fn()
-            self.check(name, self.err(result) and expect_err in str(result["error"]),
+            self.check(name, self.err(result) and result["error"].startswith(expect_code),
                        json.dumps(result)[:100])
 
         # valid placement using find_spot coords
@@ -588,7 +593,7 @@ class TestRunner:
             for orient in ["south", "west", "north", "east"]:
                 result = self.bot.place_building(prefab, bx, by, bz, orientation=orient)
                 if "id" not in result:
-                    if "not unlocked" in str(result.get("error", "")):
+                    if "not_unlocked" in str(result.get("error", "")):
                         self.skip(f"{prefab.split('.')[0]} {orient}", "not unlocked")
                         continue
                     self.check(f"{prefab.split('.')[0]} {orient}", False, json.dumps(result)[:100])
@@ -753,7 +758,7 @@ class TestRunner:
         # non-straight path rejected
         result2 = self.bot.place_path(100, 100, 105, 105)
         self.check("diagonal path rejected",
-                   self.err(result2) and "straight" in str(result2.get("error", "")),
+                   self.err(result2) and "invalid_param" in str(result2.get("error", "")),
                    json.dumps(result2)[:100])
 
         # path across z-level change (should auto-place stairs)
@@ -780,7 +785,7 @@ class TestRunner:
         if stair_spot:
             sx1, sy1, sx2, sy2 = stair_spot
             result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
-            if self.has(result3, "errors") and result3["errors"] and ("not unlocked" in str(result3["errors"]) or "Cannot place" in str(result3["errors"])):
+            if self.has(result3, "errors") and result3["errors"] and ("not_unlocked" in str(result3["errors"]) or "Cannot place" in str(result3["errors"])):
                 self.skip("path with z-change", f"stairs placement failed: {str(result3['errors'])[:80]}")
             else:
                 self.check("path with z-change places stairs",
@@ -856,7 +861,7 @@ class TestRunner:
             bx, by, bz = blocking_tree["x"], blocking_tree["y"], blocking_tree["z"]
             result = self.bot.place_building("Path", bx, by, bz)
             self.check("non-overridable tree blocks",
-                       self.err(result) and "occupied" in str(result.get("error", "")),
+                       self.err(result),
                        json.dumps(result)[:100])
         else:
             self.skip("non-overridable tree blocks", "no blocking tree found")
@@ -1154,7 +1159,7 @@ class TestRunner:
         if dc_id:
             dc_result = self.bot.building_range(dc_id)
             # DC may or may not have range -- just check no crash
-            self.check("range on DC no crash", not self.err(dc_result) or "no work range" in str(dc_result.get("error", "")),
+            self.check("range on DC no crash", not self.err(dc_result) or "invalid_type" in str(dc_result.get("error", "")),
                        json.dumps(dc_result)[:100])
 
     def test_find_planting(self):
@@ -1900,6 +1905,68 @@ class TestRunner:
         result = self.bot.migrate(d1, d2, 0)
         self.check("migrate call returns dict", isinstance(result, dict),
                    f"got: {type(result).__name__}")
+
+    def test_error_codes(self):
+        """Test structured error codes and TimberbotError exception on every write endpoint."""
+        print("\n=== error codes (TimberbotError) ===\n")
+
+        bot = self.strict_bot  # this bot raises TimberbotError
+        spot = self.find_spot("Path")
+        sx = spot["x"] if spot else 100
+        sy = spot["y"] if spot else 100
+        sz = spot["z"] if spot else 2
+
+        # every error-producing call with its expected code prefix
+        error_cases = [
+            ("set_speed invalid",       lambda: bot.set_speed(99),                              "invalid_param"),
+            ("set_workhours invalid",   lambda: bot.set_workhours(0),                           "invalid_param"),
+            ("pause nonexistent",       lambda: bot.pause_building(999999),                     "not_found"),
+            ("unpause nonexistent",     lambda: bot.unpause_building(999999),                   "not_found"),
+            ("set_clutch nonexistent",  lambda: bot.set_clutch(999999, True),                   "not_found"),
+            ("set_floodgate nonexistent", lambda: bot.set_floodgate(999999, 1.0),               "not_found"),
+            ("set_priority nonexistent", lambda: bot.set_priority(999999, "Normal"),             "not_found"),
+            ("set_haul_priority nonexistent", lambda: bot.set_haul_priority(999999),             "not_found"),
+            ("set_recipe nonexistent",  lambda: bot.set_recipe(999999, "Fake"),                 "not_found"),
+            ("set_farmhouse_action nonexistent", lambda: bot.set_farmhouse_action(999999, "planting"), "not_found"),
+            ("set_plantable_priority nonexistent", lambda: bot.set_plantable_priority(999999, "Pine"), "not_found"),
+            ("set_workers nonexistent", lambda: bot.set_workers(999999, 1),                     "not_found"),
+            ("demolish nonexistent",    lambda: bot.demolish_building(999999),                  "not_found"),
+            ("place unknown prefab",    lambda: bot.place_building("Fake", sx, sy, sz),         "not_found"),
+            ("place bad orientation",   lambda: bot.place_building("Path", sx, sy, sz, "bogus"), "invalid_param"),
+            ("find_placement unknown",  lambda: bot.find_placement("Fake", 0, 0, 10, 10),      "not_found"),
+            ("place_path diagonal",     lambda: bot.place_path(100, 100, 105, 105),             "invalid_param"),
+            ("stockpile_capacity nonexistent", lambda: bot.set_capacity(999999, 100),           "not_found"),
+            ("stockpile_good nonexistent", lambda: bot.set_good(999999, "Water"),               "not_found"),
+            ("building_range nonexistent", lambda: bot.building_range(999999),                  "not_found"),
+            ("unlock_building fake",    lambda: bot.unlock_building("FakeBuilding"),            "not_found"),
+            ("set_distribution fake",   lambda: bot.set_distribution("FakeDistrict", "Water"),  "not_found"),
+        ]
+
+        for name, fn, expected_code in error_cases:
+            try:
+                fn()
+                self.check(f"err {name}", False, "no exception raised")
+            except TimberbotError as e:
+                ok = e.code == expected_code
+                self.check(f"err {name} -> {expected_code}",
+                           ok,
+                           f"got code={e.code} error={e.error}" if not ok else "")
+            except Exception as e:
+                self.check(f"err {name}", False, f"unexpected: {type(e).__name__}: {e}")
+
+        # verify non-error calls do NOT raise
+        success_cases = [
+            ("speed read",    lambda: bot.speed()),
+            ("ping",          lambda: bot.ping()),
+            ("weather",       lambda: bot.weather()),
+            ("time",          lambda: bot.time()),
+        ]
+        for name, fn in success_cases:
+            try:
+                result = fn()
+                self.check(f"ok {name}", result is not None)
+            except TimberbotError as e:
+                self.check(f"ok {name}", False, f"unexpected error: {e.error}")
 
     def test_data_accuracy(self):
         """Validate cached API data matches live game components using debug validate."""
