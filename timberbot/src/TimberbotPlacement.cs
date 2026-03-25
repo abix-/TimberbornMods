@@ -32,9 +32,37 @@ using UnityEngine;
 
 namespace Timberbot
 {
+    public struct PlaceBuildingResult
+    {
+        public int Id;
+        public string Name;
+        public string Error;
+        public int X, Y, Z;
+        public string Orientation;
+        public bool Success => Id != 0;
+
+        public static PlaceBuildingResult Fail(string error, int x = 0, int y = 0, int z = 0)
+            => new PlaceBuildingResult { Error = error, X = x, Y = y, Z = z };
+
+        public string ToJson(TimberbotJw jw)
+        {
+            if (Error != null)
+            {
+                jw.Reset().OpenObj().Prop("error", Error);
+                if (X != 0 || Y != 0) jw.Prop("x", X).Prop("y", Y).Prop("z", Z);
+                return jw.CloseObj().ToString();
+            }
+            return jw.Reset().OpenObj()
+                .Prop("id", Id).Prop("name", Name)
+                .Prop("x", X).Prop("y", Y).Prop("z", Z)
+                .Prop("orientation", Orientation)
+                .CloseObj().ToString();
+        }
+    }
+
     public class TimberbotPlacement
     {
-        private readonly TimberbotJw _jw = new TimberbotJw(1024);
+        public readonly TimberbotJw Jw = new TimberbotJw(1024);
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
@@ -204,11 +232,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found", ("id", buildingId));
+                return Jw.Error("not_found", ("id", buildingId));
 
             var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
-            return _jw.Result(("id", buildingId), ("name", name), ("demolished", true));
+            return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
         // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
@@ -222,7 +250,7 @@ namespace Timberbot
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
-                return _jw.Error("invalid_param: path must be a straight line (x1==x2 or y1==y2)");
+                return Jw.Error("invalid_param: path must be a straight line (x1==x2 or y1==y2)");
 
             // Check if stairs and platforms are unlocked before we start.
             // Stairs are needed for any z-level change. Platforms are needed for
@@ -338,25 +366,17 @@ namespace Timberbot
                         for (int p = 0; p < step; p++)
                         {
                             var platResult = PlaceBuilding("Platform" + _factionSuffix, rampTileX, rampTileY, baseZ + p, "south");
-                            if (platResult.GetType().GetProperty("id") == null)
-                            {
-                                var err = platResult.GetType().GetProperty("error")?.GetValue(platResult);
-                                if (err != null && !err.ToString().Contains("occupied"))
-                                    errors.Add($"platform at ({rampTileX},{rampTileY},z={baseZ + p}): {err}");
-                            }
+                            if (!platResult.Success && platResult.Error != null && !platResult.Error.Contains("occupied"))
+                                errors.Add($"platform at ({rampTileX},{rampTileY},z={baseZ + p}): {platResult.Error}");
                         }
 
                         // place stair on top
                         int stairZ = baseZ + step;
                         var stairResult = PlaceBuilding("Stairs" + _factionSuffix, rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
-                        if (stairResult.GetType().GetProperty("id") != null)
+                        if (stairResult.Success)
                             stairs++;
-                        else
-                        {
-                            var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
-                            if (err != null && !err.ToString().Contains("occupied"))
-                                errors.Add($"stairs at ({rampTileX},{rampTileY},z={stairZ}): {err}");
-                        }
+                        else if (stairResult.Error != null && !stairResult.Error.Contains("occupied"))
+                            errors.Add($"stairs at ({rampTileX},{rampTileY},z={stairZ}): {stairResult.Error}");
                     }
 
                     if (!goingUp)
@@ -374,16 +394,12 @@ namespace Timberbot
 
                 // place path at current tile
                 var result = PlaceBuilding("Path", cx, cy, tz, "south");
-                if (result.GetType().GetProperty("id") != null)
+                if (result.Success)
                     placed++;
+                else if (result.Error != null && !result.Error.Contains("occupied"))
+                    errors.Add($"path at ({cx},{cy}): {result.Error}");
                 else
-                {
-                    var err = result.GetType().GetProperty("error")?.GetValue(result);
-                    if (err != null && !err.ToString().Contains("occupied"))
-                        errors.Add($"path at ({cx},{cy}): {err}");
-                    else
-                        skipped++;
-                }
+                    skipped++;
 
                 prevZ = tz;
                 if (cx == x2 && cy == y2) break;
@@ -433,12 +449,12 @@ namespace Timberbot
         {
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
-            catch { return _jw.Error("not_found", ("prefab", prefabName)); }
+            catch { return Jw.Error("not_found", ("prefab", prefabName)); }
             if (buildingSpec == null)
-                return _jw.Error("not_found", ("prefab", prefabName));
+                return Jw.Error("not_found", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
+                return Jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
 
             var size = blockObjectSpec.Size;
             var waterInputSpec = buildingSpec.GetSpec<WaterInputSpec>();
@@ -710,34 +726,28 @@ namespace Timberbot
             }
         }
 
-        public object PlaceBuilding(string prefabName, int x, int y, int z, string orientationStr)
+        public PlaceBuildingResult PlaceBuilding(string prefabName, int x, int y, int z, string orientationStr)
         {
             int orientation = ParseOrientation(orientationStr);
             if (orientation < 0)
-                return _jw.Error("invalid_param: invalid orientation, use south, west, north, east", ("prefab", prefabName));
+                return PlaceBuildingResult.Fail("invalid_param: invalid orientation, use south, west, north, east");
 
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
-            catch { return _jw.Error("not_found", ("prefab", prefabName)); }
+            catch { return PlaceBuildingResult.Fail("not_found", x, y, z); }
             if (buildingSpec == null)
-                return _jw.Error("not_found", ("prefab", prefabName));
+                return PlaceBuildingResult.Fail("not_found", x, y, z);
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
+                return PlaceBuildingResult.Fail("invalid_type: no block object spec", x, y, z);
 
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
             if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
-                return _jw.Error("not_unlocked", ("prefab", prefabName), ("scienceCost", bs.ScienceCost), ("currentPoints", _scienceService.SciencePoints));
+                return PlaceBuildingResult.Fail("not_unlocked", x, y, z);
 
             // Origin correction: user always specifies bottom-left corner (smallest x,y).
-            // The game's Placement struct expects a different origin depending on orientation:
-            //   south (0): bottom-left = same as user    -> gx=x, gy=y
-            //   west  (1): bottom-left is at top-left    -> shift gy up by height-1
-            //   north (2): bottom-left is at top-right   -> shift both gx right, gy up
-            //   east  (3): bottom-left is at bottom-right -> shift gx right by width-1
-            // For orient 1,3: footprint dimensions swap (a 2x4 building becomes 4x2)
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
             if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
@@ -749,19 +759,11 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            // validate using the game's own preview system -- identical to what the player
-            // sees when placing a building (green = valid, red = invalid)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
-                return _jw.Error($"invalid_param: cannot place at ({gx}, {gy}, {z})", ("prefab", prefabName), ("x", x), ("y", y), ("z", z));
+                return PlaceBuildingResult.Fail($"invalid_param: cannot place at ({gx}, {gy}, {z})", x, y, z);
 
-            // Validation passed -- create the real building.
-            // GetMatchingPlacer returns the right placer for the block type (regular,
-            // stackable, etc). The callback fires synchronously with the new entity.
-            // We capture its InstanceID (same ID used everywhere in the API) and
-            // clean name (strips "(Clone)" suffix Unity adds).
             var orient = (Timberborn.Coordinates.Orientation)orientation;
-            var placement = new Placement(new Vector3Int(gx, gy, z), orient,
-                FlipMode.Unflipped);
+            var placement = new Placement(new Vector3Int(gx, gy, z), orient, FlipMode.Unflipped);
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
@@ -773,11 +775,9 @@ namespace Timberbot
             });
 
             if (placedId == 0)
-            {
-                return _jw.Error("operation_failed: placement rejected by game engine", ("prefab", prefabName), ("x", x), ("y", y), ("z", z));
-            }
+                return PlaceBuildingResult.Fail("operation_failed: placement rejected by game engine", x, y, z);
 
-            return _jw.Result(("id", placedId), ("name", placedName), ("x", x), ("y", y), ("z", z), ("orientation", (OrientNames[orientation])));
+            return new PlaceBuildingResult { Id = placedId, Name = placedName, X = x, Y = y, Z = z, Orientation = OrientNames[orientation] };
         }
 
         private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)

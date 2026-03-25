@@ -351,7 +351,7 @@ class TestRunner:
                        json.dumps(result)[:100])
 
         # valid placement using find_spot coords
-        result = self.bot.place_building("Path", sx, sy, sz, spot.get("orientation", "south"))
+        result = self.write_and_wait(lambda: self.bot.place_building("Path", sx, sy, sz, spot.get("orientation", "south")))
         self.check("valid placement", self.has(result, "id"))
 
         if self.has(result, "id"):
@@ -882,33 +882,10 @@ class TestRunner:
     def test_path_routing(self):
         print("\n=== path routing ===\n")
 
-        # find a flat open area for path tests dynamically
-        test_spot = None
-        for cy in range(100, 170):
-            for cx in range(70, 170):
-                region = self.bot.tiles(cx, cy, cx + 4, cy)
-                tiles = region.get("tiles", [])
-                if len(tiles) < 5:
-                    continue
-                heights = set(t.get("terrain", 0) for t in tiles)
-                if len(heights) != 1:
-                    continue
-                tz = heights.pop()
-                if tz < 2:
-                    continue
-                occupants = [t for t in tiles if t.get("occupants") or t.get("water", 0) > 0]
-                if occupants:
-                    continue
-                test_spot = (cx, cy, tz)
-                break
-            if test_spot:
-                break
-
-        if not test_spot:
-            self.skip("path routing tests", "no flat open area")
-            return
-
-        sx, sy, sz = test_spot
+        # place paths directly east of DC on same row
+        sx = self.center_x + 3  # just east of DC (3x3)
+        sy = self.center_y
+        sz = self.bot.tiles(sx, sy, sx, sy).get("tiles", [{}])[0].get("terrain", 2)
 
         # flat path
         result = self.bot.place_path(sx, sy, sx + 3, sy)
@@ -940,8 +917,8 @@ class TestRunner:
         # path across z-level change (should auto-place stairs)
         # find two adjacent unoccupied tiles with z-height difference of 1
         stair_spot = None
-        for ty in range(100, 170):
-            for tx in range(70, 170):
+        for ty in range(self.center_y - 10, self.center_y + 15):
+            for tx in range(self.center_x - 10, self.center_x + 30):
                 region = self.bot.tiles(tx, ty, tx + 1, ty)
                 tiles = region.get("tiles", [])
                 if len(tiles) < 2:
@@ -961,18 +938,17 @@ class TestRunner:
         if stair_spot:
             sx1, sy1, sx2, sy2 = stair_spot
             result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
-            if self.has(result3, "errors") and result3["errors"] and ("not_unlocked" in str(result3["errors"]) or "Cannot place" in str(result3["errors"])):
-                self.skip("path with z-change", f"stairs placement failed: {str(result3['errors'])[:80]}")
-            else:
-                self.check("path with z-change places stairs",
-                           self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
-                           json.dumps(result3)[:100])
-
-                # verify stairs on map (wait for cache refresh)
+            errs = str(result3.get("errors", ""))
+            if "not unlocked" in errs or "not_unlocked" in errs:
+                self.skip("path with z-change", "stairs not unlocked")
+            elif self.has(result3, "stairs") and result3.get("stairs", 0) > 0:
+                self.check("path with z-change places stairs", True)
                 self.wait_for_refresh()
                 region = self.bot.tiles(sx1, sy1, sx2, sy2)
                 has_stairs = any(any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
                 self.check("verify stairs on map", has_stairs)
+            else:
+                self.check("path with z-change places stairs", False, json.dumps(result3)[:100])
 
             # cleanup
             buildings = self.bot.buildings()
