@@ -14,65 +14,32 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
-using Timberborn.BaseComponentSystem;
 using Timberborn.BlockObjectTools;
-using Timberborn.Coordinates;
-using Timberborn.Cutting;
-using Timberborn.TemplateInstantiation;
 using Timberborn.MapIndexSystem;
 using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
-using Timberborn.EntitySystem;
 using Timberborn.Forestry;
 using Timberborn.Planting;
-using Timberborn.Gathering;
-using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
-using Timberborn.Goods;
 using Timberborn.InventorySystem;
-using Timberborn.NaturalResourcesLifecycle;
 using Timberborn.PrioritySystem;
-using Timberborn.ResourceCountingSystem;
-using Timberborn.SingletonSystem;
-using Timberborn.Stockpiles;
 using Timberborn.TimeSystem;
 using Timberborn.WaterBuildings;
-using Timberborn.WeatherSystem;
 using Timberborn.WorkSystem;
-using Timberborn.NeedSystem;
-using Timberborn.LifeSystem;
-using Timberborn.Wellbeing;
-using Timberborn.BuildingsReachability;
-using Timberborn.ConstructionSites;
-using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
-using Timberborn.BeaverContaminationSystem;
-using Timberborn.Bots;
-using Timberborn.Carrying;
-using Timberborn.DeteriorationSystem;
-using Timberborn.Wonders;
 using Timberborn.NotificationSystem;
-using Timberborn.StatusSystem;
-using Timberborn.DwellingSystem;
 using Timberborn.PowerManagement;
 using Timberborn.SoilContaminationSystem;
 using Timberborn.Hauling;
 using Timberborn.Workshops;
-using Timberborn.Reproduction;
 using Timberborn.Fields;
-using Timberborn.GameDistrictsMigration;
 using Timberborn.ToolButtonSystem;
 using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
-using Timberborn.BuildingsNavigation;
 using Timberborn.SoilMoistureSystem;
 using Timberborn.NeedSpecs;
 using Timberborn.GameFactionSystem;
-using Timberborn.RangedEffectSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -530,7 +497,11 @@ namespace Timberbot
 
             return new
             {
-                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                x1 = minX,
+                y1 = minY,
+                x2 = maxX,
+                y2 = maxY,
+                z,
                 marked,
                 tiles = coords.Count
             };
@@ -614,9 +585,14 @@ namespace Timberbot
 
             return new
             {
-                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                x1 = minX,
+                y1 = minY,
+                x2 = maxX,
+                y2 = maxY,
+                z,
                 crop,
-                planted, skipped
+                planted,
+                skipped
             };
         }
 
@@ -677,7 +653,11 @@ namespace Timberbot
 
             return new
             {
-                x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
+                x1 = minX,
+                y1 = minY,
+                x2 = maxX,
+                y2 = maxY,
+                z,
                 cleared = true,
                 tiles = coords.Count
             };
@@ -715,19 +695,30 @@ namespace Timberbot
                     {
                         var buildingSpec = blockObjectTool.Template.GetSpec<BuildingSpec>();
                         if (buildingSpec != null && _buildingUnlockingService.Unlocked(buildingSpec))
-                            return new { building = buildingName, unlocked = true,
-                                         remaining = _scienceService.SciencePoints,
-                                         note = "already unlocked" };
+                            return new
+                            {
+                                building = buildingName,
+                                unlocked = true,
+                                remaining = _scienceService.SciencePoints,
+                                note = "already unlocked"
+                            };
                         var cost = buildingSpec?.ScienceCost ?? 0;
                         if (cost > _scienceService.SciencePoints)
-                            return new { error = "not enough science",
-                                         building = buildingName,
-                                         scienceCost = cost,
-                                         currentPoints = _scienceService.SciencePoints };
+                            return new
+                            {
+                                error = "not enough science",
+                                building = buildingName,
+                                scienceCost = cost,
+                                currentPoints = _scienceService.SciencePoints
+                            };
                         _buildingUnlockingService.Unlock(buildingSpec);
-                        _toolUnlockingService.UnlockInternal(blockObjectTool, () => {});
-                        return new { building = buildingName, unlocked = true,
-                                     remaining = _scienceService.SciencePoints };
+                        _toolUnlockingService.UnlockInternal(blockObjectTool, () => { });
+                        return new
+                        {
+                            building = buildingName,
+                            unlocked = true,
+                            remaining = _scienceService.SciencePoints
+                        };
                     }
                 }
 
@@ -899,8 +890,12 @@ namespace Timberbot
 
             var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
             if (terrainRange == null)
-                return new { error = "building has no work range", id = buildingId,
-                             name = TimberbotEntityCache.CleanName(ec.GameObject.name) };
+                return new
+                {
+                    error = "building has no work range",
+                    id = buildingId,
+                    name = TimberbotEntityCache.CleanName(ec.GameObject.name)
+                };
 
             var range = terrainRange.GetRange();
             int moistCount = 0;

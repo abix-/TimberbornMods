@@ -13,12 +13,10 @@
 
 using System;
 using System.Collections.Generic;
-using Timberborn.BaseComponentSystem;
 using Timberborn.BlockSystem;
 using Timberborn.Bots;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
-using Timberborn.BuildingsNavigation;
 using Timberborn.BuildingsReachability;
 using Timberborn.Carrying;
 using Timberborn.ConstructionSites;

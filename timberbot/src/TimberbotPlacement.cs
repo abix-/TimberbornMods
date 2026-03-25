@@ -14,67 +14,18 @@
 //
 // GetTerrainHeight: reads terrain column data for a single tile.
 
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using Timberborn.BlockSystem;
-using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
-using Timberborn.BaseComponentSystem;
 using Timberborn.BlockObjectTools;
 using Timberborn.Coordinates;
-using Timberborn.Cutting;
-using Timberborn.TemplateInstantiation;
 using Timberborn.MapIndexSystem;
 using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
-using Timberborn.Forestry;
-using Timberborn.Planting;
-using Timberborn.Gathering;
-using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
-using Timberborn.Goods;
-using Timberborn.InventorySystem;
-using Timberborn.NaturalResourcesLifecycle;
-using Timberborn.PrioritySystem;
-using Timberborn.ResourceCountingSystem;
-using Timberborn.SingletonSystem;
-using Timberborn.Stockpiles;
-using Timberborn.TimeSystem;
-using Timberborn.WaterBuildings;
-using Timberborn.WeatherSystem;
-using Timberborn.WorkSystem;
-using Timberborn.NeedSystem;
-using Timberborn.LifeSystem;
-using Timberborn.Wellbeing;
-using Timberborn.BuildingsReachability;
-using Timberborn.ConstructionSites;
-using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
-using Timberborn.BeaverContaminationSystem;
-using Timberborn.Bots;
-using Timberborn.Carrying;
-using Timberborn.DeteriorationSystem;
-using Timberborn.Wonders;
-using Timberborn.NotificationSystem;
-using Timberborn.StatusSystem;
-using Timberborn.DwellingSystem;
-using Timberborn.PowerManagement;
-using Timberborn.SoilContaminationSystem;
-using Timberborn.Hauling;
-using Timberborn.Workshops;
-using Timberborn.Reproduction;
-using Timberborn.Fields;
-using Timberborn.GameDistrictsMigration;
-using Timberborn.ToolButtonSystem;
-using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
 using Timberborn.BuildingsNavigation;
-using Timberborn.SoilMoistureSystem;
-using Timberborn.NeedSpecs;
-using Timberborn.GameFactionSystem;
-using Timberborn.RangedEffectSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -336,8 +287,13 @@ namespace Timberbot
                 cx += dx; cy += dy;
             }
 
-            var ret = new { placed, stairs, skipped,
-                            errors = errors.Count > 0 ? errors.ToArray() : null };
+            var ret = new
+            {
+                placed,
+                stairs,
+                skipped,
+                errors = errors.Count > 0 ? errors.ToArray() : null
+            };
             return ret;
         }
 
@@ -430,143 +386,143 @@ namespace Timberbot
             try
             {
 
-            for (int ty = y1; ty <= y2; ty++)
-            {
-                for (int tx = x1; tx <= x2; tx++)
+                for (int ty = y1; ty <= y2; ty++)
                 {
-                    int tz = GetTerrainHeight(tx, ty);
-                    if (tz <= 0) continue;
-
-                    // find best orientation (most path tiles adjacent to entrance side)
-                    int bestOrient = -1;
-                    int bestPathCount = -1;
-
-                    for (int orient = 0; orient < 4; orient++)
+                    for (int tx = x1; tx <= x2; tx++)
                     {
-                        // validate using cached preview
-                        if (cachedPreview == null) continue;
-                        int vrx = size.x, vry = size.y;
-                        if (orient == 1 || orient == 3) { vrx = size.y; vry = size.x; }
-                        int vgx = tx, vgy = ty;
-                        switch (orient)
-                        {
-                            case 1: vgy = ty + vry - 1; break;
-                            case 2: vgx = tx + vrx - 1; vgy = ty + vry - 1; break;
-                            case 3: vgx = tx + vrx - 1; break;
-                        }
-                        var placement = new Placement(new Vector3Int(vgx, vgy, tz),
-                            (Timberborn.Coordinates.Orientation)orient, FlipMode.Unflipped);
-                        cachedPreview.Reposition(placement);
-                        if (!cachedPreview.BlockObject.IsValid()) continue;
+                        int tz = GetTerrainHeight(tx, ty);
+                        if (tz <= 0) continue;
 
-                        // count path tiles on entrance side
-                        int rx = size.x, ry = size.y;
-                        if (orient == 1 || orient == 3) { rx = size.y; ry = size.x; }
+                        // find best orientation (most path tiles adjacent to entrance side)
+                        int bestOrient = -1;
+                        int bestPathCount = -1;
 
-                        int pathCount = 0;
-                        switch (orient)
+                        for (int orient = 0; orient < 4; orient++)
                         {
-                            case 0: // south: check y-1 row
-                                for (int px = tx; px < tx + rx; px++)
-                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty - 1) * 1000 + tz)) pathCount++;
-                                break;
-                            case 1: // west: check x-1 column
-                                for (int py = ty; py < ty + ry; py++)
-                                    if (pathTiles.Contains((long)(tx - 1) * 1000000 + (long)py * 1000 + tz)) pathCount++;
-                                break;
-                            case 2: // north: check y+ry row
-                                for (int px = tx; px < tx + rx; px++)
-                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty + ry) * 1000 + tz)) pathCount++;
-                                break;
-                            case 3: // east: check x+rx column
-                                for (int py = ty; py < ty + ry; py++)
-                                    if (pathTiles.Contains((long)(tx + rx) * 1000000 + (long)py * 1000 + tz)) pathCount++;
-                                break;
-                        }
-
-                        if (pathCount > bestPathCount)
-                        {
-                            bestPathCount = pathCount;
-                            bestOrient = orient;
-                        }
-                    }
-
-                    if (bestOrient >= 0)
-                    {
-                        // check district road reachability on entrance-side path tiles
-                        bool reachable = false;
-                        if (bestPathCount > 0)
-                        {
-                            int erx = size.x, ery = size.y;
-                            if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
-                            var checkCoords = new List<Vector3Int>();
-                            switch (bestOrient)
+                            // validate using cached preview
+                            if (cachedPreview == null) continue;
+                            int vrx = size.x, vry = size.y;
+                            if (orient == 1 || orient == 3) { vrx = size.y; vry = size.x; }
+                            int vgx = tx, vgy = ty;
+                            switch (orient)
                             {
-                                case 0:
-                                    for (int px = tx; px < tx + erx; px++)
-                                        checkCoords.Add(new Vector3Int(px, ty - 1, tz));
+                                case 1: vgy = ty + vry - 1; break;
+                                case 2: vgx = tx + vrx - 1; vgy = ty + vry - 1; break;
+                                case 3: vgx = tx + vrx - 1; break;
+                            }
+                            var placement = new Placement(new Vector3Int(vgx, vgy, tz),
+                                (Timberborn.Coordinates.Orientation)orient, FlipMode.Unflipped);
+                            cachedPreview.Reposition(placement);
+                            if (!cachedPreview.BlockObject.IsValid()) continue;
+
+                            // count path tiles on entrance side
+                            int rx = size.x, ry = size.y;
+                            if (orient == 1 || orient == 3) { rx = size.y; ry = size.x; }
+
+                            int pathCount = 0;
+                            switch (orient)
+                            {
+                                case 0: // south: check y-1 row
+                                    for (int px = tx; px < tx + rx; px++)
+                                        if (pathTiles.Contains((long)px * 1000000 + (long)(ty - 1) * 1000 + tz)) pathCount++;
                                     break;
-                                case 1:
-                                    for (int py = ty; py < ty + ery; py++)
-                                        checkCoords.Add(new Vector3Int(tx - 1, py, tz));
+                                case 1: // west: check x-1 column
+                                    for (int py = ty; py < ty + ry; py++)
+                                        if (pathTiles.Contains((long)(tx - 1) * 1000000 + (long)py * 1000 + tz)) pathCount++;
                                     break;
-                                case 2:
-                                    for (int px = tx; px < tx + erx; px++)
-                                        checkCoords.Add(new Vector3Int(px, ty + ery, tz));
+                                case 2: // north: check y+ry row
+                                    for (int px = tx; px < tx + rx; px++)
+                                        if (pathTiles.Contains((long)px * 1000000 + (long)(ty + ry) * 1000 + tz)) pathCount++;
                                     break;
-                                case 3:
-                                    for (int py = ty; py < ty + ery; py++)
-                                        checkCoords.Add(new Vector3Int(tx + erx, py, tz));
+                                case 3: // east: check x+rx column
+                                    for (int py = ty; py < ty + ry; py++)
+                                        if (pathTiles.Contains((long)(tx + rx) * 1000000 + (long)py * 1000 + tz)) pathCount++;
                                     break;
                             }
-                            foreach (var coord in checkCoords)
+
+                            if (pathCount > bestPathCount)
                             {
-                                if (reachableRoadCoords.Contains(coord))
-                                { reachable = true; break; }
+                                bestPathCount = pathCount;
+                                bestOrient = orient;
                             }
                         }
 
-                        // check power adjacency on all 4 sides of footprint
-                        int brx = size.x, bry = size.y;
-                        if (bestOrient == 1 || bestOrient == 3) { brx = size.y; bry = size.x; }
-                        bool nearPower = false;
-                        for (int px = tx - 1; px <= tx + brx && !nearPower; px++)
-                            for (int py = ty - 1; py <= ty + bry && !nearPower; py++)
+                        if (bestOrient >= 0)
+                        {
+                            // check district road reachability on entrance-side path tiles
+                            bool reachable = false;
+                            if (bestPathCount > 0)
                             {
-                                if (px >= tx && px < tx + brx && py >= ty && py < ty + bry) continue;
-                                if (powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
-                                    nearPower = true;
-                            }
-
-                        // check flooding: any water on footprint tiles means building will flood
-                        int frx = size.x, fry = size.y;
-                        if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
-                        bool flooded = false;
-                        for (int fx = tx; fx < tx + frx && !flooded; fx++)
-                            for (int fy = ty; fy < ty + fry && !flooded; fy++)
-                            {
-                                try
+                                int erx = size.x, ery = size.y;
+                                if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
+                                var checkCoords = new List<Vector3Int>();
+                                switch (bestOrient)
                                 {
-                                    float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
-                                    if (wh > 0) flooded = true;
+                                    case 0:
+                                        for (int px = tx; px < tx + erx; px++)
+                                            checkCoords.Add(new Vector3Int(px, ty - 1, tz));
+                                        break;
+                                    case 1:
+                                        for (int py = ty; py < ty + ery; py++)
+                                            checkCoords.Add(new Vector3Int(tx - 1, py, tz));
+                                        break;
+                                    case 2:
+                                        for (int px = tx; px < tx + erx; px++)
+                                            checkCoords.Add(new Vector3Int(px, ty + ery, tz));
+                                        break;
+                                    case 3:
+                                        for (int py = ty; py < ty + ery; py++)
+                                            checkCoords.Add(new Vector3Int(tx + erx, py, tz));
+                                        break;
                                 }
-                                catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
+                                foreach (var coord in checkCoords)
+                                {
+                                    if (reachableRoadCoords.Contains(coord))
+                                    { reachable = true; break; }
+                                }
                             }
 
-                        results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded));
+                            // check power adjacency on all 4 sides of footprint
+                            int brx = size.x, bry = size.y;
+                            if (bestOrient == 1 || bestOrient == 3) { brx = size.y; bry = size.x; }
+                            bool nearPower = false;
+                            for (int px = tx - 1; px <= tx + brx && !nearPower; px++)
+                                for (int py = ty - 1; py <= ty + bry && !nearPower; py++)
+                                {
+                                    if (px >= tx && px < tx + brx && py >= ty && py < ty + bry) continue;
+                                    if (powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
+                                        nearPower = true;
+                                }
+
+                            // check flooding: any water on footprint tiles means building will flood
+                            int frx = size.x, fry = size.y;
+                            if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
+                            bool flooded = false;
+                            for (int fx = tx; fx < tx + frx && !flooded; fx++)
+                                for (int fy = ty; fy < ty + fry && !flooded; fy++)
+                                {
+                                    try
+                                    {
+                                        float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
+                                        if (wh > 0) flooded = true;
+                                    }
+                                    catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
+                                }
+
+                            results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded));
+                        }
                     }
                 }
-            }
 
-            // sort: non-flooded > reachable > path access > power > path count
-            results.Sort((a, b) =>
-            {
-                if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
-                if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
-                if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
-                if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
-                return b.pathCount - a.pathCount;
-            });
+                // sort: non-flooded > reachable > path access > power > path count
+                results.Sort((a, b) =>
+                {
+                    if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
+                    if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
+                    if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
+                    if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
+                    return b.pathCount - a.pathCount;
+                });
 
             } // end try
             finally
@@ -611,9 +567,9 @@ namespace Timberbot
             switch (lower)
             {
                 case "south": return 0;
-                case "west":  return 1;
+                case "west": return 1;
                 case "north": return 2;
-                case "east":  return 3;
+                case "east": return 3;
                 default: return -1;
             }
         }
@@ -622,8 +578,11 @@ namespace Timberbot
         {
             int orientation = ParseOrientation(orientationStr);
             if (orientation < 0)
-                return new { error = $"invalid orientation '{orientationStr}', use: south, west, north, east",
-                             prefab = prefabName };
+                return new
+                {
+                    error = $"invalid orientation '{orientationStr}', use: south, west, north, east",
+                    prefab = prefabName
+                };
 
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
@@ -636,9 +595,13 @@ namespace Timberbot
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
             if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
-                return new { error = "building not unlocked", prefab = prefabName,
-                             scienceCost = bs.ScienceCost,
-                             currentPoints = _scienceService.SciencePoints };
+                return new
+                {
+                    error = "building not unlocked",
+                    prefab = prefabName,
+                    scienceCost = bs.ScienceCost,
+                    currentPoints = _scienceService.SciencePoints
+                };
 
             // correct origin so user coords = bottom-left corner regardless of orientation
             // orientations 1,3 swap x/y dimensions
@@ -655,8 +618,15 @@ namespace Timberbot
 
             // validate using the game's own preview system (same as player UI)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
-                return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
-                             prefab = prefabName, x, y, z, orientation = OrientNames[orientation] };
+                return new
+                {
+                    error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
+                    prefab = prefabName,
+                    x,
+                    y,
+                    z,
+                    orientation = OrientNames[orientation]
+                };
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
@@ -678,8 +648,13 @@ namespace Timberbot
                 {
                     error = "placement rejected by game engine",
                     prefab = prefabName,
-                    x, y, z, orientation,
-                    sizeX = size.x, sizeY = size.y, sizeZ = size.z,
+                    x,
+                    y,
+                    z,
+                    orientation,
+                    sizeX = size.x,
+                    sizeY = size.y,
+                    sizeZ = size.z,
                     hint = "passed pre-validation but game rejected it"
                 };
             }

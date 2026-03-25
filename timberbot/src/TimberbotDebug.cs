@@ -12,64 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Timberborn.BlockSystem;
-using Timberborn.BuilderPrioritySystem;
-using Timberborn.Buildings;
-using Timberborn.BaseComponentSystem;
 using Timberborn.BlockObjectTools;
-using Timberborn.Coordinates;
-using Timberborn.Cutting;
-using Timberborn.TemplateInstantiation;
-using Timberborn.MapIndexSystem;
-using Timberborn.TerrainSystem;
-using Timberborn.WaterSystem;
-using Timberborn.EntitySystem;
-using Timberborn.Forestry;
-using Timberborn.Planting;
-using Timberborn.Gathering;
-using Timberborn.GameCycleSystem;
-using Timberborn.GameDistricts;
-using Timberborn.Goods;
-using Timberborn.InventorySystem;
-using Timberborn.NaturalResourcesLifecycle;
-using Timberborn.PrioritySystem;
-using Timberborn.ResourceCountingSystem;
-using Timberborn.SingletonSystem;
-using Timberborn.Stockpiles;
-using Timberborn.TimeSystem;
-using Timberborn.WaterBuildings;
-using Timberborn.WeatherSystem;
-using Timberborn.WorkSystem;
-using Timberborn.NeedSystem;
-using Timberborn.LifeSystem;
-using Timberborn.Wellbeing;
-using Timberborn.BuildingsReachability;
-using Timberborn.ConstructionSites;
-using Timberborn.MechanicalSystem;
-using Timberborn.ScienceSystem;
-using Timberborn.BeaverContaminationSystem;
-using Timberborn.Bots;
-using Timberborn.Carrying;
-using Timberborn.DeteriorationSystem;
-using Timberborn.Wonders;
-using Timberborn.NotificationSystem;
-using Timberborn.StatusSystem;
-using Timberborn.DwellingSystem;
-using Timberborn.PowerManagement;
-using Timberborn.SoilContaminationSystem;
-using Timberborn.Hauling;
-using Timberborn.Workshops;
-using Timberborn.Reproduction;
-using Timberborn.Fields;
-using Timberborn.GameDistrictsMigration;
-using Timberborn.ToolButtonSystem;
-using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
-using Timberborn.BuildingsNavigation;
-using Timberborn.SoilMoistureSystem;
-using Timberborn.NeedSpecs;
-using Timberborn.GameFactionSystem;
-using Timberborn.RangedEffectSystem;
 using UnityEngine;
 using CachedBuilding = Timberbot.TimberbotEntityCache.CachedBuilding;
 using CachedBeaver = Timberbot.TimberbotEntityCache.CachedBeaver;
@@ -114,9 +57,18 @@ namespace Timberbot
 
                 // Nutrients is IEnumerable<GoodAmount> -- not indexable
                 // Test alternative: .ToList() then iterate (trades enumerator box for list alloc)
-                results.Add(new { test = "BreedingPod.Nutrients", count = breedingPods.Count, iterations,
-                    foreachMs, forLoopMs = -1.0, foreachGC0 = gcForeach, forLoopGC0 = -1L,
-                    speedup = -1.0, note = "IEnumerable -- not indexable, foreach is the only option" });
+                results.Add(new
+                {
+                    test = "BreedingPod.Nutrients",
+                    count = breedingPods.Count,
+                    iterations,
+                    foreachMs,
+                    forLoopMs = -1.0,
+                    foreachGC0 = gcForeach,
+                    forLoopGC0 = -1L,
+                    speedup = -1.0,
+                    note = "IEnumerable -- not indexable, foreach is the only option"
+                });
             }
 
             // --- Test 2: Inventories.AllInventories + inv.Stock foreach vs for ---
@@ -159,9 +111,17 @@ namespace Timberbot
                 long gcFor = GC.CollectionCount(0) - gcBefore;
                 double forMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
-                results.Add(new { test = "Inventories.AllInventories+Stock", count = withInv.Count, iterations,
-                    foreachMs, forLoopMs = forMs, foreachGC0 = gcForeach, forLoopGC0 = gcFor,
-                    speedup = foreachMs > 0 ? foreachMs / forMs : 0 });
+                results.Add(new
+                {
+                    test = "Inventories.AllInventories+Stock",
+                    count = withInv.Count,
+                    iterations,
+                    foreachMs,
+                    forLoopMs = forMs,
+                    foreachGC0 = gcForeach,
+                    forLoopGC0 = gcFor,
+                    speedup = foreachMs > 0 ? foreachMs / forMs : 0
+                });
 
                 // breakdown: AllInventories access only (no Stock iteration)
                 sw.Restart();
@@ -173,10 +133,15 @@ namespace Timberbot
                         for (int ii = 0; ii < allInv.Count; ii++) { var _ = allInv[ii].TotalAmountInStock; }
                     }
                 sw.Stop();
-                results.Add(new { test = "Inventories.AllInventories.only", count = withInv.Count, iterations,
+                results.Add(new
+                {
+                    test = "Inventories.AllInventories.only",
+                    count = withInv.Count,
+                    iterations,
                     totalMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
                     perCallMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / iterations,
-                    gc0 = GC.CollectionCount(0) - gcBefore });
+                    gc0 = GC.CollectionCount(0) - gcBefore
+                });
 
                 // breakdown: Stock iteration with Dictionary insert (simulates real refresh)
                 var testDict = new Dictionary<string, int>();
@@ -204,10 +169,15 @@ namespace Timberbot
                         }
                     }
                 sw.Stop();
-                results.Add(new { test = "Inventories.FullRefreshSim", count = withInv.Count, iterations,
+                results.Add(new
+                {
+                    test = "Inventories.FullRefreshSim",
+                    count = withInv.Count,
+                    iterations,
                     totalMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
                     perCallMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / iterations,
-                    gc0 = GC.CollectionCount(0) - gcBefore });
+                    gc0 = GC.CollectionCount(0) - gcBefore
+                });
             }
 
             // --- Test: NeedMgr.GetNeeds() allocation ---
@@ -249,10 +219,24 @@ namespace Timberbot
                 long ngc2 = GC.CollectionCount(0) - ngc;
                 double nms2 = nsw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
-                results.Add(new { test = "NeedMgr.GetNeeds.foreach", count = beaversWithNeeds.Count, iterations = n,
-                    totalMs = nms1, perCallMs = nms1 / n, gc0 = ngc1 });
-                results.Add(new { test = "NeedMgr.FullNeedLoop", count = beaversWithNeeds.Count, iterations = n,
-                    totalMs = nms2, perCallMs = nms2 / n, gc0 = ngc2 });
+                results.Add(new
+                {
+                    test = "NeedMgr.GetNeeds.foreach",
+                    count = beaversWithNeeds.Count,
+                    iterations = n,
+                    totalMs = nms1,
+                    perCallMs = nms1 / n,
+                    gc0 = ngc1
+                });
+                results.Add(new
+                {
+                    test = "NeedMgr.FullNeedLoop",
+                    count = beaversWithNeeds.Count,
+                    iterations = n,
+                    totalMs = nms2,
+                    perCallMs = nms2 / n,
+                    gc0 = ngc2
+                });
             }
 
             // --- Endpoint benchmarks: functional + performance ---
@@ -274,8 +258,16 @@ namespace Timberbot
 
                 bool pass = !(result is Dictionary<string, object> bd && bd.ContainsKey("error"));
 
-                return new { test = name, iterations = iters, totalMs = bms,
-                             perCallMs = bms / iters, gc0 = bgc0, items, pass };
+                return new
+                {
+                    test = name,
+                    iterations = iters,
+                    totalMs = bms,
+                    perCallMs = bms / iters,
+                    gc0 = bgc0,
+                    items,
+                    pass
+                };
             }
 
             int nHeavy = System.Math.Max(n / 10, 1);
@@ -310,10 +302,13 @@ namespace Timberbot
             results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
 
             // metadata
-            results.Insert(0, new { test = "_meta",
+            results.Insert(0, new
+            {
+                test = "_meta",
                 buildings = Service.Cache.Buildings.Read.Count,
                 beavers = Service.Cache.Beavers.Read.Count,
-                trees = Service.Cache.NaturalResources.Read.Count });
+                trees = Service.Cache.NaturalResources.Read.Count
+            });
 
             return new { benchmarks = results };
         }
@@ -486,79 +481,79 @@ namespace Timberbot
                         break;
 
                     case "get":
-                    {
-                        var path = Arg("path", "");
-                        if (string.IsNullOrEmpty(path)) { info["error"] = "pass path:_fieldName.nested.field"; break; }
-                        var obj = Resolve(path);
-                        _debugLastResult = obj;
-                        info["path"] = path;
-                        DumpObject(obj, info);
-                        break;
-                    }
+                        {
+                            var path = Arg("path", "");
+                            if (string.IsNullOrEmpty(path)) { info["error"] = "pass path:_fieldName.nested.field"; break; }
+                            var obj = Resolve(path);
+                            _debugLastResult = obj;
+                            info["path"] = path;
+                            DumpObject(obj, info);
+                            break;
+                        }
 
                     case "fields":
-                    {
-                        var path = Arg("path", "");
-                        object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
-                        info["type"] = obj.GetType().FullName;
-                        var filter = Arg("filter", "");
-                        var members = new List<string>();
-                        foreach (var f in obj.GetType().GetFields(flags))
-                            if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                                members.Add($"F {f.Name}:{f.FieldType.Name}");
-                        foreach (var p in obj.GetType().GetProperties(flags))
-                            if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                                members.Add($"P {p.Name}:{p.PropertyType.Name}");
-                        foreach (var m in obj.GetType().GetMethods(flags))
                         {
-                            if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
-                            if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
-                            var parms = m.GetParameters();
-                            members.Add($"M {m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
+                            var path = Arg("path", "");
+                            object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
+                            if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                            info["type"] = obj.GetType().FullName;
+                            var filter = Arg("filter", "");
+                            var members = new List<string>();
+                            foreach (var f in obj.GetType().GetFields(flags))
+                                if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                    members.Add($"F {f.Name}:{f.FieldType.Name}");
+                            foreach (var p in obj.GetType().GetProperties(flags))
+                                if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                    members.Add($"P {p.Name}:{p.PropertyType.Name}");
+                            foreach (var m in obj.GetType().GetMethods(flags))
+                            {
+                                if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
+                                if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                                var parms = m.GetParameters();
+                                members.Add($"M {m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
+                            }
+                            info["members"] = members;
+                            break;
                         }
-                        info["members"] = members;
-                        break;
-                    }
 
                     case "call":
-                    {
-                        var path = Arg("path", "");
-                        var methodName = Arg("method", "");
-                        if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
-                        object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
-                        // find all overloads
-                        var methods = obj.GetType().GetMethods(flags);
-                        System.Reflection.MethodInfo bestMethod = null;
-                        foreach (var m in methods)
-                            if (m.Name == methodName) { bestMethod = m; break; }
-                        if (bestMethod == null) { info["error"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
-                        // build args from arg0, arg1, etc
-                        var methodParams = bestMethod.GetParameters();
-                        var callArgs = new object[methodParams.Length];
-                        for (int i = 0; i < methodParams.Length; i++)
                         {
-                            var argStr = Arg($"arg{i}", "");
-                            callArgs[i] = ParseArg(argStr, methodParams[i].ParameterType);
+                            var path = Arg("path", "");
+                            var methodName = Arg("method", "");
+                            if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
+                            object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
+                            if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                            // find all overloads
+                            var methods = obj.GetType().GetMethods(flags);
+                            System.Reflection.MethodInfo bestMethod = null;
+                            foreach (var m in methods)
+                                if (m.Name == methodName) { bestMethod = m; break; }
+                            if (bestMethod == null) { info["error"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
+                            // build args from arg0, arg1, etc
+                            var methodParams = bestMethod.GetParameters();
+                            var callArgs = new object[methodParams.Length];
+                            for (int i = 0; i < methodParams.Length; i++)
+                            {
+                                var argStr = Arg($"arg{i}", "");
+                                callArgs[i] = ParseArg(argStr, methodParams[i].ParameterType);
+                            }
+                            var result = bestMethod.Invoke(obj, callArgs);
+                            _debugLastResult = result;
+                            DumpObject(result, info);
+                            info["stored"] = "result stored in $ for chaining";
+                            break;
                         }
-                        var result = bestMethod.Invoke(obj, callArgs);
-                        _debugLastResult = result;
-                        DumpObject(result, info);
-                        info["stored"] = "result stored in $ for chaining";
-                        break;
-                    }
 
                     case "validate":
-                    {
-                        int valId = int.Parse(Arg("id", "0"));
-                        return ValidateEntity(valId);
-                    }
+                        {
+                            int valId = int.Parse(Arg("id", "0"));
+                            return ValidateEntity(valId);
+                        }
 
                     case "validate_all":
-                    {
-                        return ValidateAll();
-                    }
+                        {
+                            return ValidateAll();
+                        }
 
                     default:
                         info["error"] = $"unknown target '{target}'. use: help, get, fields, call, validate, validate_all";
@@ -710,8 +705,13 @@ namespace Timberbot
                 if (mm > 0) results.Add(result);
             }
 
-            return new { entities = totalEntities, fields = totalFields,
-                         mismatches = totalMismatches, failures = results };
+            return new
+            {
+                entities = totalEntities,
+                fields = totalFields,
+                mismatches = totalMismatches,
+                failures = results
+            };
         }
     }
 }
