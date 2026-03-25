@@ -709,6 +709,73 @@ class TestRunner:
         bad = self.bot.find_placement("FakeBuilding", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
         self.check("find_placement unknown prefab", self.err(bad))
 
+        # entrance coords: entranceX/Y should be outside the building footprint
+        # (it's the doorstep tile where a path goes, not inside the building)
+        bsx, bsy = result.get("sizeX", 1), result.get("sizeY", 1)
+        for p in placements[:3]:
+            ex, ey = p.get("entranceX", 0), p.get("entranceY", 0)
+            bx, by = p["x"], p["y"]
+            orient = p["orientation"]
+            sx, sy = bsx, bsy
+            if orient in ("west", "east"):
+                sx, sy = bsy, bsx
+            inside = bx <= ex < bx + sx and by <= ey < by + sy
+            self.check(f"entrance ({ex},{ey}) outside footprint ({bx},{by})-({bx+sx-1},{by+sy-1})",
+                       not inside)
+
+        # entrance adjacency: entrance tile should be exactly 1 tile from building edge
+        for p in placements[:3]:
+            ex, ey = p.get("entranceX", 0), p.get("entranceY", 0)
+            bx, by = p["x"], p["y"]
+            orient = p["orientation"]
+            sx, sy = bsx, bsy
+            if orient in ("west", "east"):
+                sx, sy = bsy, bsx
+            # entrance should be adjacent to footprint (distance 1 from edge)
+            adj_x = (ex == bx - 1 or ex == bx + sx) and by <= ey < by + sy
+            adj_y = (ey == by - 1 or ey == by + sy) and bx <= ex < bx + sx
+            self.check(f"entrance ({ex},{ey}) adjacent to footprint", adj_x or adj_y,
+                       f"footprint ({bx},{by})-({bx+sx-1},{by+sy-1})")
+
+        # reachability via doorstep: build path from DC to a spot, verify reachable
+        dc = self.find_building("DistrictCenter")
+        if dc:
+            dc_bld = self.bot.buildings(detail=f"id:{dc}")
+            dc_info = dc_bld[0] if isinstance(dc_bld, list) and dc_bld else None
+            if dc_info:
+                dcx, dcy = dc_info["x"], dc_info["y"]
+                # find a placement spot on same z as DC
+                dc_z = dc_info.get("z", 2)
+                same_z = [p for p in placements if p["z"] == dc_z]
+                if same_z:
+                    spot = same_z[0]
+                    ex, ey = spot["entranceX"], spot["entranceY"]
+                    # build path from DC area to entrance
+                    path1 = self.write_and_wait(lambda: self.bot.place_path(dcx, dcy - 1, ex, dcy - 1))
+                    path2 = self.write_and_wait(lambda: self.bot.place_path(ex, dcy - 1, ex, ey))
+                    self.wait_for_refresh()
+                    self.wait_for_refresh()  # navmesh needs extra time to update
+                    # re-query placement to check reachability
+                    result2 = self.bot.find_placement(self.prefab("Inventor"),
+                        spot["x"] - 1, spot["y"] - 1, spot["x"] + 1, spot["y"] + 1)
+                    p2 = result2.get("placements", []) if isinstance(result2, dict) else []
+                    matching = [p for p in p2 if p["x"] == spot["x"] and p["y"] == spot["y"]]
+                    if matching:
+                        self.check("spot reachable after path built", matching[0].get("reachable") == 1,
+                                   f"reachable={matching[0].get('reachable')}")
+                        self.check("pathAccess after path built", matching[0].get("pathAccess") == 1,
+                                   f"pathAccess={matching[0].get('pathAccess')}")
+                    else:
+                        self.skip("reachability after path", "spot not in re-query results")
+                    # cleanup: demolish paths
+                    # (paths are cheap, leave them for other tests)
+                else:
+                    self.skip("reachability via doorstep", "no spots at DC z-level")
+            else:
+                self.skip("reachability via doorstep", "could not read DC")
+        else:
+            self.skip("reachability via doorstep", "no DC found")
+
     def test_water_placement(self):
         print("\n=== water placement ===\n")
 

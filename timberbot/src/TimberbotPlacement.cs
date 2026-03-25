@@ -562,7 +562,7 @@ namespace Timberbot
                             bool hasPath = false;
                             if (cachedPreview.BlockObject.HasEntrance)
                             {
-                                var ds = cachedPreview.BlockObject.PositionedEntrance.DoorstepCoordinates;
+                                var ds = cachedPreview.BlockObject.PositionedEntrance.Coordinates;
                                 hasPath = pathTiles.Contains((long)ds.x * 1000000 + (long)ds.y * 1000 + ds.z);
                             }
 
@@ -593,42 +593,17 @@ namespace Timberbot
                             int entranceX = tx, entranceY = ty;
                             if (cachedPreview.BlockObject.HasEntrance)
                             {
-                                var ds = cachedPreview.BlockObject.PositionedEntrance.DoorstepCoordinates;
+                                var ds = cachedPreview.BlockObject.PositionedEntrance.Coordinates;
                                 entranceX = ds.x;
                                 entranceY = ds.y;
                             }
 
-                            // check district road reachability on entrance-side path tiles
+                            // check reachability: doorstep tile in reachable road network
                             bool reachable = false;
-                            if (bestHasPath)
+                            if (bestHasPath && cachedPreview.BlockObject.HasEntrance)
                             {
-                                int erx = size.x, ery = size.y;
-                                if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
-                                var checkCoords = new List<Vector3Int>();
-                                switch (bestOrient)
-                                {
-                                    case 0:
-                                        for (int px = tx; px < tx + erx; px++)
-                                            checkCoords.Add(new Vector3Int(px, ty - 1, tz));
-                                        break;
-                                    case 1:
-                                        for (int py = ty; py < ty + ery; py++)
-                                            checkCoords.Add(new Vector3Int(tx - 1, py, tz));
-                                        break;
-                                    case 2:
-                                        for (int px = tx; px < tx + erx; px++)
-                                            checkCoords.Add(new Vector3Int(px, ty + ery, tz));
-                                        break;
-                                    case 3:
-                                        for (int py = ty; py < ty + ery; py++)
-                                            checkCoords.Add(new Vector3Int(tx + erx, py, tz));
-                                        break;
-                                }
-                                foreach (var coord in checkCoords)
-                                {
-                                    if (reachableRoadCoords.Contains(coord))
-                                    { reachable = true; break; }
-                                }
+                                var ds = cachedPreview.BlockObject.PositionedEntrance.Coordinates;
+                                reachable = reachableRoadCoords.Contains(ds);
                             }
 
                             // check power adjacency on all 4 sides of footprint
