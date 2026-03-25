@@ -28,6 +28,7 @@ using Timberborn.PrioritySystem;
 using Timberborn.TimeSystem;
 using Timberborn.WaterBuildings;
 using Timberborn.WorkSystem;
+using Timberborn.GameDistrictsMigration;
 using Timberborn.ScienceSystem;
 using Timberborn.NotificationSystem;
 using Timberborn.PowerManagement;
@@ -100,6 +101,8 @@ namespace Timberbot
             FactionNeedService factionNeedService,
             NotificationSaver notificationSaver,
             DistrictCenterRegistry districtCenterRegistry,
+            WorkingHoursManager workingHoursManager,
+            PopulationDistributorRetriever populationDistributorRetriever,
             TimberbotEntityCache cache)
         {
             _terrainService = terrainService;
@@ -121,6 +124,8 @@ namespace Timberbot
             _factionNeedService = factionNeedService;
             _notificationSaver = notificationSaver;
             _districtCenterRegistry = districtCenterRegistry;
+            _workingHoursManager = workingHoursManager;
+            _populationDistributorRetriever = populationDistributorRetriever;
             _cache = cache;
         }
 
@@ -138,6 +143,45 @@ namespace Timberbot
 
             _speedManager.ChangeSpeed(SpeedScale[speed]);
             return new { speed };
+        }
+
+        // set when beavers stop working (1-24, default 18 = 6pm)
+        public object SetWorkHours(int endHours)
+        {
+            if (endHours < 1 || endHours > 24)
+                return new { error = "endHours must be 1-24" };
+            _workingHoursManager.EndHours = endHours;
+            return new { endHours = _workingHoursManager.EndHours };
+        }
+
+        // move beavers between districts. requires 2+ districts.
+        public object MigratePopulation(string fromDistrict, string toDistrict, int count)
+        {
+            Timberborn.GameDistricts.DistrictCenter fromDc = null, toDc = null;
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                if (dc.DistrictName == fromDistrict) fromDc = dc;
+                if (dc.DistrictName == toDistrict) toDc = dc;
+            }
+            if (fromDc == null) return new { error = "from district not found", from = fromDistrict };
+            if (toDc == null) return new { error = "to district not found", to = toDistrict };
+            try
+            {
+                var distributor = _populationDistributorRetriever.GetPopulationDistributor<AdultsDistributorTemplate>(fromDc);
+                if (distributor == null)
+                    return new { error = "no population distributor", from = fromDistrict };
+                var available = distributor.Current;
+                var toMove = System.Math.Min(count, available);
+                if (toMove <= 0)
+                    return new { error = "no population to migrate", from = fromDistrict, available };
+                distributor.MigrateTo(toDc, toMove);
+                return new { from = fromDistrict, to = toDistrict, migrated = toMove };
+            }
+            catch (System.Exception ex)
+            {
+                TimberbotLog.Error("migration", ex);
+                return new { error = ex.Message, from = fromDistrict, to = toDistrict };
+            }
         }
 
         // pause/unpause a building

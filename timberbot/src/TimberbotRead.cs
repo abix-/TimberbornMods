@@ -27,7 +27,6 @@ using Timberborn.WeatherSystem;
 using Timberborn.WorkSystem;
 using Timberborn.ScienceSystem;
 using UnityEngine;
-using Timberborn.GameDistrictsMigration;
 
 namespace Timberbot
 {
@@ -50,7 +49,6 @@ namespace Timberbot
         private readonly SpeedManager _speedManager;
         private readonly ScienceService _scienceService;
         private readonly WorkingHoursManager _workingHoursManager;
-        private readonly PopulationDistributorRetriever _populationDistributorRetriever;
         private readonly TimberbotEntityCache _cache;  // the cached entity data
         // terrain/water services for CollectTiles (thread-safe by design)
         private readonly ITerrainService _terrainService;
@@ -69,7 +67,6 @@ namespace Timberbot
             SpeedManager speedManager,
             ScienceService scienceService,
             WorkingHoursManager workingHoursManager,
-            PopulationDistributorRetriever populationDistributorRetriever,
             TimberbotEntityCache cache,
             ITerrainService terrainService,
             IThreadSafeWaterMap waterMap,
@@ -86,7 +83,6 @@ namespace Timberbot
             _speedManager = speedManager;
             _scienceService = scienceService;
             _workingHoursManager = workingHoursManager;
-            _populationDistributorRetriever = populationDistributorRetriever;
             _cache = cache;
             _terrainService = terrainService;
             _waterMap = waterMap;
@@ -757,43 +753,6 @@ namespace Timberbot
                 endHours = _workingHoursManager.EndHours,
                 areWorkingHours = _workingHoursManager.AreWorkingHours
             };
-        }
-
-        public object SetWorkHours(int endHours)
-        {
-            if (endHours < 1 || endHours > 24)
-                return new { error = "endHours must be 1-24" };
-            _workingHoursManager.EndHours = endHours;
-            return new { endHours = _workingHoursManager.EndHours };
-        }
-
-        public object MigratePopulation(string fromDistrict, string toDistrict, int count)
-        {
-            Timberborn.GameDistricts.DistrictCenter fromDc = null, toDc = null;
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
-            {
-                if (dc.DistrictName == fromDistrict) fromDc = dc;
-                if (dc.DistrictName == toDistrict) toDc = dc;
-            }
-            if (fromDc == null) return new { error = "from district not found", from = fromDistrict };
-            if (toDc == null) return new { error = "to district not found", to = toDistrict };
-            try
-            {
-                var distributor = _populationDistributorRetriever.GetPopulationDistributor<AdultsDistributorTemplate>(fromDc);
-                if (distributor == null)
-                    return new { error = "no population distributor", from = fromDistrict };
-                var available = distributor.Current;
-                var toMove = System.Math.Min(count, available);
-                if (toMove <= 0)
-                    return new { error = "no population to migrate", from = fromDistrict, available };
-                distributor.MigrateTo(toDc, toMove);
-                return new { from = fromDistrict, to = toDistrict, migrated = toMove };
-            }
-            catch (System.Exception ex)
-            {
-                TimberbotLog.Error("migration", ex);
-                return new { error = ex.Message, from = fromDistrict, to = toDistrict };
-            }
         }
 
         // Tile data for a rectangular region. Returns terrain height, water depth,

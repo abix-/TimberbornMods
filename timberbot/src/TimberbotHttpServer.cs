@@ -323,10 +323,10 @@ namespace Timberbot
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
                     case "/api/workhours":
-                        return _service.Read.SetWorkHours(
+                        return _service.Write.SetWorkHours(
                             body?.Value<int>("endHours") ?? 16);
                     case "/api/district/migrate":
-                        return _service.Read.MigratePopulation(
+                        return _service.Write.MigratePopulation(
                             body?.Value<string>("from") ?? "",
                             body?.Value<string>("to") ?? "",
                             body?.Value<int>("count") ?? 1);
