@@ -2199,6 +2199,76 @@ class TestRunner:
         errs = validate(td, [{"name": str, "adults": int, "children": int, "bots": int}])
         self.check("schema: districts (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
+        t_time = tbot.time()
+        errs = validate(t_time, {"dayNumber": int, "dayProgress": float, "partialDayNumber": float})
+        self.check("schema: time (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_weather = tbot.weather()
+        errs = validate(t_weather, {"cycle": int, "cycleDay": int, "isHazardous": bool})
+        self.check("schema: weather (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_speed = tbot.speed()
+        errs = validate(t_speed, {"speed": int})
+        self.check("schema: speed (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_science = tbot.science()
+        errs = validate(t_science, {"points": int})
+        self.check("schema: science (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_workhours = tbot.workhours()
+        errs = validate(t_workhours, {"endHours": float, "areWorkingHours": bool})
+        self.check("schema: workhours (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_prefabs = tbot.prefabs()
+        errs = validate(t_prefabs, [{"name": str}])
+        self.check("schema: prefabs (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_power = tbot.power()
+        errs = validate(t_power, [{"id": int, "supply": int, "demand": int,
+                                    "buildings": [{"name": str, "id": int, "isGenerator": bool}]}])
+        self.check("schema: power (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_resources = tbot.resources()
+        errs = validate(t_resources, [{"district": str, "good": str, "available": int, "all": int}])
+        self.check("schema: resources (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_population = tbot.population()
+        errs = validate(t_population, [{"district": str, "adults": int, "children": int, "bots": int}])
+        self.check("schema: population (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_alerts = tbot.alerts()
+        self.check("schema: alerts (toon)", isinstance(t_alerts, list), f"got {type(t_alerts).__name__}")
+        if isinstance(t_alerts, list) and t_alerts:
+            errs = validate(t_alerts, [{"type": str, "id": int, "name": str}])
+            self.check("schema: alerts[] (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_wellbeing = tbot.wellbeing()
+        errs = validate(t_wellbeing, {"beavers": int, "categories": list})
+        self.check("schema: wellbeing (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_notifications = tbot.notifications()
+        errs = validate(t_notifications, [{"subject": str, "description": str, "cycle": int, "cycleDay": int}])
+        self.check("schema: notifications (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_distribution = tbot.distribution()
+        errs = validate(t_distribution, [{"district": str, "goods": list}])
+        self.check("schema: distribution (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_tree_clusters = tbot.tree_clusters()
+        errs = validate(t_tree_clusters, [{"x": int, "y": int, "z": int, "grown": int, "total": int}])
+        self.check("schema: tree_clusters (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_tiles = tbot.tiles(self.center_x, self.center_y, self.center_x + 3, self.center_y + 3)
+        errs = validate(t_tiles, {"mapSize": dict, "region": dict, "tiles": [{"x": int, "y": int, "terrain": int}]})
+        self.check("schema: tiles (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_fp = tbot.find_placement("Path", self.center_x, self.center_y, self.center_x + 5, self.center_y + 5)
+        errs = validate(t_fp, {"prefab": str, "sizeX": int, "sizeY": int, "placements": list})
+        self.check("schema: find_placement (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        t_webhooks = tbot.list_webhooks()
+        self.check("schema: webhooks (toon)", isinstance(t_webhooks, list), f"got {type(t_webhooks).__name__}")
+
         # --- cross-validate cached data vs live game state via debug endpoint ---
         self.wait_for_refresh()
         result = self.bot.debug(target="validate_all")
