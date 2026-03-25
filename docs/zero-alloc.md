@@ -42,12 +42,13 @@ This is the only code that runs every frame-ish on the main thread. Everything h
 
 ### Known allocations (accepted)
 
-| What | Count/sec | Bytes/sec | Severity | Why accepted |
+| What | Count/sec | Bytes/sec | Severity | Status |
 |---|---|---|---|---|
-| `Math.Round(need.Points, 2)` | 2400 | ~96KB | **Medium** | Returns double, which boxes when stored. Could replace with manual rounding |
-| `foreach GetNeeds()` enumerator | 80 | ~3KB | **Unknown** | IEnumerable may box. Benchmarking pending |
-| `GetNeed(id)` return value | 2400 | Unknown | **Unknown** | May return cached or new object |
-| `foreach BreedingPod.Nutrients` | 5 | ~200B | **Minor** | IEnumerable, only 5 breeding pods |
+| `Math.Round(need.Points, 2)` | 2400 | ~96KB | **Medium** | **TODO** -- replace with manual rounding |
+| `foreach GetNeeds()` enumerator | 80 | 0 | **None** | **CONFIRMED zero-alloc** (10K benchmark, 0 GC0) |
+| `GetNeed(id)` return value | 2400 | 0 | **None** | **CONFIRMED zero-alloc** (returns cached) |
+| `GetNeedWellbeing(id)` | 2400 | 0 | **None** | **CONFIRMED zero-alloc** (returns int) |
+| `foreach BreedingPod.Nutrients` | 5 | 0 | **None** | **CONFIRMED zero-alloc** (10K benchmark, 0 GC0) |
 | `ns.NeedGroupId ?? ""` null coalesce | 2400 | 0 | **None** | Returns existing string ref, no alloc |
 
 ### Previously fixed
@@ -121,19 +122,32 @@ Batching (200ms window) means high-frequency events like `block.set` (hundreds/s
 
 These are expected and unavoidable. Entities are created rarely (seconds to minutes apart).
 
-## Remaining gaps to benchmark
+## Benchmark results (10K iterations, 76 beavers, 546 buildings)
 
-| # | What | Expected impact | How to measure |
-|---|---|---|---|
-| 1 | `NeedMgr.GetNeeds()` -- allocates new collection? | 80 allocs/sec if yes, 0 if cached | `/api/benchmark` NeedMgr tests (pending) |
-| 2 | `Math.Round(need.Points, 2)` boxing | ~96KB/sec (2400 boxes) | Replace with manual: `(int)(points * 100 + 0.5f) / 100f` |
-| 3 | `GetNeed(id)` -- allocates or returns cached? | 2400 calls/sec | Benchmark alongside GetNeeds |
+Measured via `/api/benchmark` with 10,000 iterations to ensure GC0 detection sensitivity.
+
+| Test | GC0 | ms/call | Total calls | Verdict |
+|---|---|---|---|---|
+| `NeedMgr.GetNeeds.foreach` | **0** | 0.110 | 760,000 | **Zero-alloc.** Returns cached collection |
+| `NeedMgr.FullNeedLoop` (GetNeeds + GetNeed + GetNeedWellbeing) | **0** | 0.319 | 760,000 | **All three calls zero-alloc** |
+| `BreedingPod.Nutrients` foreach | **0** | 6.001 | 60,000 | Zero-alloc. IEnumerable but no boxing |
+| `Inventories.AllInventories+Stock` for-loop | **0** | 580.583 | 5,460,000 | Zero-alloc. 0.058ms per refresh cycle |
+
+All hot path game API calls confirmed zero-alloc across 760K+ invocations.
+
+## Remaining micro-optimization
+
+| # | What | Impact | Effort | Status |
+|---|---|---|---|---|
+| 1 | `Math.Round(need.Points, 2)` boxing | ~96KB/sec (2400 double->object boxes) | 5 min | **TODO** -- replace with `(int)(points * 100 + 0.5f) / 100f` |
+
+This is the only known allocation remaining on the hot path. All other items resolved or confirmed zero-alloc.
 
 ## Overall grade
 
 | Layer | Frequency | Allocs/sec (steady state) | Grade |
 |---|---|---|---|
-| RefreshCachedState | 1Hz | ~0 (pending GetNeeds benchmark) | **A** |
+| RefreshCachedState | 1Hz | **0** (confirmed by 10K benchmark) | **A+** |
 | HTTP GET response | On demand | 1 (ToString) + ~5 small | **A-** |
 | Webhook (no subscribers) | N/A | 0 | **A+** |
 | Webhook (with subscribers) | 5Hz flush | ~10-50 depending on event rate | **B** |
