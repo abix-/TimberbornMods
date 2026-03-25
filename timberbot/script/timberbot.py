@@ -73,6 +73,12 @@ class Timberbot:
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
         return self._check(r.json())
 
+    def _post_json(self, path, data):
+        """Force JSON format for internal programmatic use."""
+        data["format"] = "json"
+        r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
+        return self._check(r.json())
+
     # -- connection --
 
     def ping(self):
@@ -473,7 +479,7 @@ class Timberbot:
                 shade = 254 + min(z - 20, 1)
             return f"\033[48;5;{min(shade, 255)}m"
 
-        data = self.tiles(x - radius, y - radius, x + radius, y + radius)
+        data = self._post_json("/api/tiles", {"x1": x - radius, "y1": y - radius, "x2": x + radius, "y2": y + radius})
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         legend = {}
         z_levels = set()
@@ -487,12 +493,7 @@ class Timberbot:
                     row += f"{DIM}?{R}"
                     continue
                 occ = t.get("occupants")
-                if isinstance(occ, str):
-                    occupant = occ.split("/")[0].split(":")[0] if occ else None
-                elif isinstance(occ, list):
-                    occupant = occ[0]["name"] if occ else None
-                else:
-                    occupant = None
+                occupant = occ[0]["name"] if occ else None
                 entrance = t.get("entrance", False)
                 if entrance and not occupant:
                     bg = _zbg(t["terrain"])
@@ -518,7 +519,7 @@ class Timberbot:
                         ch = oname[0]
                         row += f"{bg}{DIM}{ch}{R}"
                         legend[ch] = (DIM, oname)
-                elif t["water"] > 0:
+                elif t.get("water", 0) > 0:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
                     row += f"{bg}{BLU}~{R}"

@@ -124,6 +124,24 @@ return jw.ToString();
 
 Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConvert.SerializeObject(data)`.
 
+## Data formats
+
+All endpoints accept a `format` parameter: `toon` (default) or `json`.
+
+- **toon**: compact token-efficient output for LLM/AI consumption. Flat strings, optional fields omitted when zero/false. Lists render one-line-per-item via toons library.
+- **json**: full nested objects for programmatic access. All fields always present. Arrays of objects with named keys.
+
+Key differences:
+- `tiles` occupants: toon = `"Path:6/Stairs:5"` (flat string), json = `[{"name":"Path","z":6},...]` (array)
+- `tiles` water: toon = omitted when 0, json = always present
+- `find_placement` booleans: always 0/1 integers in both formats
+
+### Client design
+
+The Python client (`timberbot.py`) defaults to toon format for CLI output. Internal methods that parse data programmatically (e.g. `map()`) force JSON via `_post_json()` to get structured arrays.
+
+The test suite uses `Timberbot(json_mode=True)` for functional tests (structured data) and `Timberbot()` (toon) for format validation tests.
+
 ## Webhooks
 
 68 event handlers registered on Timberborn's `EventBus`. Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.

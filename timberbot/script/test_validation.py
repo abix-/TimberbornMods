@@ -27,11 +27,13 @@ REFRESH_WAIT = 1.5  # seconds to wait after POST for cache refresh (settings.jso
 
 class TestRunner:
     def __init__(self):
-        self.bot = Timberbot()
+        self.bot = Timberbot(json_mode=True)  # functional tests use JSON for structured data
         # disable TimberbotError raising so tests can inspect error dicts directly
         self.bot._check = lambda data: data
         # separate bot with error raising enabled for TimberbotError tests
-        self.strict_bot = Timberbot()
+        self.strict_bot = Timberbot(json_mode=True)
+        # toon bot for format validation tests
+        self.toon_bot = Timberbot()
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -197,12 +199,12 @@ class TestRunner:
         return placements[0] if placements else None
 
     def tile_has(self, tile, name):
-        """check if a tile has an occupant matching name (handles toon string or json array)"""
+        """check if a tile has an occupant matching name"""
         occ = tile.get("occupants")
-        if isinstance(occ, str):
-            return name in occ
         if isinstance(occ, list):
             return any(name in o.get("name", "") for o in occ)
+        if isinstance(occ, str):  # toon format fallback
+            return name in occ
         return False
 
     def find_building(self, name):
