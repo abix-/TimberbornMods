@@ -99,9 +99,9 @@ namespace Timberbot
         {
             if (_webhooks.Count == 0) return;
             var payload = _jw.Reset().OpenObj()
-                .Key("event").Str(eventName)
-                .Key("day").Int(_dayNightCycle.DayNumber)
-                .Key("timestamp").Long(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                .Prop("event", eventName)
+                .Prop("day", _dayNightCycle.DayNumber)
+                .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
                 .Key("data").Null()
                 .CloseObj().ToString();
             _pendingEvents.Add((eventName, payload));
@@ -112,10 +112,10 @@ namespace Timberbot
         {
             if (_webhooks.Count == 0) return;
             var payload = _jw.Reset().OpenObj()
-                .Key("event").Str(eventName)
-                .Key("day").Int(_dayNightCycle.DayNumber)
-                .Key("timestamp").Long(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
-                .Key("data").Raw(dataJson)
+                .Prop("event", eventName)
+                .Prop("day", _dayNightCycle.DayNumber)
+                .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                .RawProp("data", dataJson)
                 .CloseObj().ToString();
             _pendingEvents.Add((eventName, payload));
         }
@@ -196,10 +196,10 @@ namespace Timberbot
             _jw.Reset().OpenObj().Key(key).Int(val).CloseObj().ToString();
 
         public string DataEntity(int id, string name) =>
-            _jw.Reset().OpenObj().Key("id").Int(id).Key("name").Str(name).CloseObj().ToString();
+            _jw.Reset().OpenObj().Prop("id", id).Prop("name", name).CloseObj().ToString();
 
         public string DataEntityBot(int id, string name, bool isBot) =>
-            _jw.Reset().OpenObj().Key("id").Int(id).Key("name").Str(name).Key("isBot").Bool(isBot).CloseObj().ToString();
+            _jw.Reset().OpenObj().Prop("id", id).Prop("name", name).Prop("isBot", isBot).CloseObj().ToString();
 
         // ================================================================
         // WEBHOOK EVENT HANDLERS
@@ -211,7 +211,7 @@ namespace Timberbot
         [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching");
         [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.start", DataInt("cycle", _gameCycleService.Cycle)); }
         [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.end", DataInt("cycle", _gameCycleService.Cycle)); }
-        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", _jw.Reset().OpenObj().Key("cycle").Int(_gameCycleService.Cycle).Key("cycleDay").Int(_gameCycleService.CycleDay).CloseObj().ToString()); }
+        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", _jw.Reset().OpenObj().Prop("cycle", _gameCycleService.Cycle).Prop("cycleDay", _gameCycleService.CycleDay).CloseObj().ToString()); }
 
         // time
         [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", DataInt("day", _dayNightCycle.DayNumber)); }

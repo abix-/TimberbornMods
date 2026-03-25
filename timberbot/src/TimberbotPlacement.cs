@@ -138,17 +138,17 @@ namespace Timberbot
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                 var blockSpec = building.GetSpec<BlockObjectSpec>();
-                jw.OpenObj().Key("name").Str(templateSpec?.TemplateName ?? "unknown");
+                jw.OpenObj().Prop("name", templateSpec?.TemplateName ?? "unknown");
                 if (blockSpec != null)
                 {
                     var size = blockSpec.Size;
-                    jw.Key("sizeX").Int(size.x).Key("sizeY").Int(size.y).Key("sizeZ").Int(size.z);
+                    jw.Prop("sizeX", size.x).Prop("sizeY", size.y).Prop("sizeZ", size.z);
                 }
                 var bs = building.GetSpec<BuildingSpec>();
                 if (bs != null)
                 {
                     if (bs.ScienceCost > 0)
-                        jw.Key("scienceCost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs));
+                        jw.Prop("scienceCost", bs.ScienceCost).Prop("unlocked", _buildingUnlockingService.Unlocked(bs));
                     // collect costs into a temp list, then write to JSON.
                     // if reflection fails mid-iteration, the JW state is still clean
                     try
@@ -164,9 +164,9 @@ namespace Timberbot
                         }
                         if (costs.Count > 0)
                         {
-                            jw.Key("cost").OpenArr();
+                            jw.Arr("cost");
                             for (int ci = 0; ci < costs.Count; ci++)
-                                jw.OpenObj().Key("good").Str(costs[ci].good).Key("amount").Int(costs[ci].amount).CloseObj();
+                                jw.OpenObj().Prop("good", costs[ci].good).Prop("amount", costs[ci].amount).CloseObj();
                             jw.CloseArr();
                         }
                     }
@@ -620,20 +620,20 @@ namespace Timberbot
             int count = results.Count > 10 ? 10 : results.Count;
 
             var jw = _cache.Jw.Reset().OpenObj()
-                .Key("prefab").Str(prefabName)
-                .Key("sizeX").Int(size.x).Key("sizeY").Int(size.y)
-                .Key("placements").OpenArr();
+                .Prop("prefab", prefabName)
+                .Prop("sizeX", size.x).Prop("sizeY", size.y)
+                .Arr("placements");
             for (int i = 0; i < count; i++)
             {
                 var r = results[i];
                 jw.OpenObj()
-                    .Key("x").Int(r.x).Key("y").Int(r.y).Key("z").Int(r.z)
-                    .Key("orientation").Str(orientNames[r.orient])
-                    .Key("pathAccess").Bool(r.pathAccess)
-                    .Key("pathCount").Int(r.pathCount)
-                    .Key("reachable").Bool(r.reachable)
-                    .Key("nearPower").Bool(r.nearPower)
-                    .Key("flooded").Bool(r.flooded)
+                    .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
+                    .Prop("orientation", orientNames[r.orient])
+                    .Prop("pathAccess", r.pathAccess)
+                    .Prop("pathCount", r.pathCount)
+                    .Prop("reachable", r.reachable)
+                    .Prop("nearPower", r.nearPower)
+                    .Prop("flooded", r.flooded)
                     .CloseObj();
             }
             jw.CloseArr().CloseObj();

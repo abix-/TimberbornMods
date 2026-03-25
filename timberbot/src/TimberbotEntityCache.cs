@@ -407,7 +407,7 @@ namespace Timberbot
                         {
                             var rc = counter.GetResourceCount(goodId);
                             if (rc.AllStock > 0)
-                                dj.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
+                                dj.Key(goodId).OpenObj().Prop("available", rc.AvailableStock).Prop("all", rc.AllStock).CloseObj();
                         }
                         dj.CloseObj();
                         cd.ResourcesJson = dj.ToInnerString();

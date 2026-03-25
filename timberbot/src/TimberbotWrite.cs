@@ -565,24 +565,24 @@ namespace Timberbot
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
                 if (inRange == null) return new { error = "building has no planting range", id = buildingId };
 
-                var jw = _cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Prop("crop", crop).Arr("spots");
                 foreach (var c in inRange.GetCoordinates())
                 {
                     if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
-                    jw.OpenObj().Key("x").Int(c.x).Key("y").Int(c.y).Key("z").Int(c.z).Key("moist").Bool(_soilMoistureService.SoilIsMoist(c)).Key("planted").Bool(_plantingService.IsResourceAt(c)).CloseObj();
+                    jw.OpenObj().Prop("x", c.x).Prop("y", c.y).Prop("z", c.z).Prop("moist", _soilMoistureService.SoilIsMoist(c)).Prop("planted", _plantingService.IsResourceAt(c)).CloseObj();
                 }
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
             else
             {
-                var jw = _cache.Jw.Reset().OpenObj().Key("crop").Str(crop).Key("spots").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Prop("crop", crop).Arr("spots");
                 for (int x = Mathf.Min(x1, x2); x <= Mathf.Max(x1, x2); x++)
                     for (int y = Mathf.Min(y1, y2); y <= Mathf.Max(y1, y2); y++)
                     {
                         var c = new Vector3Int(x, y, z);
                         if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
-                        jw.OpenObj().Key("x").Int(x).Key("y").Int(y).Key("z").Int(z).Key("moist").Bool(_soilMoistureService.SoilIsMoist(c)).Key("planted").Bool(_plantingService.IsResourceAt(c)).CloseObj();
+                        jw.OpenObj().Prop("x", x).Prop("y", y).Prop("z", z).Prop("moist", _soilMoistureService.SoilIsMoist(c)).Prop("planted", _plantingService.IsResourceAt(c)).CloseObj();
                     }
                 jw.CloseArr().CloseObj();
                 return jw.ToString();

@@ -90,12 +90,31 @@ namespace Timberbot
         // Raw: inject pre-built JSON (e.g. from a nested JW call). No quoting.
         public TimberbotJw Raw(string json) { AutoSep(); _sb.Append(json); _hasValue[_depth] = true; return this; }
 
+        // --- Key+Value shortcuts: one call instead of two ---
+        // Before: jw.Key("id").Int(c.Id).Key("name").Str(c.Name).Key("alive").Bool(true)
+        // After:  jw.Prop("id", c.Id).Prop("name", c.Name).Prop("alive", true)
+        public TimberbotJw Prop(string name, int v) => Key(name).Int(v);
+        public TimberbotJw Prop(string name, long v) => Key(name).Long(v);
+        public TimberbotJw Prop(string name, bool v) => Key(name).Bool(v);
+        public TimberbotJw Prop(string name, string v) => Key(name).Str(v);
+        public TimberbotJw Prop(string name, float v, string fmt = "F2") => Key(name).Float(v, fmt);
+
+        // --- Key+Structure shortcuts ---
+        // Before: jw.Key("population").OpenObj()...CloseObj()
+        // After:  jw.Obj("population")...CloseObj()
+        public TimberbotJw Obj(string name) => Key(name).OpenObj();
+        public TimberbotJw Arr(string name) => Key(name).OpenArr();
+
+        // --- Key+Raw shortcut for embedding pre-serialized JSON ---
+        // Before: jw.Key("districts").Raw(districtsJson)
+        // After:  jw.RawProp("districts", districtsJson)
+        public TimberbotJw RawProp(string name, string json) => Key(name).Raw(json);
+
         public override string ToString() => _sb.ToString();
 
         // Returns the content inside the outermost {} or [] without the braces.
-        // Use when pre-serializing object contents to embed later with Raw().
-        // Example: jw.Reset().OpenObj().Key("a").Int(1).Key("b").Int(2).CloseObj().ToInnerString()
-        //   -> "a":1,"b":2  (no outer braces)
+        // jw.Reset().OpenObj().Prop("a", 1).Prop("b", 2).CloseObj().ToInnerString()
+        //   -> "a":1,"b":2
         public string ToInnerString()
         {
             var s = _sb.ToString();

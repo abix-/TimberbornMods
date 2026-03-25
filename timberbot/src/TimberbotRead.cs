@@ -210,49 +210,49 @@ namespace Timberbot
                 // capture districts BEFORE using _cache.Jw -- CollectDistricts uses the same JwWriter
                 var districtsJson = CollectDistricts("json") as string;
                 var jj = _cache.Jw.Reset().OpenObj();
-                jj.Key("time").OpenObj()
-                    .Key("dayNumber").Int(_dayNightCycle.DayNumber)
-                    .Key("dayProgress").Float((float)_dayNightCycle.DayProgress)
-                    .Key("partialDayNumber").Float((float)_dayNightCycle.PartialDayNumber)
+                jj.Obj("time")
+                    .Prop("dayNumber", _dayNightCycle.DayNumber)
+                    .Prop("dayProgress", (float)_dayNightCycle.DayProgress)
+                    .Prop("partialDayNumber", (float)_dayNightCycle.PartialDayNumber)
                     .CloseObj();
-                jj.Key("weather").OpenObj()
-                    .Key("cycle").Int(_gameCycleService.Cycle)
-                    .Key("cycleDay").Int(_gameCycleService.CycleDay)
-                    .Key("isHazardous").Bool(_weatherService.IsHazardousWeather)
-                    .Key("temperateWeatherDuration").Int(_weatherService.TemperateWeatherDuration)
-                    .Key("hazardousWeatherDuration").Int(_weatherService.HazardousWeatherDuration)
-                    .Key("cycleLengthInDays").Int(_weatherService.CycleLengthInDays)
+                jj.Obj("weather")
+                    .Prop("cycle", _gameCycleService.Cycle)
+                    .Prop("cycleDay", _gameCycleService.CycleDay)
+                    .Prop("isHazardous", _weatherService.IsHazardousWeather)
+                    .Prop("temperateWeatherDuration", _weatherService.TemperateWeatherDuration)
+                    .Prop("hazardousWeatherDuration", _weatherService.HazardousWeatherDuration)
+                    .Prop("cycleLengthInDays", _weatherService.CycleLengthInDays)
                     .CloseObj();
-                jj.Key("districts").Raw(districtsJson);
-                jj.Key("trees").OpenObj()
-                    .Key("markedGrown").Int(treeMarkedGrown)
-                    .Key("markedSeedling").Int(treeMarkedSeedling)
-                    .Key("unmarkedGrown").Int(treeUnmarkedGrown)
+                jj.RawProp("districts", districtsJson);
+                jj.Obj("trees")
+                    .Prop("markedGrown", treeMarkedGrown)
+                    .Prop("markedSeedling", treeMarkedSeedling)
+                    .Prop("unmarkedGrown", treeUnmarkedGrown)
                     .CloseObj();
-                jj.Key("crops").OpenObj()
-                    .Key("ready").Int(cropReady)
-                    .Key("growing").Int(cropGrowing)
+                jj.Obj("crops")
+                    .Prop("ready", cropReady)
+                    .Prop("growing", cropGrowing)
                     .CloseObj();
-                jj.Key("housing").OpenObj()
-                    .Key("occupiedBeds").Int(occupiedBeds)
-                    .Key("totalBeds").Int(totalBeds)
-                    .Key("homeless").Int(homeless)
+                jj.Obj("housing")
+                    .Prop("occupiedBeds", occupiedBeds)
+                    .Prop("totalBeds", totalBeds)
+                    .Prop("homeless", homeless)
                     .CloseObj();
-                jj.Key("employment").OpenObj()
-                    .Key("assigned").Int(assignedWorkers)
-                    .Key("vacancies").Int(totalVacancies)
-                    .Key("unemployed").Int(unemployed)
+                jj.Obj("employment")
+                    .Prop("assigned", assignedWorkers)
+                    .Prop("vacancies", totalVacancies)
+                    .Prop("unemployed", unemployed)
                     .CloseObj();
-                jj.Key("wellbeing").OpenObj()
-                    .Key("average").Float((float)avgWellbeing, "F1")
-                    .Key("miserable").Int(miserable)
-                    .Key("critical").Int(critical)
+                jj.Obj("wellbeing")
+                    .Prop("average", (float)avgWellbeing, "F1")
+                    .Prop("miserable", miserable)
+                    .Prop("critical", critical)
                     .CloseObj();
-                jj.Key("science").Int(_scienceService.SciencePoints);
-                jj.Key("alerts").OpenObj()
-                    .Key("unstaffed").Int(alertUnstaffed)
-                    .Key("unpowered").Int(alertUnpowered)
-                    .Key("unreachable").Int(alertUnreachable)
+                jj.Prop("science", _scienceService.SciencePoints);
+                jj.Obj("alerts")
+                    .Prop("unstaffed", alertUnstaffed)
+                    .Prop("unpowered", alertUnpowered)
+                    .Prop("unreachable", alertUnreachable)
                     .CloseObj();
                 jj.CloseObj();
                 return jj.ToString();
@@ -262,31 +262,31 @@ namespace Timberbot
             var jw = _cache.Jw.Reset().OpenObj();
 
             // time
-            jw.Key("day").Int(_dayNightCycle.DayNumber);
-            jw.Key("dayProgress").Float((float)_dayNightCycle.DayProgress);
+            jw.Prop("day", _dayNightCycle.DayNumber);
+            jw.Prop("dayProgress", (float)_dayNightCycle.DayProgress);
 
             // weather
-            jw.Key("cycle").Int(_gameCycleService.Cycle);
-            jw.Key("cycleDay").Int(_gameCycleService.CycleDay);
-            jw.Key("isHazardous").Bool(_weatherService.IsHazardousWeather);
-            jw.Key("tempDays").Int(_weatherService.TemperateWeatherDuration);
-            jw.Key("hazardDays").Int(_weatherService.HazardousWeatherDuration);
+            jw.Prop("cycle", _gameCycleService.Cycle);
+            jw.Prop("cycleDay", _gameCycleService.CycleDay);
+            jw.Prop("isHazardous", _weatherService.IsHazardousWeather);
+            jw.Prop("tempDays", _weatherService.TemperateWeatherDuration);
+            jw.Prop("hazardDays", _weatherService.HazardousWeatherDuration);
 
             // trees (actual trees only, not crops)
-            jw.Key("markedGrown").Int(treeMarkedGrown);
-            jw.Key("markedSeedling").Int(treeMarkedSeedling);
-            jw.Key("unmarkedGrown").Int(treeUnmarkedGrown);
+            jw.Prop("markedGrown", treeMarkedGrown);
+            jw.Prop("markedSeedling", treeMarkedSeedling);
+            jw.Prop("unmarkedGrown", treeUnmarkedGrown);
             // crops
-            jw.Key("cropReady").Int(cropReady);
-            jw.Key("cropGrowing").Int(cropGrowing);
+            jw.Prop("cropReady", cropReady);
+            jw.Prop("cropGrowing", cropGrowing);
 
             // population + resources (from cached district snapshot)
             int totalFood = 0, totalWater = 0, logStock = 0, plankStock = 0, gearStock = 0;
             foreach (var dc in _cache.Districts)
             {
-                jw.Key("adults").Int(dc.Adults);
-                jw.Key("children").Int(dc.Children);
-                jw.Key("bots").Int(dc.Bots);
+                jw.Prop("adults", dc.Adults);
+                jw.Prop("children", dc.Children);
+                jw.Prop("bots", dc.Bots);
                 if (dc.Resources != null)
                 {
                     foreach (var kvp in dc.Resources)
@@ -311,28 +311,28 @@ namespace Timberbot
             int totalPop = beaverCount;
             if (totalPop > 0)
             {
-                jw.Key("foodDays").Float((float)((double)totalFood / totalPop), "F1");
-                jw.Key("waterDays").Float((float)((double)totalWater / (totalPop * 2.0)), "F1"); // 2x because beavers drink twice/day
-                jw.Key("logDays").Float((float)((double)logStock / totalPop), "F1");
-                jw.Key("plankDays").Float((float)((double)plankStock / totalPop), "F1");
-                jw.Key("gearDays").Float((float)((double)gearStock / totalPop), "F1");
+                jw.Prop("foodDays", (float)((double)totalFood / totalPop), "F1");
+                jw.Prop("waterDays", (float)((double)totalWater / (totalPop * 2.0)), "F1"); // 2x because beavers drink twice/day
+                jw.Prop("logDays", (float)((double)logStock / totalPop), "F1");
+                jw.Prop("plankDays", (float)((double)plankStock / totalPop), "F1");
+                jw.Prop("gearDays", (float)((double)gearStock / totalPop), "F1");
             }
 
             // housing
-            jw.Key("beds").Str($"{occupiedBeds}/{totalBeds}");
-            jw.Key("homeless").Int(homeless);
+            jw.Prop("beds", $"{occupiedBeds}/{totalBeds}");
+            jw.Prop("homeless", homeless);
 
             // employment
-            jw.Key("workers").Str($"{assignedWorkers}/{totalVacancies}");
-            jw.Key("unemployed").Int(unemployed);
+            jw.Prop("workers", $"{assignedWorkers}/{totalVacancies}");
+            jw.Prop("unemployed", unemployed);
 
             // wellbeing
-            jw.Key("wellbeing").Float((float)avgWellbeing, "F1");
-            jw.Key("miserable").Int(miserable);
-            jw.Key("critical").Int(critical);
+            jw.Prop("wellbeing", (float)avgWellbeing, "F1");
+            jw.Prop("miserable", miserable);
+            jw.Prop("critical", critical);
 
             // science
-            jw.Key("science").Int(_scienceService.SciencePoints);
+            jw.Prop("science", _scienceService.SciencePoints);
 
             // alerts
             string alertStr = "none";
@@ -344,7 +344,7 @@ namespace Timberbot
                 if (alertUnreachable > 0) parts.Add($"{alertUnreachable} unreachable");
                 alertStr = string.Join(", ", parts);
             }
-            jw.Key("alerts").Str(alertStr);
+            jw.Prop("alerts", alertStr);
 
             jw.CloseObj();
             return jw.ToString();
@@ -363,7 +363,7 @@ namespace Timberbot
                     if (offset > 0 && skipped < offset) { skipped++; }
                     else if (!paginated || emitted < limit)
                     {
-                        jw.OpenObj().Key("type").Str("unstaffed").Key("id").Int(c.Id).Key("name").Str(c.Name).Key("workers").Str($"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
+                        jw.OpenObj().Prop("type", "unstaffed").Prop("id", c.Id).Prop("name", c.Name).Prop("workers", $"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
                         emitted++;
                     }
                 }
@@ -372,7 +372,7 @@ namespace Timberbot
                     if (offset > 0 && skipped < offset) { skipped++; }
                     else if (!paginated || emitted < limit)
                     {
-                        jw.OpenObj().Key("type").Str("unpowered").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
+                        jw.OpenObj().Prop("type", "unpowered").Prop("id", c.Id).Prop("name", c.Name).CloseObj();
                         emitted++;
                     }
                 }
@@ -381,7 +381,7 @@ namespace Timberbot
                     if (offset > 0 && skipped < offset) { skipped++; }
                     else if (!paginated || emitted < limit)
                     {
-                        jw.OpenObj().Key("type").Str("unreachable").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
+                        jw.OpenObj().Prop("type", "unreachable").Prop("id", c.Id).Prop("name", c.Name).CloseObj();
                         emitted++;
                     }
                 }
@@ -428,7 +428,7 @@ namespace Timberbot
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
                 var s = sorted[i];
-                jw.OpenObj().Key("x").Int(s[2]).Key("y").Int(s[3]).Key("z").Int(s[4]).Key("grown").Int(s[0]).Key("total").Int(s[1]).CloseObj();
+                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]).CloseObj();
             }
             jw.CloseArr();
             return jw.ToString();
@@ -462,18 +462,18 @@ namespace Timberbot
             var jw = _cache.Jw.Reset().OpenArr();
             foreach (var dc in _cache.Districts)
             {
-                jw.OpenObj().Key("name").Str(dc.Name);
+                jw.OpenObj().Prop("name", dc.Name);
                 if (format == "toon")
                 {
-                    jw.Key("adults").Int(dc.Adults).Key("children").Int(dc.Children).Key("bots").Int(dc.Bots);
+                    jw.Prop("adults", dc.Adults).Prop("children", dc.Children).Prop("bots", dc.Bots);
                     if (dc.ResourcesToon != null) jw.Raw(",").Raw(dc.ResourcesToon);
                 }
                 else
                 {
-                    jw.Key("population").OpenObj()
-                        .Key("adults").Int(dc.Adults).Key("children").Int(dc.Children).Key("bots").Int(dc.Bots)
+                    jw.Obj("population")
+                        .Prop("adults", dc.Adults).Prop("children", dc.Children).Prop("bots", dc.Bots)
                         .CloseObj();
-                    jw.Key("resources").OpenObj();
+                    jw.Obj("resources");
                     if (dc.ResourcesJson != null) jw.Raw(dc.ResourcesJson);
                     jw.CloseObj();
                 }
@@ -496,7 +496,7 @@ namespace Timberbot
                 {
                     if (dc.Resources == null) continue;
                     foreach (var kvp in dc.Resources)
-                        jw.OpenObj().Key("district").Str(dc.Name).Key("good").Str(kvp.Key).Key("available").Int(kvp.Value.available).Key("all").Int(kvp.Value.all).CloseObj();
+                        jw.OpenObj().Prop("district", dc.Name).Prop("good", kvp.Key).Prop("available", kvp.Value.available).Prop("all", kvp.Value.all).CloseObj();
                 }
                 jw.CloseArr();
             }
@@ -521,10 +521,10 @@ namespace Timberbot
             foreach (var dc in _cache.Districts)
             {
                 jw.OpenObj()
-                    .Key("district").Str(dc.Name)
-                    .Key("adults").Int(dc.Adults)
-                    .Key("children").Int(dc.Children)
-                    .Key("bots").Int(dc.Bots)
+                    .Prop("district", dc.Name)
+                    .Prop("adults", dc.Adults)
+                    .Prop("children", dc.Children)
+                    .Prop("bots", dc.Bots)
                     .CloseObj();
             }
             jw.CloseArr();
@@ -556,7 +556,7 @@ namespace Timberbot
             int skipped = 0, emitted = 0;
 
             var jw = _cache.Jw.Reset();
-            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.Buildings.Read)
             {
@@ -568,76 +568,76 @@ namespace Timberbot
 
                 // every building gets these base fields
                 jw.OpenObj()
-                    .Key("id").Int(c.Id)
-                    .Key("name").Str(c.Name)
-                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
-                    .Key("orientation").Str(c.Orientation ?? "")
-                    .Key("finished").Bool(c.Finished)
-                    .Key("paused").Bool(c.Paused);
+                    .Prop("id", c.Id)
+                    .Prop("name", c.Name)
+                    .Prop("x", c.X).Prop("y", c.Y).Prop("z", c.Z)
+                    .Prop("orientation", c.Orientation ?? "")
+                    .Prop("finished", c.Finished)
+                    .Prop("paused", c.Paused);
 
                 // basic mode: just priority + workers, then close
                 if (!fullDetail)
                 {
-                    jw.Key("priority").Str(c.ConstructionPriority ?? "")
-                        .Key("workers").Str(c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "")
+                    jw.Prop("priority", c.ConstructionPriority ?? "")
+                        .Prop("workers", c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "")
                         .CloseObj();
                     continue;
                 }
 
                 // full detail: conditional fields (only present if building has that component)
-                if (c.Pausable != null) jw.Key("pausable").Bool(true);
-                if (c.HasFloodgate) jw.Key("floodgate").Bool(true).Key("height").Float(c.FloodgateHeight, "F1").Key("maxHeight").Float(c.FloodgateMaxHeight, "F1");
-                if (c.ConstructionPriority != null) jw.Key("constructionPriority").Str(c.ConstructionPriority);
-                if (c.WorkplacePriorityStr != null) jw.Key("workplacePriority").Str(c.WorkplacePriorityStr);
-                if (c.Workplace != null) jw.Key("maxWorkers").Int(c.MaxWorkers).Key("desiredWorkers").Int(c.DesiredWorkers).Key("assignedWorkers").Int(c.AssignedWorkers);
-                if (c.Reachability != null) jw.Key("reachable").Bool(!c.Unreachable);
-                if (c.Mechanical != null) jw.Key("powered").Bool(c.Powered);
+                if (c.Pausable != null) jw.Prop("pausable", true);
+                if (c.HasFloodgate) jw.Prop("floodgate", true).Prop("height", c.FloodgateHeight, "F1").Prop("maxHeight", c.FloodgateMaxHeight, "F1");
+                if (c.ConstructionPriority != null) jw.Prop("constructionPriority", c.ConstructionPriority);
+                if (c.WorkplacePriorityStr != null) jw.Prop("workplacePriority", c.WorkplacePriorityStr);
+                if (c.Workplace != null) jw.Prop("maxWorkers", c.MaxWorkers).Prop("desiredWorkers", c.DesiredWorkers).Prop("assignedWorkers", c.AssignedWorkers);
+                if (c.Reachability != null) jw.Prop("reachable", !c.Unreachable);
+                if (c.Mechanical != null) jw.Prop("powered", c.Powered);
                 if (c.PowerNode != null)
                 {
-                    jw.Key("isGenerator").Bool(c.IsGenerator).Key("isConsumer").Bool(c.IsConsumer)
-                        .Key("nominalPowerInput").Int(c.NominalPowerInput).Key("nominalPowerOutput").Int(c.NominalPowerOutput);
-                    if (c.PowerDemand > 0 || c.PowerSupply > 0) jw.Key("powerDemand").Int(c.PowerDemand).Key("powerSupply").Int(c.PowerSupply);
+                    jw.Prop("isGenerator", c.IsGenerator).Prop("isConsumer", c.IsConsumer)
+                        .Prop("nominalPowerInput", c.NominalPowerInput).Prop("nominalPowerOutput", c.NominalPowerOutput);
+                    if (c.PowerDemand > 0 || c.PowerSupply > 0) jw.Prop("powerDemand", c.PowerDemand).Prop("powerSupply", c.PowerSupply);
                 }
-                if (c.Site != null) jw.Key("buildProgress").Float(c.BuildProgress).Key("materialProgress").Float(c.MaterialProgress).Key("hasMaterials").Bool(c.HasMaterials);
+                if (c.Site != null) jw.Prop("buildProgress", c.BuildProgress).Prop("materialProgress", c.MaterialProgress).Prop("hasMaterials", c.HasMaterials);
                 if (c.Capacity > 0)
                 {
-                    jw.Key("stock").Int(c.Stock).Key("capacity").Int(c.Capacity);
+                    jw.Prop("stock", c.Stock).Prop("capacity", c.Capacity);
                     if (c.Inventory != null && c.Inventory.Count > 0)
                     {
-                        jw.Key("inventory").OpenObj();
+                        jw.Obj("inventory");
                         foreach (var kvp in c.Inventory)
                             jw.Key(kvp.Key).Int(kvp.Value);
                         jw.CloseObj();
                     }
                 }
-                if (c.HasWonder) jw.Key("isWonder").Bool(true).Key("wonderActive").Bool(c.WonderActive);
-                if (c.Dwelling != null) jw.Key("dwellers").Int(c.Dwellers).Key("maxDwellers").Int(c.MaxDwellers);
-                if (c.HasClutch) jw.Key("isClutch").Bool(true).Key("clutchEngaged").Bool(c.ClutchEngaged);
+                if (c.HasWonder) jw.Prop("isWonder", true).Prop("wonderActive", c.WonderActive);
+                if (c.Dwelling != null) jw.Prop("dwellers", c.Dwellers).Prop("maxDwellers", c.MaxDwellers);
+                if (c.HasClutch) jw.Prop("isClutch", true).Prop("clutchEngaged", c.ClutchEngaged);
                 if (c.Manufactory != null)
                 {
                     if (c.Recipes != null && c.Recipes.Count > 0)
                     {
-                        jw.Key("recipes").OpenArr();
+                        jw.Arr("recipes");
                         for (int ri = 0; ri < c.Recipes.Count; ri++)
                             jw.Str(c.Recipes[ri]);
                         jw.CloseArr();
                     }
-                    jw.Key("currentRecipe").Str(c.CurrentRecipe ?? "")
-                        .Key("productionProgress").Float(c.ProductionProgress)
-                        .Key("readyToProduce").Bool(c.ReadyToProduce);
+                    jw.Prop("currentRecipe", c.CurrentRecipe ?? "")
+                        .Prop("productionProgress", c.ProductionProgress)
+                        .Prop("readyToProduce", c.ReadyToProduce);
                 }
                 if (c.BreedingPod != null)
                 {
-                    jw.Key("needsNutrients").Bool(c.NeedsNutrients);
+                    jw.Prop("needsNutrients", c.NeedsNutrients);
                     if (c.NutrientStock != null && c.NutrientStock.Count > 0)
                     {
-                        jw.Key("nutrients").OpenObj();
+                        jw.Obj("nutrients");
                         foreach (var kvp in c.NutrientStock)
                             jw.Key(kvp.Key).Int(kvp.Value);
                         jw.CloseObj();
                     }
                 }
-                if (c.EffectRadius > 0) jw.Key("effectRadius").Int(c.EffectRadius);
+                if (c.EffectRadius > 0) jw.Prop("effectRadius", c.EffectRadius);
                 jw.CloseObj();
             }
             jw.CloseArr();
@@ -659,7 +659,7 @@ namespace Timberbot
                     if (c.Cuttable != null && species.Contains(c.Name)) total++;
 
             jw.Reset();
-            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.NaturalResources.Read)
             {
@@ -669,13 +669,13 @@ namespace Timberbot
                 if (paginated && emitted >= limit) break;
                 emitted++;
                 jw.OpenObj()
-                    .Key("id").Int(c.Id)
-                    .Key("name").Str(c.Name)
-                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
-                    .Key("marked").Bool(c.Marked)
-                    .Key("alive").Bool(c.Alive)
-                    .Key("grown").Bool(c.Grown)
-                    .Key("growth").Float(c.Growth)
+                    .Prop("id", c.Id)
+                    .Prop("name", c.Name)
+                    .Prop("x", c.X).Prop("y", c.Y).Prop("z", c.Z)
+                    .Prop("marked", c.Marked)
+                    .Prop("alive", c.Alive)
+                    .Prop("grown", c.Grown)
+                    .Prop("growth", c.Growth)
                     .CloseObj();
             }
             jw.CloseArr();
@@ -695,7 +695,7 @@ namespace Timberbot
                     if (c.Gatherable != null) total++;
 
             var jw = _cache.Jw.Reset();
-            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.NaturalResources.Read)
             {
@@ -704,10 +704,10 @@ namespace Timberbot
                 if (paginated && emitted >= limit) break;
                 emitted++;
                 jw.OpenObj()
-                    .Key("id").Int(c.Id)
-                    .Key("name").Str(c.Name)
-                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
-                    .Key("alive").Bool(c.Alive)
+                    .Prop("id", c.Id)
+                    .Prop("name", c.Name)
+                    .Prop("x", c.X).Prop("y", c.Y).Prop("z", c.Z)
+                    .Prop("alive", c.Alive)
                     .CloseObj();
             }
             jw.CloseArr();
@@ -734,7 +734,7 @@ namespace Timberbot
             int skipped = 0, emitted = 0;
 
             var jw = _cache.Jw.Reset();
-            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.Beavers.Read)
             {
@@ -745,17 +745,17 @@ namespace Timberbot
                 emitted++;
 
                 jw.OpenObj()
-                    .Key("id").Int(c.Id)
-                    .Key("name").Str(c.Name)
-                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
-                    .Key("wellbeing").Float(c.Wellbeing, "F1")
-                    .Key("isBot").Bool(c.IsBot);
+                    .Prop("id", c.Id)
+                    .Prop("name", c.Name)
+                    .Prop("x", c.X).Prop("y", c.Y).Prop("z", c.Z)
+                    .Prop("wellbeing", c.Wellbeing, "F1")
+                    .Prop("isBot", c.IsBot);
 
                 if (!fullDetail)
                 {
                     float wb = c.Wellbeing;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
-                    jw.Key("tier").Str(tier).Key("workplace").Str(c.Workplace ?? "");
+                    jw.Prop("tier", tier).Prop("workplace", c.Workplace ?? "");
 
                     // critical + unmet need summaries
                     string critical = "", unmet = "";
@@ -767,34 +767,34 @@ namespace Timberbot
                             else if (!n.Favorable && n.Active) unmet = unmet.Length > 0 ? unmet + "+" + n.Id : n.Id;
                         }
                     }
-                    jw.Key("critical").Str(critical).Key("unmet").Str(unmet).CloseObj();
+                    jw.Prop("critical", critical).Prop("unmet", unmet).CloseObj();
                     continue;
                 }
 
                 // full detail
-                jw.Key("anyCritical").Bool(c.AnyCritical);
-                if (c.Workplace != null) jw.Key("workplace").Str(c.Workplace);
-                if (c.District != null) jw.Key("district").Str(c.District);
-                jw.Key("hasHome").Bool(c.HasHome).Key("contaminated").Bool(c.Contaminated);
-                if (c.Life != null) jw.Key("lifeProgress").Float(c.LifeProgress);
-                if (c.Deteriorable != null) jw.Key("deterioration").Float(c.DeteriorationProgress, "F3");
-                if (c.Carrier != null) { jw.Key("liftingCapacity").Int(c.LiftingCapacity); if (c.Overburdened) jw.Key("overburdened").Bool(true); }
-                if (c.IsCarrying) jw.Key("carrying").Str(c.CarryingGood).Key("carryAmount").Int(c.CarryAmount);
+                jw.Prop("anyCritical", c.AnyCritical);
+                if (c.Workplace != null) jw.Prop("workplace", c.Workplace);
+                if (c.District != null) jw.Prop("district", c.District);
+                jw.Prop("hasHome", c.HasHome).Prop("contaminated", c.Contaminated);
+                if (c.Life != null) jw.Prop("lifeProgress", c.LifeProgress);
+                if (c.Deteriorable != null) jw.Prop("deterioration", c.DeteriorationProgress, "F3");
+                if (c.Carrier != null) { jw.Prop("liftingCapacity", c.LiftingCapacity); if (c.Overburdened) jw.Prop("overburdened", true); }
+                if (c.IsCarrying) jw.Prop("carrying", c.CarryingGood).Prop("carryAmount", c.CarryAmount);
 
                 // needs array
-                jw.Key("needs").OpenArr();
+                jw.Arr("needs");
                 if (c.Needs != null)
                 {
                     foreach (var n in c.Needs)
                     {
                         if (!fullDetail && !c.IsBot && !n.Active) continue;
                         jw.OpenObj()
-                            .Key("id").Str(n.Id)
-                            .Key("points").Float(n.Points)
-                            .Key("wellbeing").Int(n.Wellbeing)
-                            .Key("favorable").Bool(n.Favorable)
-                            .Key("critical").Bool(n.Critical)
-                            .Key("group").Str(n.Group)
+                            .Prop("id", n.Id)
+                            .Prop("points", n.Points)
+                            .Prop("wellbeing", n.Wellbeing)
+                            .Prop("favorable", n.Favorable)
+                            .Prop("critical", n.Critical)
+                            .Prop("group", n.Group)
                             .CloseObj();
                     }
                 }
@@ -831,12 +831,12 @@ namespace Timberbot
             var jw = _cache.Jw.Reset().OpenArr();
             foreach (var net in networks.Values)
             {
-                jw.OpenObj().Key("id").Int(net.Id).Key("supply").Int(net.Supply).Key("demand").Int(net.Demand);
-                jw.Key("buildings").OpenArr();
+                jw.OpenObj().Prop("id", net.Id).Prop("supply", net.Supply).Prop("demand", net.Demand);
+                jw.Arr("buildings");
                 foreach (var idx in net.BuildingIndices)
                 {
                     var c = buildings[idx];
-                    jw.OpenObj().Key("name").Str(c.Name).Key("id").Int(c.Id).Key("isGenerator").Bool(c.IsGenerator).Key("nominalOutput").Int(c.NominalPowerOutput).Key("nominalInput").Int(c.NominalPowerInput).CloseObj();
+                    jw.OpenObj().Prop("name", c.Name).Prop("id", c.Id).Prop("isGenerator", c.IsGenerator).Prop("nominalOutput", c.NominalPowerOutput).Prop("nominalInput", c.NominalPowerInput).CloseObj();
                 }
                 jw.CloseArr().CloseObj();
             }
@@ -868,15 +868,15 @@ namespace Timberbot
         // Science points and unlockable buildings with costs and status
         public object CollectScience()
         {
-            var jw = _cache.Jw.Reset().OpenObj().Key("points").Int(_scienceService.SciencePoints);
-            jw.Key("unlockables").OpenArr();
+            var jw = _cache.Jw.Reset().OpenObj().Prop("points", _scienceService.SciencePoints);
+            jw.Arr("unlockables");
             foreach (var building in _buildingService.Buildings)
             {
                 var bs = building.GetSpec<BuildingSpec>();
                 if (bs == null || bs.ScienceCost <= 0) continue;
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                 var name = templateSpec?.TemplateName ?? "unknown";
-                jw.OpenObj().Key("name").Str(name).Key("cost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs)).CloseObj();
+                jw.OpenObj().Prop("name", name).Prop("cost", bs.ScienceCost).Prop("unlocked", _buildingUnlockingService.Unlocked(bs)).CloseObj();
             }
             jw.CloseArr().CloseObj();
             return jw.ToString();
@@ -924,16 +924,16 @@ namespace Timberbot
                         groupMaxTotals[groupId] += groupMax;
                     }
                 }
-                var jw = _cache.Jw.Reset().OpenObj().Key("beavers").Int(beaverCount).Key("categories").OpenArr();
+                var jw = _cache.Jw.Reset().OpenObj().Prop("beavers", beaverCount).Arr("categories");
                 foreach (var kvp in groupNeeds)
                 {
                     var groupId = kvp.Key;
                     float avgCurrent = beaverCount > 0 ? groupTotals.GetValueOrDefault(groupId) / beaverCount : 0;
                     float avgMax = beaverCount > 0 ? groupMaxTotals.GetValueOrDefault(groupId) / beaverCount : 0;
-                    jw.OpenObj().Key("group").Str(groupId).Key("current").Float((float)System.Math.Round(avgCurrent, 1), "F1").Key("max").Float((float)System.Math.Round(avgMax, 1), "F1");
-                    jw.Key("needs").OpenArr();
+                    jw.OpenObj().Prop("group", groupId).Prop("current", (float)System.Math.Round(avgCurrent, 1), "F1").Prop("max", (float)System.Math.Round(avgMax, 1), "F1");
+                    jw.Arr("needs");
                     foreach (var ns in kvp.Value)
-                        jw.OpenObj().Key("id").Str(ns.Id).Key("favorableWellbeing").Float(ns.FavorableWellbeing, "F1").Key("unfavorableWellbeing").Float(ns.UnfavorableWellbeing, "F1").CloseObj();
+                        jw.OpenObj().Prop("id", ns.Id).Prop("favorableWellbeing", ns.FavorableWellbeing, "F1").Prop("unfavorableWellbeing", ns.UnfavorableWellbeing, "F1").CloseObj();
                     jw.CloseArr().CloseObj();
                 }
                 jw.CloseArr().CloseObj();
@@ -955,7 +955,7 @@ namespace Timberbot
                     if (offset > 0 && skipped < offset) { skipped++; continue; }
                     if (paginated && emitted >= limit) break;
                     emitted++;
-                    jw.OpenObj().Key("subject").Str(n.Subject.ToString()).Key("description").Str(n.Description.ToString()).Key("cycle").Int(n.Cycle).Key("cycleDay").Int(n.CycleDay).CloseObj();
+                    jw.OpenObj().Prop("subject", n.Subject.ToString()).Prop("description", n.Description.ToString()).Prop("cycle", n.Cycle).Prop("cycleDay", n.CycleDay).CloseObj();
                 }
             }
             catch (System.Exception _ex) { TimberbotLog.Error("notifications", _ex); }
@@ -971,11 +971,11 @@ namespace Timberbot
             {
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
                 if (distSetting == null) continue;
-                jw.OpenObj().Key("district").Str(dc.DistrictName).Key("goods").OpenArr();
+                jw.OpenObj().Prop("district", dc.DistrictName).Arr("goods");
                 try
                 {
                     foreach (var gs in distSetting.GoodDistributionSettings)
-                        jw.OpenObj().Key("good").Str(gs.GoodId).Key("importOption").Str(gs.ImportOption.ToString()).Key("exportThreshold").Float(gs.ExportThreshold, "F0").CloseObj();
+                        jw.OpenObj().Prop("good", gs.GoodId).Prop("importOption", gs.ImportOption.ToString()).Prop("exportThreshold", gs.ExportThreshold, "F0").CloseObj();
                 }
                 catch (System.Exception _ex) { TimberbotLog.Error("distribution", _ex); }
                 jw.CloseArr().CloseObj();
@@ -1049,9 +1049,9 @@ namespace Timberbot
             }
 
             var jw = _cache.Jw.Reset().OpenObj();
-            jw.Key("mapSize").OpenObj().Key("x").Int(size.x).Key("y").Int(size.y).Key("z").Int(size.z).CloseObj();
-            jw.Key("region").OpenObj().Key("x1").Int(x1).Key("y1").Int(y1).Key("x2").Int(x2).Key("y2").Int(y2).CloseObj();
-            jw.Key("tiles").OpenArr();
+            jw.Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj();
+            jw.Obj("region").Prop("x1", x1).Prop("y1", y1).Prop("x2", x2).Prop("y2", y2).CloseObj();
+            jw.Arr("tiles");
             for (int x = x1; x <= x2; x++)
             {
                 for (int y = y1; y <= y2; y++)
@@ -1087,24 +1087,24 @@ namespace Timberbot
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occList);
 
-                    jw.OpenObj().Key("x").Int(x).Key("y").Int(y).Key("terrain").Int(terrainHeight).Key("water").Float(waterHeight, "F1");
-                    if (waterContamination > 0) jw.Key("badwater").Float((float)System.Math.Round(waterContamination, 2));
+                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight).Prop("water", waterHeight, "F1");
+                    if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
                         if (occList.Count == 1)
-                            jw.Key("occupant").Str(occList[0].name);
+                            jw.Prop("occupant", occList[0].name);
                         else
                         {
-                            jw.Key("occupants").OpenArr();
-                            foreach (var o in occList) jw.OpenObj().Key("name").Str(o.name).Key("z").Int(o.z).CloseObj();
+                            jw.Arr("occupants");
+                            foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
                             jw.CloseArr();
                         }
                     }
-                    if (entrances.Contains(key)) jw.Key("entrance").Bool(true);
-                    if (seedlings.Contains(key)) jw.Key("seedling").Bool(true);
-                    if (deadTiles.Contains(key)) jw.Key("dead").Bool(true);
-                    try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Key("contaminated").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
-                    try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Key("moist").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    if (entrances.Contains(key)) jw.Prop("entrance", true);
+                    if (seedlings.Contains(key)) jw.Prop("seedling", true);
+                    if (deadTiles.Contains(key)) jw.Prop("dead", true);
+                    try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Prop("contaminated", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                    try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Prop("moist", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
                     jw.CloseObj();
                 }
             }

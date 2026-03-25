@@ -51,6 +51,8 @@ namespace Timberbot
             public string Detail;                // "basic" or "full" (response detail level)
             public int Limit;                    // max items to return (0 = unlimited, default 100)
             public int Offset;                   // skip first N items
+            public string FilterName;            // name substring filter (case-insensitive)
+            public int FilterX, FilterY, FilterRadius; // proximity filter (Manhattan distance)
         }
 
         public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
@@ -141,6 +143,11 @@ namespace Timberbot
                 int.TryParse(ctx.Request.QueryString["limit"], out int limit);
                 int.TryParse(ctx.Request.QueryString["offset"], out int offset);
                 if (ctx.Request.QueryString["limit"] == null) limit = 100;
+                // server-side filtering: name (substring), x/y/radius (proximity)
+                var filterName = ctx.Request.QueryString["name"];
+                int.TryParse(ctx.Request.QueryString["x"], out int filterX);
+                int.TryParse(ctx.Request.QueryString["y"], out int filterY);
+                int.TryParse(ctx.Request.QueryString["radius"], out int filterRadius);
                 // GET requests: handled RIGHT HERE on the background listener thread.
                 // This is the key performance trick -- reads never block the game.
                 // All CollectX() methods read from double-buffered cached data, so they're
