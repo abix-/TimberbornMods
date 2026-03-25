@@ -1,7 +1,7 @@
 - [breaking] find_placement: boolean fields changed to 0/1 integers (pathAccess, reachable, nearPower, flooded)
 - [breaking] find_placement: removed pathCount field
 - [breaking] tiles endpoint: water field now returns WaterDepth (actual depth) instead of CeiledWaterHeight
-- [breaking] tiles endpoint: always returns occupants array (removed singular occupant string for single-occupant tiles)
+- [breaking] tiles endpoint: occupants is always array in json mode, flat string "Name:z" in toon mode (removed singular occupant key)
 - [feature] find_placement: entranceX/entranceY returns the path tile in front of the entrance
 - [feature] find_placement: waterDepth field on water buildings (pumps), sorted deepest-first
 - [feature] find_placement: flood check only on ground-required tiles (MatterBelow) -- water intake tiles no longer false-positive as flooded
@@ -17,4 +17,6 @@
 - [feature] place_path two-pass plan-then-execute: no demolishing, structured error objects in errors array
 - [fix] stair placement: stairs always on lower z tile, skip path on tiles planned for stairs
 - [internal] PlaceBuildingResult struct with rich context (prefab, scienceCost, occupant), ToJson at HTTP boundary
+- [feature] all list endpoints accept format param (toon/json) for consistent output control
+- [feature] tiles toon mode: omit water:0, occupants as compact "Name:z" string
 - [internal] Removed CHANGELOG.md -- GitHub releases are the single source
