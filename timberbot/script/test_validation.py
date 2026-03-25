@@ -252,6 +252,7 @@ class TestRunner:
         self.test_clear_trees()
         self.test_migrate()
         self.test_data_accuracy()
+        self.test_json_schema()
         self.test_performance()
 
     def test_read_endpoints(self):
@@ -1968,6 +1969,130 @@ class TestRunner:
             self.check(f"validate_all: {result['entities']} entities, {result['fields']} fields",
                        result["mismatches"] == 0,
                        f"{result['mismatches']} total mismatches across {result['entities']} entities")
+
+    def test_json_schema(self):
+        """Validate JSON structure of every endpoint in both toon and json formats."""
+        print("\n=== json schema ===\n")
+
+        def validate(data, schema, path="root"):
+            errors = []
+            if isinstance(schema, type):
+                # json deserializes all numbers as int or float; accept int where float expected
+                if schema == float and isinstance(data, (int, float)):
+                    return errors
+                if not isinstance(data, schema):
+                    errors.append(f"{path}: expected {schema.__name__}, got {type(data).__name__}")
+            elif isinstance(schema, dict):
+                if not isinstance(data, dict):
+                    errors.append(f"{path}: expected dict, got {type(data).__name__}")
+                else:
+                    for key, expected in schema.items():
+                        if key not in data:
+                            errors.append(f"{path}.{key}: missing")
+                        else:
+                            errors.extend(validate(data[key], expected, f"{path}.{key}"))
+            elif isinstance(schema, list) and len(schema) == 1:
+                if not isinstance(data, list):
+                    errors.append(f"{path}: expected list, got {type(data).__name__}")
+                elif len(data) > 0:
+                    errors.extend(validate(data[0], schema[0], f"{path}[0]"))
+            return errors
+
+        # json-mode bot for format=json endpoints
+        jbot = Timberbot(json_mode=True)
+
+        # --- format=json schemas ---
+        summary = jbot.summary()
+        errs = validate(summary, {
+            "time": {"dayNumber": int, "dayProgress": float, "partialDayNumber": float},
+            "weather": {"cycle": int, "cycleDay": int, "isHazardous": bool},
+            "districts": [{"name": str, "population": {"adults": int, "children": int, "bots": int}, "resources": dict}],
+            "trees": {"markedGrown": int, "markedSeedling": int, "unmarkedGrown": int},
+            "crops": {"ready": int, "growing": int},
+            "housing": {"occupiedBeds": int, "totalBeds": int, "homeless": int},
+            "employment": {"assigned": int, "vacancies": int, "unemployed": int},
+            "wellbeing": {"average": float, "miserable": int, "critical": int},
+            "science": int,
+            "alerts": {"unstaffed": int, "unpowered": int, "unreachable": int},
+        })
+        self.check("schema: summary (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        buildings = jbot.buildings()
+        errs = validate(buildings, [{"id": int, "name": str, "x": int, "y": int, "z": int, "finished": bool, "paused": bool}])
+        self.check("schema: buildings (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        buildings_full = jbot.buildings(detail="full")
+        errs = validate(buildings_full, [{"id": int, "name": str, "x": int, "orientation": str}])
+        self.check("schema: buildings full (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        trees = jbot.trees()
+        errs = validate(trees, [{"id": int, "name": str, "x": int, "alive": bool, "grown": bool, "growth": float}])
+        self.check("schema: trees (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        beavers = jbot.beavers()
+        errs = validate(beavers, [{"id": int, "name": str, "x": int, "wellbeing": float, "isBot": bool}])
+        self.check("schema: beavers (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        beavers_full = jbot.beavers(detail="full")
+        errs = validate(beavers_full, [{"id": int, "name": str, "anyCritical": bool, "needs": [{"id": str, "points": float, "critical": bool}]}])
+        self.check("schema: beavers full (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        time_data = jbot.time()
+        errs = validate(time_data, {"dayNumber": int, "dayProgress": float})
+        self.check("schema: time (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        weather = jbot.weather()
+        errs = validate(weather, {"cycle": int, "cycleDay": int, "isHazardous": bool})
+        self.check("schema: weather (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        speed = jbot.speed()
+        errs = validate(speed, {"speed": int})
+        self.check("schema: speed (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        science = jbot.science()
+        errs = validate(science, {"points": int})
+        self.check("schema: science (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        workhours = jbot.workhours()
+        errs = validate(workhours, {"endHours": int, "areWorkingHours": bool})
+        self.check("schema: workhours (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        prefabs = jbot.prefabs()
+        errs = validate(prefabs, [{"name": str}])
+        self.check("schema: prefabs (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        power = jbot.power()
+        errs = validate(power, [{"networkId": int, "supply": int, "demand": int, "buildings": list}])
+        self.check("schema: power (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        districts = jbot.districts()
+        errs = validate(districts, [{"name": str, "population": {"adults": int}}])
+        self.check("schema: districts (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        resources = jbot.resources()
+        self.check("schema: resources (json)", isinstance(resources, (list, dict)), f"got {type(resources).__name__}")
+
+        population = jbot.population()
+        errs = validate(population, [{"district": str, "adults": int}])
+        self.check("schema: population (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        alerts = jbot.alerts()
+        self.check("schema: alerts (json)", isinstance(alerts, list), f"got {type(alerts).__name__}")
+
+        wellbeing = jbot.wellbeing()
+        self.check("schema: wellbeing (json)", isinstance(wellbeing, (dict, str)), f"got {type(wellbeing).__name__}")
+
+        webhooks = jbot.list_webhooks()
+        self.check("schema: webhooks (json)", isinstance(webhooks, list), f"got {type(webhooks).__name__}")
+
+        # --- verify toon format returns valid JSON (not double-serialized) ---
+        tbot = Timberbot(json_mode=False)
+        for name, fn in [("summary", tbot.summary), ("buildings", tbot.buildings), ("trees", tbot.trees),
+                         ("beavers", tbot.beavers), ("districts", tbot.districts)]:
+            result = fn()
+            is_valid = isinstance(result, (dict, list))
+            self.check(f"toon valid: {name}", is_valid,
+                       f"got {type(result).__name__}: {str(result)[:80]}" if not is_valid else "")
 
     def test_performance(self):
         print("\n=== performance ===\n")
