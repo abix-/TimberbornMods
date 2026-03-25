@@ -21,7 +21,6 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using UnityEngine;
 
 namespace Timberbot
 {
@@ -60,7 +59,7 @@ namespace Timberbot
             }
             catch (HttpListenerException)
             {
-                Debug.Log($"[Timberbot] port +:{port} failed, falling back to localhost");
+                TimberbotLog.Info($"port +:{port} failed, falling back to localhost");
                 _listener = new HttpListener();
                 _listener.Prefixes.Add($"http://localhost:{port}/");
                 _listener.Start();
