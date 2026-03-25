@@ -186,9 +186,12 @@ class TestRunner:
         """find a valid placement spot for prefab using discovered search area"""
         result = self.bot.find_placement(prefab, self.x1, self.y1, self.x2, self.y2)
         placements = result.get("placements", []) if isinstance(result, dict) else []
-        # prefer non-flooded, reachable
+        # prefer reachable with water (for pumps), then non-flooded reachable
         for p in placements:
-            if p.get("reachable") and not p.get("flooded"):
+            if p.get("reachable") and p.get("waterDepth", 0) > 0:
+                return p
+        for p in placements:
+            if p.get("reachable") and not p.get("flooded", 0):
                 return p
         return placements[0] if placements else None
 
@@ -218,6 +221,7 @@ class TestRunner:
         self.test_stockpile()
         self.test_orientation()
         self.test_find_placement()
+        self.test_water_placement()
         self.test_path_routing()
         self.test_overridable_placement()
         self.test_summary_projection()
@@ -631,19 +635,19 @@ class TestRunner:
 
         # check result fields
         p0 = placements[0]
-        for field in ["x", "y", "z", "orientation", "pathAccess", "reachable", "nearPower"]:
+        for field in ["x", "y", "z", "orientation", "entranceX", "entranceY", "pathAccess", "reachable", "nearPower", "flooded"]:
             self.check(f"result has {field}", field in p0, f"keys: {list(p0.keys())}")
 
         # reachable spots
         reachable = [p for p in placements if p.get("reachable")]
-        unreachable = [p for p in placements if not p.get("reachable")]
+        unreachable = [p for p in placements if not p.get("reachable", 0)]
         self.check("has reachable placements", len(reachable) > 0,
                    f"got {len(reachable)} reachable of {len(placements)}")
 
         # verify reachable spot is actually placeable and connected
         if reachable:
             p = reachable[0]
-            self.check("reachable has pathAccess", p.get("pathAccess") == True)
+            self.check("reachable has pathAccess", p.get("pathAccess") == 1)
 
             placed = self.bot.place_building(self.prefab("Inventor"),
                 p["x"], p["y"], p["z"], orientation=p["orientation"])
@@ -660,7 +664,7 @@ class TestRunner:
                 self.check("place at reachable spot", False, json.dumps(placed)[:100])
 
         # verify unreachable spot is actually disconnected (if we have one with pathAccess)
-        unreachable_with_path = [p for p in unreachable if p.get("pathAccess")]
+        unreachable_with_path = [p for p in unreachable if p.get("pathAccess", 0)]
         if unreachable_with_path:
             p = unreachable_with_path[0]
             placed = self.bot.place_building(self.prefab("Inventor"),
@@ -704,6 +708,110 @@ class TestRunner:
         # unknown prefab
         bad = self.bot.find_placement("FakeBuilding", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
         self.check("find_placement unknown prefab", self.err(bad))
+
+    def test_water_placement(self):
+        print("\n=== water placement ===\n")
+
+        # find the water pump prefab for this faction
+        pump_prefab = self.prefab("WaterPump")
+        if pump_prefab not in self.prefab_names:
+            pump_prefab = self.prefab("DeepWaterPump")
+        if pump_prefab not in self.prefab_names:
+            self.skip("water placement", "no water pump prefab found")
+            return
+
+        # search wide area for pump placements
+        result = self.bot.find_placement(pump_prefab, self.x1 - 20, self.y1 - 20, self.x2 + 20, self.y2 + 20)
+        placements = result.get("placements", []) if isinstance(result, dict) else []
+        if not placements:
+            self.skip("water placement", "no pump placements found")
+            return
+
+        # water buildings should have waterDepth and entrance fields
+        p0 = placements[0]
+        self.check("pump has waterDepth field", "waterDepth" in p0,
+                   f"keys: {list(p0.keys())}")
+        self.check("pump has flooded field", "flooded" in p0)
+        self.check("pump has entranceX", "entranceX" in p0)
+        self.check("pump has entranceY", "entranceY" in p0)
+        # booleans should be 0/1 not true/false
+        self.check("flooded is int", isinstance(p0.get("flooded"), int),
+                   f"type={type(p0.get('flooded')).__name__}")
+
+        # find spots with water access
+        with_water = [p for p in placements if p.get("waterDepth", 0) > 0]
+        without_water = [p for p in placements if p.get("waterDepth", 0) == 0]
+        self.check("found spots with waterDepth > 0", len(with_water) > 0,
+                   f"got {len(with_water)} of {len(placements)}")
+
+        # waterDepth should sort before no-water spots
+        if with_water and without_water:
+            first_dry = next((i for i, p in enumerate(placements)
+                             if p.get("waterDepth", 0) == 0), len(placements))
+            last_wet = max(i for i, p in enumerate(placements)
+                         if p.get("waterDepth", 0) > 0)
+            self.check("waterDepth spots sorted before dry spots",
+                       last_wet < first_dry,
+                       f"last wet={last_wet}, first dry={first_dry}")
+
+        # pump at water edge should NOT be flagged flooded
+        # (MatterBelow.Any tiles with water are expected, not flooded)
+        wet_not_flooded = [p for p in with_water if not p.get("flooded", 0)]
+        self.check("pump with water not flagged flooded",
+                   len(wet_not_flooded) > 0,
+                   f"all {len(with_water)} wet spots are flooded")
+
+        # waterDepth should be a reasonable float (not 0, not huge)
+        if with_water:
+            wd = with_water[0]["waterDepth"]
+            self.check("waterDepth is float > 0", isinstance(wd, (int, float)) and wd > 0,
+                       f"got {wd}")
+            self.check("waterDepth < 10 (reasonable)", wd < 10, f"got {wd}")
+
+        # place a pump at the best water spot and verify it works
+        if wet_not_flooded:
+            p = wet_not_flooded[0]
+            placed = self.write_and_wait(lambda: self.bot.place_building(
+                pump_prefab, p["x"], p["y"], p["z"], orientation=p["orientation"]))
+            if self.has(placed, "id"):
+                self.check("pump placed successfully", True)
+                # verify it shows up in buildings
+                bld = self.bot.buildings(detail=f"id:{placed['id']}")
+                if isinstance(bld, list) and bld:
+                    b = bld[0]
+                    self.check("pump is water building",
+                               b.get("name", "").lower().find("pump") >= 0 or
+                               "Water" in str(b.get("recipes", b.get("currentRecipe", ""))))
+                self.bot.demolish_building(placed["id"])
+                self.wait_for_refresh()
+            else:
+                self.check("pump placement at water spot", False,
+                           json.dumps(placed)[:100])
+
+        # non-water building should NOT have waterDepth field
+        lodge_result = self.bot.find_placement(
+            self.prefab("Lodge") if "Lodge" in self.prefab("Lodge") else self.prefab("Rowhouse"),
+            self.x1, self.y1, self.x2, self.y2)
+        lodge_placements = lodge_result.get("placements", []) if isinstance(lodge_result, dict) else []
+        if lodge_placements:
+            self.check("non-water building has no waterDepth",
+                       "waterDepth" not in lodge_placements[0],
+                       f"keys: {list(lodge_placements[0].keys())}")
+        else:
+            self.skip("non-water waterDepth check", "no lodge placements")
+
+        # tiles water accuracy: check a water tile and a dry tile
+        if with_water:
+            p = with_water[0]
+            tiles = self.bot.tiles(p["x"], p["y"], p["x"] + 1, p["y"] + 1)
+            tile_list = tiles.get("tiles", []) if isinstance(tiles, dict) else []
+            water_tiles = [t for t in tile_list if t.get("water", 0) > 0]
+            dry_tiles = [t for t in tile_list if t.get("water", 0) == 0]
+            if water_tiles:
+                wt = water_tiles[0]
+                self.check("water tile has float depth",
+                           isinstance(wt["water"], (int, float)) and wt["water"] > 0 and wt["water"] < 10,
+                           f"water={wt['water']}")
 
     def test_path_routing(self):
         print("\n=== path routing ===\n")
@@ -2260,8 +2368,10 @@ class TestRunner:
         self.check("schema: find_placement (json)", len(errs) == 0, "; ".join(errs[:5]))
         if isinstance(fp, dict) and fp.get("placements"):
             errs = validate(fp["placements"], [{"x": int, "y": int, "z": int, "orientation": str,
-                                                 "pathAccess": bool, "pathCount": int, "reachable": bool,
-                                                 "nearPower": bool, "flooded": bool}])
+                                                 "pathAccess": int, "reachable": int,
+                                                 "nearPower": int, "flooded": int,
+                                                 "entranceX": int, "entranceY": int}])
+            # waterDepth is optional (only on water buildings)
             self.check("schema: placement[] (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         webhooks = jbot.list_webhooks()

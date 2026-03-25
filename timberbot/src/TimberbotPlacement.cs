@@ -4,7 +4,7 @@
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
 // CeiledWaterHeight > tz, path connectivity via reflection into NavMesh internals,
 // and power adjacency via cached power tile positions. Returns top 10 spots sorted
-// by: non-flooded > reachable > pathAccess > nearPower > pathCount.
+// by: non-flooded > reachable > pathAccess > nearPower.
 //
 // PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
 // creates a preview, validates, then calls BlockObjectPlacerService.Place().
@@ -427,7 +427,7 @@ namespace Timberbot
         //    preview entity, Reposition it, and check IsValid(). This runs the same
         //    9 validators the player UI uses (terrain, occupancy, water buildings, etc).
         //
-        // Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
+        // Results sorted by: non-flooded > reachable > pathAccess > nearPower.
         // Returns top 10 candidates.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {
@@ -444,23 +444,6 @@ namespace Timberbot
             var waterInputSpec = buildingSpec.GetSpec<WaterInputSpec>();
             Vector3Int? waterInputLocal = waterInputSpec != null
                 ? (Vector3Int?)waterInputSpec.WaterInputCoordinates : null;
-
-            // Build set of footprint tiles (local coords) that require solid ground.
-            // Only these tiles are checked for flooding -- tiles with MatterBelow.Any
-            // (water intake tiles on pumps etc) are expected to have water.
-            var blocks = blockObjectSpec.Blocks;
-            int baseZIdx = blockObjectSpec.BaseZ;
-            int stride2 = size.x * size.y;
-            var groundTiles = new HashSet<long>(); // encoded as ly * 1000 + lx
-            for (int ly = 0; ly < size.y; ly++)
-                for (int lx = 0; lx < size.x; lx++)
-                {
-                    int idx = baseZIdx * stride2 + ly * size.x + lx;
-                    if (idx < blocks.Length && blocks[idx].MatterBelow == MatterBelow.GroundOrStackable)
-                        groundTiles.Add((long)ly * 1000 + lx);
-                }
-            // if no ground tiles found (shouldn't happen), check all tiles
-            bool checkAllTiles = groundTiles.Count == 0;
 
             // STEP 1: REACHABILITY
             // Use reflection to access the game's NavMesh internals. These APIs are
@@ -530,7 +513,7 @@ namespace Timberbot
             }
 
             var orientNames = new[] { "south", "west", "north", "east" };
-            var results = new List<(int x, int y, int z, int orient, bool pathAccess, int pathCount, bool reachable, bool nearPower, bool flooded, float waterDepth)>();
+            var results = new List<(int x, int y, int z, int orient, bool pathAccess, bool reachable, bool nearPower, bool flooded, float waterDepth, int entranceX, int entranceY)>();
 
             // PERF: create ONE preview entity, reuse it for every candidate position.
             // Preview is a Unity GameObject with validation components attached.
@@ -552,7 +535,7 @@ namespace Timberbot
                         // Try all 4 orientations and pick the one with the most adjacent
                         // path tiles on its entrance side. This maximizes connectivity.
                         int bestOrient = -1;
-                        int bestPathCount = -1;
+                        bool bestHasPath = false;
 
                         for (int orient = 0; orient < 4; orient++)
                         {
@@ -575,43 +558,49 @@ namespace Timberbot
                             cachedPreview.Reposition(placement);
                             if (!cachedPreview.BlockObject.IsValid()) continue;
 
-                            // count path tiles on entrance side
-                            int rx = size.x, ry = size.y;
-                            if (orient == 1 || orient == 3) { rx = size.y; ry = size.x; }
-
-                            int pathCount = 0;
-                            switch (orient)
+                            // check if doorstep tile (in front of entrance) has a path
+                            bool hasPath = false;
+                            if (cachedPreview.BlockObject.HasEntrance)
                             {
-                                case 0: // south: check y-1 row
-                                    for (int px = tx; px < tx + rx; px++)
-                                        if (pathTiles.Contains((long)px * 1000000 + (long)(ty - 1) * 1000 + tz)) pathCount++;
-                                    break;
-                                case 1: // west: check x-1 column
-                                    for (int py = ty; py < ty + ry; py++)
-                                        if (pathTiles.Contains((long)(tx - 1) * 1000000 + (long)py * 1000 + tz)) pathCount++;
-                                    break;
-                                case 2: // north: check y+ry row
-                                    for (int px = tx; px < tx + rx; px++)
-                                        if (pathTiles.Contains((long)px * 1000000 + (long)(ty + ry) * 1000 + tz)) pathCount++;
-                                    break;
-                                case 3: // east: check x+rx column
-                                    for (int py = ty; py < ty + ry; py++)
-                                        if (pathTiles.Contains((long)(tx + rx) * 1000000 + (long)py * 1000 + tz)) pathCount++;
-                                    break;
+                                var ds = cachedPreview.BlockObject.PositionedEntrance.DoorstepCoordinates;
+                                hasPath = pathTiles.Contains((long)ds.x * 1000000 + (long)ds.y * 1000 + ds.z);
                             }
 
-                            if (pathCount > bestPathCount)
+                            // prefer orientation with path access, then first valid
+                            if (hasPath && !bestHasPath || (!bestHasPath && bestOrient < 0))
                             {
-                                bestPathCount = pathCount;
+                                bestHasPath = hasPath;
                                 bestOrient = orient;
                             }
                         }
 
                         if (bestOrient >= 0)
                         {
+                            // reposition preview to best orientation to read game state
+                            int brx2 = size.x, bry2 = size.y;
+                            if (bestOrient == 1 || bestOrient == 3) { brx2 = size.y; bry2 = size.x; }
+                            int bgx = tx, bgy = ty;
+                            switch (bestOrient)
+                            {
+                                case 1: bgy = ty + bry2 - 1; break;
+                                case 2: bgx = tx + brx2 - 1; bgy = ty + bry2 - 1; break;
+                                case 3: bgx = tx + brx2 - 1; break;
+                            }
+                            cachedPreview.Reposition(new Placement(new Vector3Int(bgx, bgy, tz),
+                                (Timberborn.Coordinates.Orientation)bestOrient, FlipMode.Unflipped));
+
+                            // read doorstep coords
+                            int entranceX = tx, entranceY = ty;
+                            if (cachedPreview.BlockObject.HasEntrance)
+                            {
+                                var ds = cachedPreview.BlockObject.PositionedEntrance.DoorstepCoordinates;
+                                entranceX = ds.x;
+                                entranceY = ds.y;
+                            }
+
                             // check district road reachability on entrance-side path tiles
                             bool reachable = false;
-                            if (bestPathCount > 0)
+                            if (bestHasPath)
                             {
                                 int erx = size.x, ery = size.y;
                                 if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
@@ -643,54 +632,34 @@ namespace Timberbot
                             }
 
                             // check power adjacency on all 4 sides of footprint
-                            int brx = size.x, bry = size.y;
-                            if (bestOrient == 1 || bestOrient == 3) { brx = size.y; bry = size.x; }
                             bool nearPower = false;
-                            for (int px = tx - 1; px <= tx + brx && !nearPower; px++)
-                                for (int py = ty - 1; py <= ty + bry && !nearPower; py++)
+                            for (int px = tx - 1; px <= tx + brx2 && !nearPower; px++)
+                                for (int py = ty - 1; py <= ty + bry2 && !nearPower; py++)
                                 {
-                                    if (px >= tx && px < tx + brx && py >= ty && py < ty + bry) continue;
+                                    if (px >= tx && px < tx + brx2 && py >= ty && py < ty + bry2) continue;
                                     if (powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
                                         nearPower = true;
                                 }
 
-                            // check flooding: only ground-required tiles (MatterBelow.GroundOrStackable)
-                            // count as flooded. Water intake tiles (MatterBelow.Any) are expected wet.
+                            // use the game's positioned blocks (already rotated) for flooding + water depth
                             bool flooded = false;
-                            for (int ly = 0; ly < size.y && !flooded; ly++)
-                                for (int lx = 0; lx < size.x && !flooded; lx++)
-                                {
-                                    if (!checkAllTiles && !groundTiles.Contains((long)ly * 1000 + lx)) continue;
-                                    int wx, wy;
-                                    switch (bestOrient)
-                                    {
-                                        case 0: wx = tx + lx; wy = ty + ly; break;
-                                        case 1: wx = tx + ly; wy = ty + (size.x - 1 - lx); break;
-                                        case 2: wx = tx + (size.x - 1 - lx); wy = ty + (size.y - 1 - ly); break;
-                                        case 3: wx = tx + (size.y - 1 - ly); wy = ty + lx; break;
-                                        default: continue;
-                                    }
-                                    if (GetWaterDepth(wx, wy) > 0) flooded = true;
-                                }
-
-                            // check water depth at intake tile for water buildings
                             float waterDepth = 0f;
-                            if (waterInputLocal.HasValue)
+                            foreach (var block in cachedPreview.BlockObject.PositionedBlocks.GetAllBlocks())
                             {
-                                var wil = waterInputLocal.Value;
-                                int wx, wy;
-                                switch (bestOrient)
+                                var c = block.Coordinates;
+                                if (c.z != tz) continue;
+                                float depth = GetWaterDepth(c.x, c.y);
+                                if (block.MatterBelow == MatterBelow.GroundOrStackable)
                                 {
-                                    case 0: wx = tx + wil.x; wy = ty + wil.y; break;
-                                    case 1: wx = tx + wil.y; wy = ty + (size.x - 1 - wil.x); break;
-                                    case 2: wx = tx + (size.x - 1 - wil.x); wy = ty + (size.y - 1 - wil.y); break;
-                                    case 3: wx = tx + (size.y - 1 - wil.y); wy = ty + wil.x; break;
-                                    default: wx = tx + wil.x; wy = ty + wil.y; break;
+                                    if (depth > 0) flooded = true;
                                 }
-                                waterDepth = GetWaterDepth(wx, wy);
+                                else if (block.MatterBelow != MatterBelow.Air && waterInputLocal.HasValue)
+                                {
+                                    if (depth > waterDepth) waterDepth = depth;
+                                }
                             }
 
-                            results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded, waterDepth));
+                            results.Add((tx, ty, tz, bestOrient, bestHasPath, reachable, nearPower, flooded, waterDepth, entranceX, entranceY));
                         }
                     }
                 }
@@ -706,7 +675,7 @@ namespace Timberbot
                     if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
                     if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
                     if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
-                    return b.pathCount - a.pathCount;
+                    return 0;
                 });
 
             } // end try
@@ -728,11 +697,11 @@ namespace Timberbot
                 jw.OpenObj()
                     .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
                     .Prop("orientation", orientNames[r.orient])
-                    .Prop("pathAccess", r.pathAccess)
-                    .Prop("pathCount", r.pathCount)
-                    .Prop("reachable", r.reachable)
-                    .Prop("nearPower", r.nearPower)
-                    .Prop("flooded", r.flooded);
+                    .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
+                    .Prop("pathAccess", r.pathAccess ? 1 : 0)
+                    .Prop("reachable", r.reachable ? 1 : 0)
+                    .Prop("nearPower", r.nearPower ? 1 : 0)
+                    .Prop("flooded", r.flooded ? 1 : 0);
                 if (waterInputLocal.HasValue)
                     jw.Prop("waterDepth", r.waterDepth, "F2");
                 jw.CloseObj();
