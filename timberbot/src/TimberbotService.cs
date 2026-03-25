@@ -132,6 +132,7 @@ namespace Timberbot
         private int _httpPort = 8085;             // HTTP server port
         private bool _webhooksEnabled = true;     // enable webhook push notifications (default: on)
         private float _webhookBatchSeconds = 0.2f; // webhook batching window (default: 200ms, 0 = immediate)
+        private int _webhookCircuitBreaker = 30;   // consecutive failures before disabling webhook (default: 30)
 
         public TimberbotService(
             IGoodService goodService,
@@ -245,6 +246,11 @@ namespace Timberbot
                     {
                         int batchMs = json.Value<int>("webhookBatchMs");
                         _webhookBatchSeconds = batchMs >= 0 ? batchMs / 1000f : 0.2f;
+                    }
+                    if (json["webhookCircuitBreaker"] != null)
+                    {
+                        int cb = json.Value<int>("webhookCircuitBreaker");
+                        _webhookCircuitBreaker = cb > 0 ? cb : 30;
                     }
                 }
             }

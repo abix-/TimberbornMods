@@ -92,7 +92,7 @@ namespace Timberbot
         // batching: accumulate events, flush periodically from UpdateSingleton
         private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
         private float _lastWebhookFlush = 0f;
-        private const int CircuitBreakerThreshold = 5;
+        // circuit breaker threshold loaded from _webhookCircuitBreaker field in TimberbotService.cs
 
         public object RegisterWebhook(string url, List<string> events)
         {
@@ -171,10 +171,10 @@ namespace Timberbot
                     catch (System.Exception _ex)
                     {
                         whRef.ConsecutiveFailures++;
-                        if (whRef.ConsecutiveFailures >= CircuitBreakerThreshold)
+                        if (whRef.ConsecutiveFailures >= _webhookCircuitBreaker)
                         {
                             whRef.Disabled = true;
-                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {CircuitBreakerThreshold} failures: {url}", _ex);
+                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {_webhookCircuitBreaker} failures: {url}", _ex);
                         }
                         else
                             TimberbotLog.Error("webhook.post", _ex);
