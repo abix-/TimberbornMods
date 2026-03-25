@@ -9,20 +9,20 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 - **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
 - **Cached classes:** `CachedBuilding` (18 component refs + ~25 cached primitives), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + 14 primitives). Modified in-place, `Clone()` for double-buffer. Refreshed at 1Hz (configurable via settings.json).
 - **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
+- **Static values at add-time:** EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight, X, Y, Z, Orientation -- all set once in entity-add handler, never re-read.
 
 | Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
 |---|---|---|---|---|
-| `_buildingIndex` | `List<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove (instant) |
-| `_naturalResourceIndex` | `List<CachedNaturalResource>` | same | **zero** | entity add/remove (instant) |
-| `_beaverIndex` | `List<CachedBeaver>` | same | **zero** | entity add/remove (instant) |
-| `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove (instant) |
-| `UpdateSingleton` | -- | just `DrainRequests()` | **~0ms** when idle | N/A |
+| `_buildingIndex` | `List<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove |
+| `_naturalResourceIndex` | `List<CachedNaturalResource>` | same | **zero** | entity add/remove |
+| `_beaverIndex` | `List<CachedBeaver>` | same | **zero** | entity add/remove |
+| `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove |
 
 ### Cached component refs
 
 `CachedBuilding`, `CachedNaturalResource`, and `CachedBeaver` classes resolve all component references once at entity-add time. Endpoints read cached primitives (refreshed at 1Hz) without calling `GetComponent<T>()`.
 
-| Struct | Fields cached | GetComponent calls saved per item |
+| Class | Fields cached | GetComponent calls saved per item |
 |---|---|---|
 | `CachedBuilding` | BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect | **18** |
 | `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
@@ -30,44 +30,41 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 ## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total, 100 iterations)
 
-### Optimized (cached class indexes, double-buffered, background thread)
+All endpoints use cached class indexes, double-buffered reads on background thread.
 
 | Endpoint | Items | Min (ms) | GetComponent | Notes |
 |---|---|---|---|---|
 | `ping` | 1 | **0.7** | 0 | Listener thread |
-| `summary` | 3500+ | **0.9** | 0 | Cached primitives only |
+| `summary` | 3500+ | **0.9** | 0 | JwWriter, cached primitives |
 | `buildings` | 522 | **2.1** | **0** | StringBuilder + Jw helper |
 | `buildings detail:full` | 522 | **3.4** | **0** | StringBuilder + Jw, all fields |
 | `trees` | 2983 | **8.6** | **0** | StringBuilder + Jw |
 | `gatherables` | 1504 | **6.7** | **0** | StringBuilder + Jw helper |
-| `beavers` | 65 | **1.1** | **0** | CachedBeaver + StringBuilder + Jw |
-| `alerts` | 19 | **0.8** | **0** | Cached primitives |
-| `resources` | 13 | **0.8** | 0 | District registries |
-| `weather` | 1 | **0.8** | 0 | Service fields |
-| `time` | 1 | **0.8** | 0 | Service fields |
-| `prefabs` | 157 | **2.9** | 0 | Building templates |
-| `wellbeing` | 1 | **0.9** | 0 | Cached beaver needs |
-| `tree_clusters` | 5 | **0.9** | 0 | Cached natural resources |
+| `beavers` | 65 | **1.1** | **0** | StringBuilder + Jw, position/district/carrying |
+| `beavers detail:full` | 65 | ~1.5 | **0** | all 38 needs, NeedGroupId, deterioration |
+| `alerts` | 19 | **0.8** | **0** | JwWriter, cached primitives |
+| `resources` | 13 | **0.8** | 0 | JwWriter, district registries |
+| `power` | cached | **0.8** | **0** | JwWriter, groups by cached PowerNetworkId |
+| `weather` | 1 | **0.8** | 0 | JwWriter, service fields |
+| `time` | 1 | **0.8** | 0 | JwWriter, service fields |
+| `prefabs` | 157 | **2.9** | 0 | JwWriter, building templates |
+| `wellbeing` | 1 | **0.9** | 0 | JwWriter, cached beaver needs |
+| `tree_clusters` | 5 | **0.9** | 0 | JwWriter, cached natural resources |
+| `map` (stacking) | varies | ~10 | **0** | JwWriter, cached tile footprints, thread-safe |
 | **burst (7 calls)** | -- | **17** | -- | 2ms avg per call |
 
-### New endpoints (0.5.6+)
+### Optimization gaps
 
-| Endpoint | Iterates | Notes |
-|---|---|---|
-| `beavers` (position, district, carrying) | `_beaversRead` | x,y,z from transform, district from Citizen, GoodCarrier for carried goods |
-| `beavers detail:full` (all needs + groups) | `_beaversRead` | shows all 38 needs with NeedGroupId, liftingCapacity, deterioration |
-| `power` | `_buildingsRead` | groups by cached `PowerNetworkId`. Zero GetComponent |
-| `map` (stacking) | `_buildingsRead` + `_naturalResourcesRead` | cached tile footprints. Zero GetComponent, fully thread-safe |
+| Endpoint | What it does | Frequency | Notes |
+|---|---|---|---|
+| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes, N/A to optimize |
+| `CollectSummary` (districts) | District resource counts | every bot turn | iterates district centers live, partially cached |
 
-### Still scan all entities (not cached -- optimization gaps)
+## Serialization
 
-| Endpoint | What it does | Frequency | Why not indexed | Could cache? |
-|---|---|---|---|---|
-| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes | N/A |
-| ~~`CollectScan`~~ | ~~Radius-filtered survey~~ | ~~scanned all entities~~ | **FIXED** | uses `_buildingsRead` + `_naturalResourcesRead` with cached footprints |
-| ~~`CollectMap`~~ | ~~Region tile occupants~~ | ~~scanned all entities~~ | **FIXED** | uses `_buildingsRead` + `_naturalResourcesRead` with cached footprints |
-| ~~`CollectPowerNetworks`~~ | ~~Group by power graph~~ | ~~scanned all entities~~ | **FIXED** | now uses `_buildingsRead` with cached `PowerNetworkId` (Graph hashcode) |
-| `CollectSummary` (districts) | District resource counts | every bot turn | iterates district centers live | partially cached, district loop still live |
+All 14 low/medium-volume endpoints use shared `JwWriter` (zero Dictionary/List/Newtonsoft allocs). 5 high-volume endpoints (buildings, trees, crops, gatherables, beavers) use dedicated `StringBuilder` + `Jw` static helper for isolation.
+
+**A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). Main-thread cost for reads is **zero**.
 
 ## Thread model
 
@@ -82,105 +79,49 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
 
-## GC pressure audit
+## GC pressure
 
-`RefreshCachedState` runs every 1s (cadenced, configurable via settings.json). Allocations here cause GC pressure proportional to refresh rate.
+`RefreshCachedState` runs every 1s (cadenced, configurable via settings.json).
 
-### Per-refresh allocations (RefreshCachedState, every 1s)
+### Per-refresh open items
 
-| Source | Lines | Allocs/refresh | Severity | Status |
-|---|---|---|---|---|
-| ~~`Priority.ToString()` x2 per building~~ | 248-249 | ~~60K strings/sec~~ | **FIXED** | static `PriorityNames[]` lookup, zero alloc |
-| ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in class, `.Clear()` + repopulate |
-| ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
-| ~~60fps refresh~~ | UpdateSingleton | ~~60x/sec~~ | **FIXED** | cadenced to 1s (configurable) |
-| ~~`Orientation` from `OrientNames[]`~~ | ~~226~~ | ~~0~~ | **FIXED** | moved to add-time (immutable after placement) |
-| `foreach` over `BreedingPod.Nutrients` | 316 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
-| `foreach` over `Inventories.AllInventories` | 330 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
-| `foreach` over `inv.Stock` (nested) | 335 | ~500+ enumerator boxes/refresh | **minor** | nested inside AllInventories loop, same boxing concern |
-| ~~`CleanName()` per employed beaver~~ | ~~390~~ | ~~50 string allocs/refresh~~ | **FIXED** | reference-compare Workplace + District, only recompute name on change |
-| `NeedMgr.GetNeeds()` per beaver | 423 | 65 calls + 2470 List.Add/refresh | **unknown** | may allocate new collection per call. 38 CachedNeed structs x 65 beavers copied to Lists |
+| Source | Allocs/refresh | Severity | Notes |
+|---|---|---|---|
+| `foreach` over `BreedingPod.Nutrients` | ~5 enumerator boxes | **minor** | foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
+| `foreach` over `Inventories.AllInventories` | ~500 enumerator boxes | **minor** | all buildings with inventories. At 1Hz = ~500 small allocs/sec |
+| `foreach` over `inv.Stock` (nested) | ~500+ enumerator boxes | **minor** | nested inside AllInventories loop, same boxing |
+| `NeedMgr.GetNeeds()` per beaver | 65 calls + 2470 List.Add | **unknown** | may allocate new collection per call. 38 needs x 65 beavers |
 
-### Per-request allocations (only when API called)
+Previously fixed: Priority.ToString (static lookup), nutrients dict (persistent + clear), static values (add-time only), 60fps refresh (cadenced to 1s), Orientation (add-time), CleanName (ref-compare).
+
+### Per-request open items
 
 | Source | Count | Severity |
 |---|---|---|
-| ~~`new Dictionary` per building~~ | ~~522 per call~~ | **FIXED** -- StringBuilder like trees |
-| ~~`new List<object>` per endpoint~~ | ~~1 per call~~ | **FIXED** -- StringBuilder returns string |
-| ~~`new Dictionary` per beaver~~ | ~~65 per call~~ | **FIXED** -- CachedBeaver + StringBuilder |
-| ~~`new Dictionary` per power network~~ | ~~~17 per call~~ | **FIXED** -- JwWriter, zero Dictionary allocs |
-| ~~`new Dictionary` in summary flat~~ | ~~1 per call + goods~~ | **FIXED** -- JwWriter, inline totals |
-| ~~`List<object>` in find_placement~~ | ~~1 list + N anonymous objects~~ | **FIXED** -- value tuples + JwWriter |
-| ~~LINQ `.Select().ToList()` in map stacking~~ | ~~per stacked tile~~ | **FIXED** -- simple loop + Dictionary |
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
-| `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
+| `sb.ToString()` for trees/buildings | 1 per request | unavoidable, reusable `_sb` field, pre-allocated 500KB |
 
-All 14 low/medium-volume endpoints now use shared `JwWriter` (zero Dictionary/List/Newtonsoft allocs). High-volume endpoints (buildings, trees, crops, gatherables, beavers) use dedicated `StringBuilder` + `Jw` static helper.
+All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated from request paths.
 
-### Static values (resolved)
+### Webhook allocations (per event fire)
 
-All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight.
+68 event handlers registered on EventBus. `PushEvent()` early-exits if `_webhooks.Count == 0` -- zero allocations with no subscribers.
 
-### Webhook allocations (per event fire, main thread)
-
-68 event handlers registered on EventBus. Only matching event types fire. Each fires `PushEvent()` which early-exits if `_webhooks.Count == 0`.
-
-| Source | Allocs/event | Severity | Notes |
-|---|---|---|---|
-| ~~`new { id, name }` data payload before count check~~ | ~~1 anonymous object~~ | **FIXED** | guarded with `if (_webhooks.Count > 0)` |
-| ~~`_webhooks.ToArray()` per event~~ | ~~1 array~~ | **FIXED** | replaced with index loop |
-| ~~Dead `new StringContent` on line 159~~ | ~~1 object~~ | **FIXED** | deleted |
-| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | expected | only if webhooks registered |
-| `new StringContent` inside lambda | 1 per webhook | expected | actual HTTP payload |
-| Lambda closure | 1 per webhook (~30 bytes) | expected | ThreadPool work item |
-| `ThreadPool.QueueUserWorkItem` | 1 per webhook | expected | fire-and-forget |
-
-**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec during normal gameplay. With 0 webhooks registered, PushEvent early-exits with zero allocations. With webhooks registered, each matched event allocates data payload + serialization + StringContent (expected, unavoidable).
-
-## Remaining bottlenecks (ordered by impact)
-
-| # | Bottleneck | Cost | Root cause | Fix |
-|---|---|---|---|---|
-| 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
-| 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
-| ~~3~~ | ~~Webhook data alloc with 0 subscribers~~ | ~~68 objects/sec~~ | ~~data before count check~~ | **FIXED** -- `if (_webhooks.Count > 0)` guard |
-| ~~4~~ | ~~Webhook ToArray per event~~ | ~~1 array per fire~~ | ~~ToArray snapshot~~ | **FIXED** -- index loop |
-| ~~5~~ | ~~Dead StringContent alloc~~ | ~~1 per fire~~ | ~~unused object~~ | **FIXED** -- deleted |
-| ~~6~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | | **FIXED** -- cached `Go` field |
-| ~~7~~ | ~~Building X,Y,Z,Orientation re-read~~ | ~~522 reads/sec~~ | | **FIXED** -- add-time only |
-| ~~8~~ | ~~CachedBuilding 48-field struct copy~~ | ~~144K copies/sec at 1500 buildings~~ | ~~struct value copy in RefreshCachedState~~ | **FIXED** -- converted to class, modify in-place, Clone() for double-buffer |
-
-## Resolved bottlenecks
-
-| Bottleneck | Was | Fix applied |
+| Source | Allocs/event | Notes |
 |---|---|---|
-| GetComponent per item (trees) | 5 calls x 2986 items/request | cached component refs in `CachedNaturalResource` class |
-| GetComponent per item (buildings) | 18 calls x 522 items/request | cached component refs in `CachedBuilding` class |
-| Full entity scan per endpoint | O(4161) every call | event-driven typed indexes via `EventBus` |
-| Per-frame index rebuild | O(4161) every frame | eliminated -- indexes update on entity add/remove only |
-| Per-frame entity cache rebuild | O(4161) every frame | eliminated -- `_entityCache` updates via EventBus |
-| tree_clusters full scan | O(4161) | switched to `_naturalResourceIndex` with cached refs |
-| wellbeing full scan | O(4161) | switched to `_beaverIndex` |
-| find_placement full scan | O(4161) | switched to `_buildingIndex` with cached refs |
-| demolish_path_at full scan | O(4161) x up to 6 | switched to `_buildingIndex` with cached refs |
-| All reads blocking main thread | ~7ms overhead per call | GETs served on listener thread, zero main-thread cost |
-| JSON serialization on main thread | ~1-3ms/response | now serializes on listener thread for GETs |
-| Thread-unsafe property reads from background | game crash (nav mesh recalc) | all mutable state cached as primitives on main thread, double-buffered |
-| Trees Dictionary + Newtonsoft overhead | 23ms for 3000 trees | StringBuilder serialization: 2ms (11.5x faster) |
-| Buildings Dictionary + Newtonsoft overhead | 8ms for 522 buildings | StringBuilder serialization |
-| Priority.ToString() 60K allocs/sec | per-frame GC pressure | static PriorityNames[] lookup, zero alloc |
-| RefreshCachedState 60x/sec | wasted CPU on main thread | cadenced to 1s (configurable via settings.json) |
-| Beavers live GetComponent from background | 2.4ms + thread safety risk | CachedBeaver struct with needs list, StringBuilder serialization |
-| Double-buffer copy-back race | "Collection was modified" errors | removed copy-back, add/remove updates both buffers |
-| new Dictionary per breeding pod per frame | ~5 allocs/frame | persistent dict, clear+repopulate |
-| Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |
-| Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
-| LINQ `.Select().ToList()` in map stacking | anonymous objects + LINQ alloc per stacked tile | simple loop with Dictionary |
-| Webhook dead StringContent alloc | 1 object per event fire | deleted unused line |
-| Webhook data alloc with 0 subscribers | 68 anonymous objects per event batch | `if (_webhooks.Count > 0)` guard before alloc |
-| Webhook ToArray per event fire | 1 array alloc per fire | index loop (main thread, safe) |
-| 22 silent `catch { }` blocks | invisible failures | `TimberbotLog.Error()` -- file + console, timestamped, all errors |
-| CachedBuilding 48-field struct copy | 144K field copies/sec at 1500 buildings | converted to class, modify in-place, `Clone()` for double-buffer |
+| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | only if webhooks registered |
+| `new StringContent` inside lambda | 1 per webhook | actual HTTP payload |
+| Lambda closure | 1 per webhook (~30 bytes) | ThreadPool work item |
+| `ThreadPool.QueueUserWorkItem` | 1 per webhook | fire-and-forget |
+
+**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec. With 0 webhooks: zero allocations. With webhooks: each matched event allocates payload + serialization + StringContent (expected, unavoidable).
+
+## Remaining bottlenecks
+
+| # | Bottleneck | Cost | Notes |
+|---|---|---|---|
+| 1 | **Unity GC spikes** | random 0.5-2s | Unity GC freezes all threads. Reduced alloc pressure but unavoidable from mod |
+| 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string. Unavoidable, once per request |
 
 ## Optimization history
 
@@ -195,8 +136,6 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | StringBuilder (trees) | 2.0ms | 2.8ms | 1.3ms | 28ms |
 | Alloc-once + SB buildings | 2.0ms | ~1ms | ~1ms | ~20ms est |
 | DRY (Jw + DoubleBuffer) | **8.6ms** | **2.1ms** | **3.4ms** | **17ms** |
-
-**A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). StringBuilder skips Newtonsoft entirely -- manual JSON via `sb.Append()`. Main-thread cost for reads is **zero**.
 
 ## Late-game projections
 
@@ -222,7 +161,7 @@ All scaling is linear with item count. Zero main-thread cost for GET-only bot tu
 - **Bots scale free:** bots don't eat/drink/sleep but DO add to beaver index. 50+ bots = more entities to cache and serialize
 - **Multi-district:** each district has its own resource counters. 3+ districts increases summary/resources iteration
 - **Vertical builds:** heavy platform/stair stacking increases map `occupants` arrays (more allocs per tile)
-- **Power networks:** complex power grids fragment into many small networks. `power` endpoint uses cached `PowerNetworkId` but still iterates all buildings per call
+- **Power networks:** complex power grids fragment into many small networks. `power` endpoint iterates all buildings per call
 
 ## Test coverage
 
