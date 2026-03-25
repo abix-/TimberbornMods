@@ -876,7 +876,7 @@ Terrain, water, occupants, and contamination for a rectangular region.
 | tiles | array | Per-tile data |
 | tiles[].x, y | int | Tile coordinates |
 | tiles[].terrain | int | Terrain height |
-| tiles[].water | float | Water height |
+| tiles[].water | float | Water depth at tile |
 | tiles[].badwater | float | (optional) Water contamination 0-1 |
 | tiles[].occupant | string | (optional) Building/entity name (single occupant) |
 | tiles[].occupants | array | (optional) Multiple occupants at different z-levels: `[{name, z}, ...]`. Appears instead of `occupant` when buildings are stacked vertically |
