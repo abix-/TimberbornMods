@@ -20,14 +20,30 @@ Some endpoints support two output formats via `?format=` query param or `"format
 
 ### Error Format
 
-All errors return JSON with an `error` field:
+All errors return JSON with a machine-readable `error` code:
 
 ```json
-{"error": "description of what went wrong"}
+{"error": "not_found", "id": 42}
+{"error": "invalid_type", "id": 42, "detail": "not a floodgate"}
+{"error": "invalid_param", "detail": "speed must be 0-3"}
+{"error": "insufficient_science", "building": "LargePowerWheel", "scienceCost": 60, "currentPoints": 10}
 ```
 
-!!! info "Error context"
-    Some errors include additional fields for debugging: `id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.
+| Code | Meaning |
+|------|---------|
+| `not_found` | Entity, building, district, or prefab does not exist |
+| `invalid_type` | Entity exists but is the wrong type for this operation |
+| `invalid_param` | Parameter value is out of range or invalid |
+| `not_unlocked` | Building requires science unlock first |
+| `insufficient_science` | Not enough science points |
+| `no_population` | No beavers available to migrate |
+| `disabled` | Feature disabled in settings.json |
+| `unknown_endpoint` | Route not found |
+| `invalid_body` | Malformed JSON request body |
+| `operation_failed` | Game service threw an exception |
+| `internal_error` | Unhandled server error |
+
+The `detail` field provides human-readable context when the code alone is ambiguous. Context fields (`id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.) vary by endpoint.
 
 ### Python CLI
 

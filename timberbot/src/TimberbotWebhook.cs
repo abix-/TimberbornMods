@@ -72,7 +72,7 @@ namespace Timberbot
 
         public object RegisterWebhook(string url, List<string> events)
         {
-            if (!Enabled) return _jw.BeginObj().Prop("error", "webhooks disabled in settings.json").CloseObj().ToString();
+            if (!Enabled) return _jw.Error("disabled", ("detail", "webhooks disabled in settings.json"));
             var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
             var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new HashSet<string>(events) : null };
             _webhooks.Add(reg);

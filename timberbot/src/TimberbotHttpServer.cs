@@ -105,7 +105,7 @@ namespace Timberbot
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    Respond(req.Context, 500, new { error = ex.Message });
+                    Respond(req.Context, 500, new { error = "internal_error", detail = ex.Message });
                 }
             }
         }
@@ -162,7 +162,7 @@ namespace Timberbot
                     catch (Exception ex)
                     {
                         TimberbotLog.Error("route.get", ex);
-                        Respond(ctx, 500, new { error = ex.Message });
+                        Respond(ctx, 500, new { error = "internal_error", detail = ex.Message });
                     }
                     continue;
                 }
@@ -184,7 +184,7 @@ namespace Timberbot
                     }
                     catch
                     {
-                        Respond(ctx, 400, new { error = "invalid JSON body" });
+                        Respond(ctx, 400, new { error = "invalid_body" });
                         continue;
                     }
                 }
@@ -403,7 +403,7 @@ namespace Timberbot
                         return _service.WebhookMgr.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
                     case "/api/debug":
-                        if (!_debugEnabled) return "{\"error\":\"debug endpoint disabled in settings.json\"}";
+                        if (!_debugEnabled) return "{\"error\":\"disabled\",\"detail\":\"debug endpoint\"}";
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
                         if (body != null)
                             foreach (var prop in body.Properties())
@@ -411,7 +411,7 @@ namespace Timberbot
                         return _service.DebugTool.DebugInspect(
                             body?.Value<string>("target") ?? "help", debugArgs);
                     case "/api/benchmark":
-                        if (!_debugEnabled) return "{\"error\":\"benchmark endpoint disabled in settings.json\"}";
+                        if (!_debugEnabled) return "{\"error\":\"disabled\",\"detail\":\"benchmark endpoint\"}";
                         return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":
@@ -437,35 +437,12 @@ namespace Timberbot
                 }
             }
 
-            return new
-            {
-                error = "unknown endpoint",
-                endpoints = new[]
-                {
-                    "GET  /api/ping",
-                    "GET  /api/summary",
-                    "GET  /api/resources",
-                    "GET  /api/population",
-                    "GET  /api/time",
-                    "GET  /api/weather",
-                    "GET  /api/districts",
-                    "GET  /api/buildings",
-                    "GET  /api/trees",
-                    "GET  /api/crops",
-                    "GET  /api/speed",
-                    "GET  /api/prefabs",
-                    "POST /api/speed              {speed: 0-3}",
-                    "POST /api/building/pause      {id, paused}",
-                    "POST /api/floodgate           {id, height}",
-                    "POST /api/priority            {id, priority}",
-                    "POST /api/workers             {id, count}",
-                    "POST /api/cutting/area        {x1,y1,x2,y2,z,marked}",
-                    "POST /api/stockpile/capacity  {id, capacity}",
-                    "POST /api/stockpile/good      {id, good, allowed}",
-                    "POST /api/building/demolish   {id}",
-                    "POST /api/building/place      {prefab, x, y, z, orientation}"
-                }
-            };
+            return "{\"error\":\"unknown_endpoint\",\"endpoints\":[" +
+                "\"GET /api/ping\",\"GET /api/summary\",\"GET /api/buildings\",\"GET /api/trees\"," +
+                "\"GET /api/beavers\",\"GET /api/resources\",\"GET /api/districts\",\"GET /api/weather\"," +
+                "\"GET /api/time\",\"GET /api/speed\",\"GET /api/prefabs\",\"GET /api/power\"," +
+                "\"POST /api/speed\",\"POST /api/building/place\",\"POST /api/building/demolish\"" +
+                "]}";
         }
 
         // Send a JSON response. If data is already a string (from JW serialization),

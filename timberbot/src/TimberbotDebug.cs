@@ -282,16 +282,9 @@ namespace Timberbot
                 // functional check: did the endpoint return an error?
                 bool pass = !(result is Dictionary<string, object> bd && bd.ContainsKey("error"));
 
-                return new
-                {
-                    test = name,
-                    iterations = iters,
-                    totalMs = bms,
-                    perCallMs = bms / iters,
-                    gc0 = bgc0,
-                    items,
-                    pass
-                };
+                return Service.Cache.Jw.Result(("test", name), ("iterations", iters),
+                    ("totalMs", bms), ("perCallMs", bms / iters), ("gc0", bgc0),
+                    ("items", items), ("pass", pass));
             }
 
             // Heavy endpoints (CollectBuildings.full, CollectTiles, FindPlacement) run 10x
@@ -534,7 +527,7 @@ namespace Timberbot
                     case "get":
                         {
                             var path = Arg("path", "");
-                            if (string.IsNullOrEmpty(path)) { info["error"] = "pass path:_fieldName.nested.field"; break; }
+                            if (string.IsNullOrEmpty(path)) { info["error"] = "invalid_param"; info["detail"] = "pass path:_fieldName.nested.field"; break; }
                             var obj = Resolve(path);
                             _debugLastResult = obj;
                             info["path"] = path;
@@ -546,7 +539,7 @@ namespace Timberbot
                         {
                             var path = Arg("path", "");
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                            if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                            if (obj == null) { info["error"] = "not_found"; info["detail"] = $"could not resolve '{path}'"; break; }
                             info["type"] = obj.GetType().FullName;
                             var filter = Arg("filter", "");
                             var members = new List<string>();
@@ -571,15 +564,15 @@ namespace Timberbot
                         {
                             var path = Arg("path", "");
                             var methodName = Arg("method", "");
-                            if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
+                            if (string.IsNullOrEmpty(methodName)) { info["error"] = "invalid_param"; info["detail"] = "pass method:MethodName"; break; }
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                            if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                            if (obj == null) { info["error"] = "not_found"; info["detail"] = $"could not resolve '{path}'"; break; }
                             // find all overloads
                             var methods = obj.GetType().GetMethods(flags);
                             System.Reflection.MethodInfo bestMethod = null;
                             foreach (var m in methods)
                                 if (m.Name == methodName) { bestMethod = m; break; }
-                            if (bestMethod == null) { info["error"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
+                            if (bestMethod == null) { info["error"] = "not_found"; info["detail"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
                             // build args from arg0, arg1, etc
                             var methodParams = bestMethod.GetParameters();
                             var callArgs = new object[methodParams.Length];
@@ -607,15 +600,19 @@ namespace Timberbot
                         }
 
                     default:
-                        info["error"] = $"unknown target '{target}'. use: help, get, fields, call, validate, validate_all";
+                        info["error"] = "invalid_param"; info["detail"] = $"unknown target '{target}'. use: help, get, fields, call, validate, validate_all";
                         break;
                 }
             }
             catch (System.Exception ex)
             {
-                info["error"] = ex.ToString();
+                info["error"] = "internal_error"; info["detail"] = ex.ToString();
             }
-            return info;
+            // serialize the info dict via JW (Prop(string, object) handles complex values)
+            var jw = Service.Cache.Jw.BeginObj();
+            foreach (var kvp in info)
+                jw.Prop(kvp.Key, kvp.Value);
+            return jw.End();
         }
 
         // ValidatePlacement lives in TimberbotService.Placement.cs (used by PlaceBuilding)
@@ -752,7 +749,7 @@ namespace Timberbot
                 return Service.Cache.Jw.Result(("id", id), ("type", "naturalResource"), ("name", (c.Name)), ("fields", fields), ("mismatches", mismatches), ("total", total));
             }
 
-            return Service.Cache.Jw.Error("entity not found in cache", ("id", id));
+            return Service.Cache.Jw.Error("not_found", ("id", id));
         }
 
         // Validate every entity in the cache against live game state.
@@ -849,18 +846,13 @@ namespace Timberbot
                     }
                     totalFields += tf;
                     totalMismatches += mm;
-                    if (mm > 0) results.Add(new { type = "district", name = cd.Name, fields, mismatches = mm, total = tf });
+                    if (mm > 0) results.Add(Service.Cache.Jw.Result(("type", "district"), ("name", cd.Name), ("fields", fields), ("mismatches", mm), ("total", tf)));
                 }
             }
             catch (System.Exception _ex) { TimberbotLog.Error("validate.districts", _ex); }
 
-            return new
-            {
-                entities = totalEntities,
-                fields = totalFields,
-                mismatches = totalMismatches,
-                failures = results
-            };
+            return Service.Cache.Jw.Result(("entities", totalEntities), ("fields", totalFields),
+                ("mismatches", totalMismatches), ("failures", results));
         }
     }
 }

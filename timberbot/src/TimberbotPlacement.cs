@@ -183,7 +183,7 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("entity not found", ("id", buildingId));
+                return _jw.Error("not_found", ("id", buildingId));
 
             var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
@@ -201,7 +201,7 @@ namespace Timberbot
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
-                return _jw.BeginObj().Prop("error", "path must be a straight line (x1==x2 or y1==y2)").CloseObj().ToString();
+                return _jw.Error("invalid_param", ("detail", "path must be a straight line (x1==x2 or y1==y2)"));
 
             // Check if stairs and platforms are unlocked before we start.
             // Stairs are needed for any z-level change. Platforms are needed for
@@ -412,10 +412,10 @@ namespace Timberbot
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return _jw.Error("unknown prefab", ("prefab", prefabName));
+                return _jw.Error("not_found", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("no block object spec", ("prefab", prefabName));
+                return _jw.Error("invalid_type", ("prefab", prefabName), ("detail", "no block object spec"));
 
             var size = blockObjectSpec.Size;
 
@@ -700,30 +700,20 @@ namespace Timberbot
         {
             int orientation = ParseOrientation(orientationStr);
             if (orientation < 0)
-                return new
-                {
-                    error = $"invalid orientation '{orientationStr}', use: south, west, north, east",
-                    prefab = prefabName
-                };
+                return _jw.Error("invalid_param", ("prefab", prefabName), ("detail", "invalid orientation, use: south, west, north, east"));
 
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return _jw.Error("unknown prefab", ("prefab", prefabName));
+                return _jw.Error("not_found", ("prefab", prefabName));
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("no block object spec", ("prefab", prefabName));
+                return _jw.Error("invalid_type", ("prefab", prefabName), ("detail", "no block object spec"));
 
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
             if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
-                return new
-                {
-                    error = "building not unlocked",
-                    prefab = prefabName,
-                    scienceCost = bs.ScienceCost,
-                    currentPoints = _scienceService.SciencePoints
-                };
+                return _jw.Error("not_unlocked", ("prefab", prefabName), ("scienceCost", bs.ScienceCost), ("currentPoints", _scienceService.SciencePoints));
 
             // Origin correction: user always specifies bottom-left corner (smallest x,y).
             // The game's Placement struct expects a different origin depending on orientation:

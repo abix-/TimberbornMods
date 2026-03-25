@@ -129,11 +129,14 @@ namespace Timberbot
         //   _jw.Result(("id", 5), ("name", "Path"), ("placed", true))
         //   -> {"id":5,"name":"Path","placed":true}
         //
-        //   _jw.Error("not found")
-        //   -> {"error":"not found"}
+        //   _jw.Error("not_found")
+        //   -> {"error":"not_found"}
         //
-        //   _jw.Error("not found", ("id", buildingId))
-        //   -> {"error":"not found","id":42}
+        //   _jw.Error("not_found", ("id", buildingId))
+        //   -> {"error":"not_found","id":42}
+        //
+        //   _jw.Error("invalid_type", ("id", 42), ("detail", "not a floodgate"))
+        //   -> {"error":"invalid_type","id":42,"detail":"not a floodgate"}
         public string Result(params (string key, object val)[] props)
         {
             Reset().OpenObj();

@@ -449,25 +449,12 @@ namespace Timberbot
 
         public object CollectTime()
         {
-            return new
-            {
-                dayNumber = _dayNightCycle.DayNumber,
-                dayProgress = _dayNightCycle.DayProgress,
-                partialDayNumber = _dayNightCycle.PartialDayNumber
-            };
+            return _cache.Jw.Result(("dayNumber", _dayNightCycle.DayNumber), ("dayProgress", _dayNightCycle.DayProgress), ("partialDayNumber", _dayNightCycle.PartialDayNumber));
         }
 
         public object CollectWeather()
         {
-            return new
-            {
-                cycle = _gameCycleService.Cycle,
-                cycleDay = _gameCycleService.CycleDay,
-                isHazardous = _weatherService.IsHazardousWeather,
-                temperateWeatherDuration = _weatherService.TemperateWeatherDuration,
-                hazardousWeatherDuration = _weatherService.HazardousWeatherDuration,
-                cycleLengthInDays = _weatherService.CycleLengthInDays
-            };
+            return _cache.Jw.Result(("cycle", _gameCycleService.Cycle), ("cycleDay", _gameCycleService.CycleDay), ("isHazardous", _weatherService.IsHazardousWeather), ("temperateWeatherDuration", _weatherService.TemperateWeatherDuration), ("hazardousWeatherDuration", _weatherService.HazardousWeatherDuration), ("cycleLengthInDays", _weatherService.CycleLengthInDays));
         }
 
         public object CollectDistricts(string format = "toon")
@@ -896,11 +883,7 @@ namespace Timberbot
 
         public object CollectWorkHours()
         {
-            return new
-            {
-                endHours = _workingHoursManager.EndHours,
-                areWorkingHours = _workingHoursManager.AreWorkingHours
-            };
+            return _cache.Jw.Result(("endHours", _workingHoursManager.EndHours), ("areWorkingHours", _workingHoursManager.AreWorkingHours));
         }
 
         // Science points and unlockable buildings with costs and status
@@ -977,7 +960,7 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
-            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.BeginObj().Prop("error", ex.Message).CloseObj().ToString(); }
+            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Error("operation_failed", ("detail", ex.Message)); }
         }
 
         // Game event history (droughts, deaths, etc)
