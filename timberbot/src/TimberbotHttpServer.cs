@@ -232,7 +232,7 @@ namespace Timberbot
                     case "/api/prefabs":
                         return _service.CollectPrefabs();
                     case "/api/webhooks":
-                        return _service.ListWebhooks();
+                        return _service.WebhookMgr.ListWebhooks();
                 }
             }
 
@@ -350,11 +350,11 @@ namespace Timberbot
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
                     case "/api/webhooks":
-                        return _service.RegisterWebhook(
+                        return _service.WebhookMgr.RegisterWebhook(
                             body?.Value<string>("url") ?? "",
                             body?["events"]?.ToObject<System.Collections.Generic.List<string>>());
                     case "/api/webhooks/delete":
-                        return _service.UnregisterWebhook(
+                        return _service.WebhookMgr.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
                     case "/api/debug":
                         if (!_debugEnabled) return new { error = "debug endpoint disabled in settings.json" };
@@ -431,7 +431,8 @@ namespace Timberbot
                 ctx.Response.ContentType = "application/json";
                 ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
                 // write directly to output stream -- avoids intermediate byte[] allocation
-                using (var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8))
+                // UTF8Encoding(false) = no BOM prefix (JSON parsers reject BOM)
+                using (var sw = new StreamWriter(ctx.Response.OutputStream, new UTF8Encoding(false)))
                     sw.Write(json);
                 ctx.Response.OutputStream.Close();
             }

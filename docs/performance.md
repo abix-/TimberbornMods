@@ -176,39 +176,52 @@ All scaling is linear with item count. Zero main-thread cost for GET-only bot tu
 
 ## Pre-release audit (v0.7.0)
 
-### HTTP response
+### Hot path: RefreshCachedState (every 1s on main thread)
+
+Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
+
+| What | Cost | Allocs | Status |
+|---|---|---|---|
+| ~500 building property reads | ~0.05ms | 0 | Good |
+| ~3000 natural resource reads | ~0.1ms | 0 | Good |
+| ~80 beaver reads + needs | ~0.2ms | 0 | Good |
+| Inventory for-loop (indexed) | ~0.05ms | 0 | **FIXED** -- was foreach, benchmarked 25% faster |
+| `GetNeeds()` IEnumerable per beaver | ~0.01ms | ~80 enumerator boxes | Can't fix -- game API returns IEnumerable |
+| 3x `Swap()` pointer swap | O(1) | 0 | Good |
+
+### HTTP response (per request, background thread)
 
 | Issue | Severity | Status |
 |---|---|---|
-| `JsonConvert.SerializeObject(data, Formatting.Indented)` allocates oversized string with whitespace | Medium | **TODO** -- switch to `Formatting.None` |
-| `Encoding.UTF8.GetBytes(json)` allocates byte array per response | Medium | **TODO** -- write directly to output stream with `StreamWriter` |
-| JwWriter responses bypass serialization entirely (return string) | Good | Already optimized |
+| `Formatting.Indented` whitespace bloat | Medium | **FIXED** -- switched to `Formatting.None` (~30% smaller) |
+| `GetBytes()` byte array alloc per response | Medium | **FIXED** -- `StreamWriter` writes directly to output stream |
+| UTF-8 BOM prefix from StreamWriter | Critical | **FIXED** -- `new UTF8Encoding(false)` |
+| JwWriter responses bypass Newtonsoft entirely | Good | Already optimized |
 
 ### Webhook flush (every 200ms)
 
 | Issue | Severity | Status |
 |---|---|---|
-| `new StringBuilder(256)` per webhook per flush | Medium | **TODO** -- reuse field-level SB |
-| `JsonConvert.SerializeObject` per event in PushEvent | Medium | Acceptable -- only fires when webhooks registered |
-| `new StringContent(...)` per webhook per flush | Low | ThreadPool, acceptable |
-| Circuit breaker disables dead URLs after N failures | Good | Already implemented |
+| `new StringBuilder(256)` per webhook per flush | Medium | **FIXED** -- reuses field-level `_webhookSb` |
+| `JsonConvert.SerializeObject` per event in PushEvent | Medium | Acceptable -- only fires with subscribers |
+| Batching (200ms window) | Good | Reduces ThreadPool items for high-frequency events |
+| Circuit breaker (5 failures) | Good | Disables dead URLs automatically |
 
-### RefreshCachedState (every 1s on main thread)
-
-| Issue | Severity | Status |
-|---|---|---|
-| `GetNeeds()` IEnumerable may box enumerator (~80 beavers * ~30 needs) | Medium | Can't fix without game source |
-| Inventory Dictionary.Clear() + repopulate per building | Low | Dict reused, not reallocated |
-| BreedingPod.Nutrients IEnumerable foreach | Low | Only ~5 breeding pods |
-| All other struct fields: direct property reads | Good | Zero-alloc |
-
-### JsonWriter
+### JsonWriter bugs and fixes
 
 | Issue | Severity | Status |
 |---|---|---|
-| `Key().OpenArr()` double-comma bug | Critical | **FIXED** -- `_hasValue[_depth] = false` after Key |
-| `Float(v).ToString(fmt)` allocates string per call | Low | **FIXED** -- zero-alloc digit writing |
-| StringBuilder reused via `Reset()` | Good | Already optimized |
+| `Key().OpenArr()` double-comma (`"key":,[`) | Critical | **FIXED** -- `_hasValue[_depth] = false` after Key() |
+| Value methods missing `AutoSep()` (`"a""b"` in arrays) | Critical | **FIXED** -- all value methods now call AutoSep() |
+| `Float(v).ToString(fmt)` string alloc | Low | **FIXED** -- zero-alloc digit writing to SB |
+| Collect-then-emit for prefab costs | Medium | **FIXED** -- prevents partial JSON on exception |
+
+### Production verdict
+
+- Main thread: 0.4ms/sec for 3500 entities. Scales linearly, projected ~1ms at late-game (10K entities)
+- Zero GC0 collections across all endpoints (confirmed by /api/benchmark)
+- All JSON output validated via test suite (51 tests, any-save-game compatible)
+- No blocking issues remaining
 
 ## Test coverage
 

@@ -27,11 +27,12 @@ namespace Timberbot
         public JwWriter CloseObj() { _sb.Append('}'); _depth--; _hasValue[_depth] = true; return this; }
 
         public JwWriter Key(string name) { AutoSep(); _sb.Append('"'); _sb.Append(name); _sb.Append("\":"); _hasValue[_depth] = false; return this; }
-        public JwWriter Bool(bool v) { _sb.Append(v ? "true" : "false"); _hasValue[_depth] = true; return this; }
-        public JwWriter Int(int v) { _sb.Append(v); _hasValue[_depth] = true; return this; }
-        public JwWriter Long(long v) { _sb.Append(v); _hasValue[_depth] = true; return this; }
+        public JwWriter Bool(bool v) { AutoSep(); _sb.Append(v ? "true" : "false"); _hasValue[_depth] = true; return this; }
+        public JwWriter Int(int v) { AutoSep(); _sb.Append(v); _hasValue[_depth] = true; return this; }
+        public JwWriter Long(long v) { AutoSep(); _sb.Append(v); _hasValue[_depth] = true; return this; }
         public JwWriter Float(float v, string fmt = "F2")
         {
+            AutoSep();
             // zero-alloc: write digits directly instead of v.ToString(fmt) which allocates
             if (v < 0) { _sb.Append('-'); v = -v; }
             int whole = (int)v;
@@ -51,8 +52,8 @@ namespace Timberbot
             _hasValue[_depth] = true;
             return this;
         }
-        public JwWriter Str(string v) { _sb.Append('"'); _sb.Append(v ?? ""); _sb.Append('"'); _hasValue[_depth] = true; return this; }
-        public JwWriter Null() { _sb.Append("null"); _hasValue[_depth] = true; return this; }
+        public JwWriter Str(string v) { AutoSep(); _sb.Append('"'); _sb.Append(v ?? ""); _sb.Append('"'); _hasValue[_depth] = true; return this; }
+        public JwWriter Null() { AutoSep(); _sb.Append("null"); _hasValue[_depth] = true; return this; }
         public JwWriter Raw(string json) { AutoSep(); _sb.Append(json); _hasValue[_depth] = true; return this; }
 
         public override string ToString() => _sb.ToString();
