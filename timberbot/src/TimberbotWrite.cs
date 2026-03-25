@@ -11,8 +11,9 @@
 //
 // Pattern: each method takes primitive params, finds the entity, calls the game
 // service, returns {id, name, field: newValue} on success or {error: "code"} on failure.
-// Error codes: not_found, invalid_type, invalid_param, insufficient_science,
-// no_population, operation_failed. Optional "detail" field for human context.
+// Error codes: "code: detail" format (e.g. "not_found", "invalid_type: not a floodgate").
+// AI parses the prefix before the colon. Codes: not_found, invalid_type, invalid_param,
+// insufficient_science, no_population, operation_failed.
 
 using System;
 using System.Collections.Generic;
@@ -142,7 +143,7 @@ namespace Timberbot
         public object SetSpeed(int speed)
         {
             if (speed < 0 || speed > 3)
-                return _jw.Error("invalid_param", ("detail", "speed must be 0-3"));
+                return _jw.Error("invalid_param: speed must be 0-3");
 
             _speedManager.ChangeSpeed(SpeedScale[speed]);
             return _jw.Result(("speed", speed));
@@ -152,7 +153,7 @@ namespace Timberbot
         public object SetWorkHours(int endHours)
         {
             if (endHours < 1 || endHours > 24)
-                return _jw.Error("invalid_param", ("detail", "endHours must be 1-24"));
+                return _jw.Error("invalid_param: endHours must be 1-24");
             _workingHoursManager.EndHours = endHours;
             return _jw.Result(("endHours", (_workingHoursManager.EndHours)));
         }
@@ -172,7 +173,7 @@ namespace Timberbot
             {
                 var distributor = _populationDistributorRetriever.GetPopulationDistributor<AdultsDistributorTemplate>(fromDc);
                 if (distributor == null)
-                    return _jw.Error("not_found", ("detail", "no population distributor"), ("from", fromDistrict));
+                    return _jw.Error("not_found: no population distributor", ("from", fromDistrict));
                 var available = distributor.Current;
                 var toMove = System.Math.Min(count, available);
                 if (toMove <= 0)
@@ -183,7 +184,7 @@ namespace Timberbot
             catch (System.Exception ex)
             {
                 TimberbotLog.Error("migration", ex);
-                return _jw.Error("operation_failed", ("detail", ex.Message), ("from", fromDistrict), ("to", toDistrict));
+                return _jw.Error("operation_failed: " + ex.Message, ("from", fromDistrict), ("to", toDistrict));
             }
         }
 
@@ -196,7 +197,7 @@ namespace Timberbot
 
             var pausable = ec.GetComponent<PausableBuilding>();
             if (pausable == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "not pausable"));
+                return _jw.Error("invalid_type: not pausable", ("id", buildingId));
 
             if (paused)
                 pausable.Pause();
@@ -214,7 +215,7 @@ namespace Timberbot
 
             var clutch = ec.GetComponent<Clutch>();
             if (clutch == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no clutch"));
+                return _jw.Error("invalid_type: no clutch", ("id", buildingId));
 
             clutch.SetMode(engaged ? ClutchMode.Engaged : ClutchMode.Disengaged);
             return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("engaged", clutch.IsEngaged).CloseObj().ToString();
@@ -229,7 +230,7 @@ namespace Timberbot
 
             var floodgate = ec.GetComponent<Floodgate>();
             if (floodgate == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "not a floodgate"));
+                return _jw.Error("invalid_type: not a floodgate", ("id", buildingId));
 
             var clamped = Mathf.Clamp(height, 0f, floodgate.MaxHeight);
             floodgate.SetHeightAndSynchronize(clamped);
@@ -249,7 +250,7 @@ namespace Timberbot
                 return _jw.Error("not_found", ("id", buildingId));
 
             if (!Enum.TryParse<Priority>(priorityStr, true, out var parsed))
-                return _jw.Error("invalid_param", ("value", priorityStr), ("detail", "use: VeryLow, Normal, VeryHigh"));
+                return _jw.Error("invalid_param: use VeryLow, Normal, VeryHigh", ("value", priorityStr));
 
             // construction priority: affects how fast builders deliver materials
             if (type == "construction" || string.IsNullOrEmpty(type))
@@ -272,7 +273,7 @@ namespace Timberbot
                 }
             }
 
-            return _jw.Error("invalid_type", ("id", buildingId), ("type", type), ("detail", "no priority of that type"));
+            return _jw.Error("invalid_type: no priority of that type", ("id", buildingId), ("type", type));
         }
 
         // haulers deliver goods to this building first
@@ -284,7 +285,7 @@ namespace Timberbot
 
             var hp = ec.GetComponent<HaulPrioritizable>();
             if (hp == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no haul priority"));
+                return _jw.Error("invalid_type: no haul priority", ("id", buildingId));
 
             hp.Prioritized = prioritized;
             return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("haulPrioritized", hp.Prioritized).CloseObj().ToString();
@@ -303,7 +304,7 @@ namespace Timberbot
 
             var manufactory = ec.GetComponent<Manufactory>();
             if (manufactory == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no manufactory"));
+                return _jw.Error("invalid_type: no manufactory", ("id", buildingId));
 
             if (string.IsNullOrEmpty(recipeId) || recipeId == "none")
             {
@@ -334,7 +335,7 @@ namespace Timberbot
 
             var farmhouse = ec.GetComponent<FarmHouse>();
             if (farmhouse == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "not a farmhouse"));
+                return _jw.Error("invalid_type: not a farmhouse", ("id", buildingId));
 
             if (action == "planting")
             {
@@ -347,7 +348,7 @@ namespace Timberbot
                 return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("action", "default").CloseObj().ToString();
             }
 
-            return _jw.Error("invalid_param", ("action", action), ("detail", "use: planting or harvesting"));
+            return _jw.Error("invalid_param: use planting or harvesting", ("action", action));
         }
 
         // forester/gatherer prioritizes this resource type
@@ -359,7 +360,7 @@ namespace Timberbot
 
             var prioritizer = ec.GetComponent<PlantablePrioritizer>();
             if (prioritizer == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no plantable prioritizer"));
+                return _jw.Error("invalid_type: no plantable prioritizer", ("id", buildingId));
 
             if (string.IsNullOrEmpty(plantableName) || plantableName == "none")
             {
@@ -369,7 +370,7 @@ namespace Timberbot
 
             var planterBuilding = ec.GetComponent<PlanterBuilding>();
             if (planterBuilding == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no planter"));
+                return _jw.Error("invalid_type: no planter", ("id", buildingId));
 
             PlantableSpec match = null;
             var available = new List<string>();
@@ -400,7 +401,7 @@ namespace Timberbot
 
             var workplace = ec.GetComponent<Workplace>();
             if (workplace == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "not a workplace"));
+                return _jw.Error("invalid_type: not a workplace", ("id", buildingId));
 
             var clamped = Mathf.Clamp(count, 0, workplace.MaxWorkers);
             workplace.DesiredWorkers = clamped;
@@ -452,7 +453,7 @@ namespace Timberbot
 
             var inventories = ec.GetComponent<Inventories>();
             if (inventories == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no inventory"));
+                return _jw.Error("invalid_type: no inventory", ("id", buildingId));
 
             // Set capacity on all inventories
             var capInv = inventories.AllInventories;
@@ -478,7 +479,7 @@ namespace Timberbot
 
             var sga = ec.GetComponent<SingleGoodAllower>();
             if (sga == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("detail", "not a single-good stockpile"));
+                return _jw.Error("invalid_type: not a single-good stockpile", ("id", buildingId));
 
             sga.AllowedGood = goodId;
             return _jw.Result(("id", buildingId), ("name", TimberbotEntityCache.CleanName(ec.GameObject.name)), ("good", sga.AllowedGood));
@@ -548,7 +549,7 @@ namespace Timberbot
                 var ec = _cache.FindEntity(buildingId);
                 if (ec == null) return _jw.Error("not_found", ("id", buildingId));
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
-                if (inRange == null) return _jw.Error("invalid_type", ("id", buildingId), ("detail", "no planting range"));
+                if (inRange == null) return _jw.Error("invalid_type: no planting range", ("id", buildingId));
 
                 var jw = _cache.Jw.BeginObj().Prop("crop", crop).Arr("spots");
                 foreach (var c in inRange.GetCoordinates())
@@ -644,7 +645,7 @@ namespace Timberbot
             catch (System.Exception ex)
             {
                 TimberbotLog.Error("unlock", ex);
-                return _jw.Error("operation_failed", ("detail", ex.Message), ("building", buildingName));
+                return _jw.Error("operation_failed: " + ex.Message, ("building", buildingName));
             }
         }
 
@@ -661,7 +662,7 @@ namespace Timberbot
 
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
                 if (distSetting == null)
-                    return _jw.Error("invalid_type", ("district", districtName), ("detail", "no distribution settings"));
+                    return _jw.Error("invalid_type: no distribution settings", ("district", districtName));
 
                 try
                 {
@@ -678,7 +679,7 @@ namespace Timberbot
                 catch (System.Exception ex)
                 {
                     TimberbotLog.Error("distribution", ex);
-                    return _jw.Error("operation_failed", ("detail", ex.Message), ("district", districtName), ("good", goodId));
+                    return _jw.Error("operation_failed: " + ex.Message, ("district", districtName), ("good", goodId));
                 }
 
                 return _jw.Result(("district", districtName), ("good", goodId), ("importOption", importOption), ("exportThreshold", exportThreshold));
@@ -698,7 +699,7 @@ namespace Timberbot
 
             var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
             if (terrainRange == null)
-                return _jw.Error("invalid_type", ("id", buildingId), ("name", TimberbotEntityCache.CleanName(ec.GameObject.name)), ("detail", "no work range"));
+                return _jw.Error("invalid_type: no work range", ("id", buildingId), ("name", TimberbotEntityCache.CleanName(ec.GameObject.name)));
 
             var range = terrainRange.GetRange();
             int moistCount = 0;

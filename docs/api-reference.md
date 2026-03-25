@@ -20,16 +20,18 @@ Some endpoints support two output formats via `?format=` query param or `"format
 
 ### Error Format
 
-All errors return JSON with a machine-readable `error` code:
+All errors return JSON with an `error` field in `"code: detail"` format:
 
 ```json
 {"error": "not_found", "id": 42}
-{"error": "invalid_type", "id": 42, "detail": "not a floodgate"}
-{"error": "invalid_param", "detail": "speed must be 0-3"}
+{"error": "invalid_type: not a floodgate", "id": 42}
+{"error": "invalid_param: speed must be 0-3"}
 {"error": "insufficient_science", "building": "LargePowerWheel", "scienceCost": 60, "currentPoints": 10}
 ```
 
-| Code | Meaning |
+The error string starts with a machine-readable code. Parse the prefix before `:` to switch on it. Everything after `:` is human context.
+
+| Code prefix | Meaning |
 |------|---------|
 | `not_found` | Entity, building, district, or prefab does not exist |
 | `invalid_type` | Entity exists but is the wrong type for this operation |
@@ -43,7 +45,7 @@ All errors return JSON with a machine-readable `error` code:
 | `operation_failed` | Game service threw an exception |
 | `internal_error` | Unhandled server error |
 
-The `detail` field provides human-readable context when the code alone is ambiguous. Context fields (`id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.) vary by endpoint.
+Context fields (`id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.) vary by endpoint.
 
 ### Python CLI
 

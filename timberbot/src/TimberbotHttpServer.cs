@@ -105,7 +105,7 @@ namespace Timberbot
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    Respond(req.Context, 500, new { error = "internal_error", detail = ex.Message });
+                    Respond(req.Context, 500, new { error = "internal_error: " + ex.Message });
                 }
             }
         }
@@ -162,7 +162,7 @@ namespace Timberbot
                     catch (Exception ex)
                     {
                         TimberbotLog.Error("route.get", ex);
-                        Respond(ctx, 500, new { error = "internal_error", detail = ex.Message });
+                        Respond(ctx, 500, new { error = "internal_error: " + ex.Message });
                     }
                     continue;
                 }
@@ -403,7 +403,7 @@ namespace Timberbot
                         return _service.WebhookMgr.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
                     case "/api/debug":
-                        if (!_debugEnabled) return "{\"error\":\"disabled\",\"detail\":\"debug endpoint\"}";
+                        if (!_debugEnabled) return "{\"error\":\"disabled: debug endpoint\"}";
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
                         if (body != null)
                             foreach (var prop in body.Properties())
@@ -411,7 +411,7 @@ namespace Timberbot
                         return _service.DebugTool.DebugInspect(
                             body?.Value<string>("target") ?? "help", debugArgs);
                     case "/api/benchmark":
-                        if (!_debugEnabled) return "{\"error\":\"disabled\",\"detail\":\"benchmark endpoint\"}";
+                        if (!_debugEnabled) return "{\"error\":\"disabled: benchmark endpoint\"}";
                         return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":

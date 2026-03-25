@@ -135,8 +135,8 @@ namespace Timberbot
         //   _jw.Error("not_found", ("id", buildingId))
         //   -> {"error":"not_found","id":42}
         //
-        //   _jw.Error("invalid_type", ("id", 42), ("detail", "not a floodgate"))
-        //   -> {"error":"invalid_type","id":42,"detail":"not a floodgate"}
+        //   _jw.Error("invalid_type: not a floodgate", ("id", 42))
+        //   -> {"error":"invalid_type: not a floodgate","id":42}
         public string Result(params (string key, object val)[] props)
         {
             Reset().OpenObj();

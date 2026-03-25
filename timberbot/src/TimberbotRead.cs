@@ -960,7 +960,7 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
-            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Error("operation_failed", ("detail", ex.Message)); }
+            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Error("operation_failed: " + ex.Message); }
         }
 
         // Game event history (droughts, deaths, etc)

@@ -201,7 +201,7 @@ namespace Timberbot
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
-                return _jw.Error("invalid_param", ("detail", "path must be a straight line (x1==x2 or y1==y2)"));
+                return _jw.Error("invalid_param: path must be a straight line (x1==x2 or y1==y2)");
 
             // Check if stairs and platforms are unlocked before we start.
             // Stairs are needed for any z-level change. Platforms are needed for
@@ -415,7 +415,7 @@ namespace Timberbot
                 return _jw.Error("not_found", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("invalid_type", ("prefab", prefabName), ("detail", "no block object spec"));
+                return _jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
 
             var size = blockObjectSpec.Size;
 
@@ -700,7 +700,7 @@ namespace Timberbot
         {
             int orientation = ParseOrientation(orientationStr);
             if (orientation < 0)
-                return _jw.Error("invalid_param", ("prefab", prefabName), ("detail", "invalid orientation, use: south, west, north, east"));
+                return _jw.Error("invalid_param: invalid orientation, use south, west, north, east", ("prefab", prefabName));
 
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
@@ -708,7 +708,7 @@ namespace Timberbot
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Error("invalid_type", ("prefab", prefabName), ("detail", "no block object spec"));
+                return _jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
 
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
