@@ -878,8 +878,7 @@ Terrain, water, occupants, and contamination for a rectangular region.
 | tiles[].terrain | int | Terrain height |
 | tiles[].water | float | Water depth at tile |
 | tiles[].badwater | float | (optional) Water contamination 0-1 |
-| tiles[].occupant | string | (optional) Building/entity name (single occupant) |
-| tiles[].occupants | array | (optional) Multiple occupants at different z-levels: `[{name, z}, ...]`. Appears instead of `occupant` when buildings are stacked vertically |
+| tiles[].occupants | array | (optional) Buildings/entities on this tile: `[{name, z}, ...]` |
 | tiles[].entrance | bool | (optional) Is an entrance tile |
 | tiles[].seedling | bool | (optional) Has a seedling |
 | tiles[].dead | bool | (optional) Dead tree stump (buildable) |
@@ -893,7 +892,7 @@ Terrain, water, occupants, and contamination for a rectangular region.
   "tiles": [
     {"x": 100, "y": 100, "terrain": 2, "water": 0.0},
     {"x": 100, "y": 101, "terrain": 2, "water": 1.5, "badwater": 0.3},
-    {"x": 100, "y": 102, "terrain": 2, "water": 0.0, "occupant": "Path", "moist": true}
+    {"x": 100, "y": 102, "terrain": 2, "water": 0.0, "occupants": [{"name": "Path", "z": 2}], "moist": true}
   ]
 }
 ```

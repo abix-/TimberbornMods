@@ -1,0 +1,14 @@
+- [breaking] find_placement: boolean fields changed to 0/1 integers (pathAccess, reachable, nearPower, flooded)
+- [breaking] find_placement: removed pathCount field
+- [breaking] tiles endpoint: water field now returns WaterDepth (actual depth) instead of CeiledWaterHeight
+- [breaking] tiles endpoint: always returns occupants array (removed singular occupant string for single-occupant tiles)
+- [feature] find_placement: entranceX/entranceY returns the path tile in front of the entrance
+- [feature] find_placement: waterDepth field on water buildings (pumps), sorted deepest-first
+- [feature] find_placement: flood check only on ground-required tiles (MatterBelow) -- water intake tiles no longer false-positive as flooded
+- [feature] 29 CLI smoke tests via subprocess
+- [fix] find_placement entrance coords: use Coordinates (path tile) not DoorstepCoordinates (building tile)
+- [fix] Prefab names: all buildings except Path require faction suffix (.Folktails or .IronTeeth)
+- [fix] top dashboard crash when district resources are dicts
+- [fix] top dashboard crash when district resources default to 0
+- [fix] map renderer: handle occupants list (multiple z-level stacking)
+- [internal] Removed CHANGELOG.md -- GitHub releases are the single source
