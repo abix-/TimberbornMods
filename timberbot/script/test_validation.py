@@ -298,7 +298,7 @@ class TestRunner:
         self.check("set speed 0", not self.err(result))
 
         # verify via debug
-        verify = self.debug_get("_speedManager.CurrentSpeed")
+        verify = self.debug_get("Read._speedManager.CurrentSpeed")
         self.check("verify speed=0 via debug",
                    str(verify.get("value", "")) == "0",
                    f"got: {verify.get('value')}")
@@ -1059,7 +1059,7 @@ class TestRunner:
                    json.dumps(result)[:100])
 
         # verify via debug
-        verify = self.debug_get("_workingHoursManager.EndHours")
+        verify = self.debug_get("Read._workingHoursManager.EndHours")
         self.check("verify workhours via debug",
                    str(verify.get("value", "")) == "20",
                    f"got: {verify.get('value')}")
@@ -1651,7 +1651,12 @@ class TestRunner:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length).decode("utf-8") if length else ""
                 try:
-                    received_events.append(json.loads(body))
+                    parsed = json.loads(body)
+                    # webhooks send batched arrays: [{event1}, {event2}]
+                    if isinstance(parsed, list):
+                        received_events.extend(parsed)
+                    else:
+                        received_events.append(parsed)
                 except Exception:
                     received_events.append({"raw": body})
                 self.send_response(200)
