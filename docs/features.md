@@ -5,7 +5,7 @@
 | [Beavers](api-reference.md#get-apibeavers) | Per-beaver position, district, wellbeing, needs, workplace, carried goods, deterioration. `detail:full` for all needs with group category | Yes |
 | [Wellbeing](api-reference.md#get-apiwellbeing) | Population wellbeing by category (Social, Fun, Nutrition, Aesthetics, Awe) with current/max | Yes |
 | [Buildings](api-reference.md#get-apibuildings) | Workers, priority, power, reachability, inventory, construction progress | Yes |
-| [Placement](api-reference.md#post-apibuildingplace) | Place any building with game-native validation. Find spots with reachability and power | Yes |
+| [Placement](api-reference.md#post-apibuildingplace) | Place any building with game-native validation. Find spots with entrance coords, reachability, power, water depth | Yes |
 | [Building range](api-reference.md#post-apibuildingrange) | Work radius for farmhouse, lumberjack, forester, gatherer, scavenger, district center | Yes |
 | [Paths](api-reference.md#post-apipathroute) | Auto-stairs and platforms across z-levels | Yes |
 | [Crops](api-reference.md#post-apiplantingmark) | Plant, clear, find valid irrigated spots within farmhouse range | Yes |

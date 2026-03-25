@@ -1140,7 +1140,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 
 ### POST /api/placement/find
 
-Find valid placements for a building within a rectangular area. Results sorted by: district reachability > path access > power adjacency > path count. Returns at most 10 results.
+Find valid placements for a building within a rectangular area. Returns at most 10 results. Water buildings sort by waterDepth first (deepest water preferred). Others sort by: non-flooded > reachable > pathAccess > nearPower.
 
 **CLI:** `timberbot.py find_placement prefab:LumberjackFlag x1:110 y1:125 x2:130 y2:145`
 
@@ -1164,20 +1164,22 @@ Find valid placements for a building within a rectangular area. Results sorted b
 | placements | array | Valid positions (max 10) |
 | placements[].x, y, z | int | Bottom-left coordinates |
 | placements[].orientation | string | Best orientation name |
-| placements[].pathAccess | bool | Adjacent to paths |
-| placements[].pathCount | int | Number of adjacent path tiles |
-| placements[].reachable | bool | Connected to district road network |
-| placements[].nearPower | bool | Adjacent to power building |
-| placements[].flooded | bool | Water on footprint tiles. Flooded buildings are non-functional |
+| placements[].entranceX | int | Doorstep tile X (where path must connect) |
+| placements[].entranceY | int | Doorstep tile Y (where path must connect) |
+| placements[].pathAccess | int | 1 if doorstep tile has a path, 0 otherwise |
+| placements[].reachable | int | 1 if connected to district road network, 0 otherwise |
+| placements[].nearPower | int | 1 if adjacent to power building, 0 otherwise |
+| placements[].flooded | int | 1 if water on ground tiles. Flooded buildings are non-functional |
+| placements[].waterDepth | float | Water depth at intake tile (water buildings only) |
 
-Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
+Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non-flooded > reachable > pathAccess > nearPower.
 
 ```json
 {
   "prefab": "LumberjackFlag.IronTeeth",
   "sizeX": 2, "sizeY": 2,
   "placements": [
-    {"x": 120, "y": 130, "z": 2, "orientation": "south", "pathAccess": true, "pathCount": 2, "reachable": true, "nearPower": false, "flooded": false}
+    {"x": 120, "y": 130, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 129, "pathAccess": 1, "reachable": 1, "nearPower": 0, "flooded": 0}
   ]
 }
 ```
