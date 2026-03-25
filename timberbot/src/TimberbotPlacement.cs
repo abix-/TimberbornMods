@@ -26,6 +26,8 @@ using Timberborn.EntitySystem;
 using Timberborn.GameDistricts;
 using Timberborn.ScienceSystem;
 using Timberborn.BuildingsNavigation;
+using Timberborn.FactionSystem;
+using Timberborn.GameFactionSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -44,6 +46,7 @@ namespace Timberbot
         private readonly DistrictCenterRegistry _districtCenterRegistry;
         private readonly PreviewFactory _previewFactory;
         private readonly ScienceService _scienceService;
+        private readonly FactionService _factionService;
         private readonly TimberbotEntityCache _cache;
 
         public TimberbotPlacement(
@@ -59,6 +62,7 @@ namespace Timberbot
             DistrictCenterRegistry districtCenterRegistry,
             PreviewFactory previewFactory,
             ScienceService scienceService,
+            FactionService factionService,
             TimberbotEntityCache cache)
         {
             _terrainService = terrainService;
@@ -73,6 +77,7 @@ namespace Timberbot
             _districtCenterRegistry = districtCenterRegistry;
             _previewFactory = previewFactory;
             _scienceService = scienceService;
+            _factionService = factionService;
             _cache = cache;
         }
 
@@ -80,25 +85,15 @@ namespace Timberbot
         private static readonly string[] PriorityNames = TimberbotEntityCache.PriorityNames;
         private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
 
-        // Faction suffix detected once at startup from building prefab names.
-        // Every prefab has the suffix (e.g. "FarmHouse.IronTeeth", "Stairs.Folktails").
-        // Faction never changes during a game session.
+        // Faction suffix for prefab names (e.g. ".IronTeeth" or ".Folktails").
+        // Detected once at startup via FactionService.Current.Id -- the same API
+        // other mods (UnifiedFactions) use. Faction never changes during a game session.
         private string _factionSuffix = "";
 
-        // Called once from TimberbotService.Load(). Scans any building template name
-        // for a dot-separated suffix to determine the active faction.
+        // Called once from TimberbotService.Load().
         public void DetectFaction()
         {
-            foreach (var building in _buildingService.Buildings)
-            {
-                var name = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>()?.TemplateName ?? "";
-                int dot = name.LastIndexOf('.');
-                if (dot > 0)
-                {
-                    _factionSuffix = name.Substring(dot); // e.g. ".IronTeeth" or ".Folktails"
-                    break;
-                }
-            }
+            _factionSuffix = "." + _factionService.Current.Id;
             TimberbotLog.Info($"faction: {_factionSuffix}");
         }
 

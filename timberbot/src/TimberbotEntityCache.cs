@@ -84,6 +84,8 @@ namespace Timberbot
 
         // shared JSON writer instance: 300KB pre-allocated StringBuilder, reused via Reset()
         public readonly TimberbotJw Jw = new TimberbotJw(300000);
+        // small JwWriter for district pre-serialization (main thread only, during RefreshCachedState)
+        private readonly TimberbotJw _districtJw = new TimberbotJw(4096);
 
         public static readonly HashSet<string> TreeSpecies = new HashSet<string>
             { "Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove" };
@@ -379,13 +381,37 @@ namespace Timberbot
                     var counter = dc.GetComponent<DistrictResourceCounter>();
                     if (counter != null)
                     {
-                        cd.Resources = new Dictionary<string, int>();
+                        cd.Resources = new Dictionary<string, (int, int)>();
+                        // pre-serialize toon format: "Water":50,"Log":236
+                        var dj = _districtJw.Reset();
+                        bool first = true;
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
                             if (rc.AllStock > 0)
-                                cd.Resources[goodId] = rc.AvailableStock;
+                            {
+                                cd.Resources[goodId] = (rc.AvailableStock, rc.AllStock);
+                                if (!first) dj.Raw(",");
+                                first = false;
+                                dj.Raw("\"").Raw(goodId).Raw("\":").Int(rc.AvailableStock);
+                            }
                         }
+                        cd.ResourcesToon = dj.ToString();
+
+                        // pre-serialize json format: "Water":{"available":50,"all":54}
+                        dj.Reset();
+                        first = true;
+                        foreach (var goodId in goods)
+                        {
+                            var rc = counter.GetResourceCount(goodId);
+                            if (rc.AllStock > 0)
+                            {
+                                if (!first) dj.Raw(",");
+                                first = false;
+                                dj.Raw("\"").Raw(goodId).Raw("\":{\"available\":").Int(rc.AvailableStock).Raw(",\"all\":").Int(rc.AllStock).Raw("}");
+                            }
+                        }
+                        cd.ResourcesJson = dj.ToString();
                     }
                     Districts.Add(cd);
                 }
@@ -730,7 +756,9 @@ namespace Timberbot
         {
             public string Name;
             public int Adults, Children, Bots;
-            public Dictionary<string, int> Resources;
+            public Dictionary<string, (int available, int all)> Resources;  // for projection math + toon resources
+            public string ResourcesToon;  // pre-serialized: "Water":50,"Log":236,...
+            public string ResourcesJson;  // pre-serialized: "Water":{"available":50,"all":54},...
         }
     }
 }

@@ -291,15 +291,16 @@ namespace Timberbot
                 {
                     foreach (var kvp in dc.Resources)
                     {
-                        jw.Key(kvp.Key).Int(kvp.Value);
-                        if (kvp.Key == "Water") totalWater += kvp.Value;
+                        int avail = kvp.Value.available;
+                        jw.Key(kvp.Key).Int(avail);
+                        if (kvp.Key == "Water") totalWater += avail;
                         else if (kvp.Key == "Berries" || kvp.Key == "Kohlrabi" || kvp.Key == "Carrot" || kvp.Key == "Potato"
                               || kvp.Key == "Wheat" || kvp.Key == "Bread" || kvp.Key == "Cassava" || kvp.Key == "Corn"
                               || kvp.Key == "Eggplant" || kvp.Key == "Soybean" || kvp.Key == "MapleSyrup")
-                            totalFood += kvp.Value;
-                        else if (kvp.Key == "Log") logStock = kvp.Value;
-                        else if (kvp.Key == "Plank") plankStock = kvp.Value;
-                        else if (kvp.Key == "Gear") gearStock = kvp.Value;
+                            totalFood += avail;
+                        else if (kvp.Key == "Log") logStock = avail;
+                        else if (kvp.Key == "Plank") plankStock = avail;
+                        else if (kvp.Key == "Gear") gearStock = avail;
                     }
                 }
             }
@@ -437,39 +438,22 @@ namespace Timberbot
 
         public object CollectDistricts(string format = "toon")
         {
-            var goods = _goodService.Goods;
             var jw = _cache.Jw.Reset().OpenArr();
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            foreach (var dc in _cache.Districts)
             {
-                var counter = dc.GetComponent<DistrictResourceCounter>();
-                var pop = dc.DistrictPopulation;
-                jw.OpenObj().Key("name").Str(dc.DistrictName);
+                jw.OpenObj().Key("name").Str(dc.Name);
                 if (format == "toon")
                 {
-                    jw.Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
-                      .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
-                      .Key("bots").Int(pop != null ? pop.NumberOfBots : 0);
-                    if (counter != null)
-                        foreach (var goodId in goods)
-                        {
-                            var rc = counter.GetResourceCount(goodId);
-                            if (rc.AllStock > 0) jw.Key(goodId).Int(rc.AvailableStock);
-                        }
+                    jw.Key("adults").Int(dc.Adults).Key("children").Int(dc.Children).Key("bots").Int(dc.Bots);
+                    if (dc.ResourcesToon != null) jw.Raw(",").Raw(dc.ResourcesToon);
                 }
                 else
                 {
                     jw.Key("population").OpenObj()
-                        .Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
-                        .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
-                        .Key("bots").Int(pop != null ? pop.NumberOfBots : 0)
+                        .Key("adults").Int(dc.Adults).Key("children").Int(dc.Children).Key("bots").Int(dc.Bots)
                         .CloseObj();
                     jw.Key("resources").OpenObj();
-                    if (counter != null)
-                        foreach (var goodId in goods)
-                        {
-                            var rc = counter.GetResourceCount(goodId);
-                            if (rc.AllStock > 0) jw.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
-                        }
+                    if (dc.ResourcesJson != null) jw.Raw(dc.ResourcesJson);
                     jw.CloseObj();
                 }
                 jw.CloseObj();
@@ -480,38 +464,29 @@ namespace Timberbot
 
         public object CollectResources(string format = "toon")
         {
-            var goods = _goodService.Goods;
             var jw = _cache.Jw.Reset();
             if (format == "toon")
             {
+                // flat list: [{district, good, available, all}, ...]
+                // toon pre-serialized string only has available -- need json string for all
+                // fall back to Resources dict for toon flat format
                 jw.OpenArr();
-                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                foreach (var dc in _cache.Districts)
                 {
-                    var counter = dc.GetComponent<DistrictResourceCounter>();
-                    if (counter == null) continue;
-                    foreach (var goodId in goods)
-                    {
-                        var rc = counter.GetResourceCount(goodId);
-                        if (rc.AllStock > 0)
-                            jw.OpenObj().Key("district").Str(dc.DistrictName).Key("good").Str(goodId).Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
-                    }
+                    if (dc.Resources == null) continue;
+                    foreach (var kvp in dc.Resources)
+                        jw.OpenObj().Key("district").Str(dc.Name).Key("good").Str(kvp.Key).Key("available").Int(kvp.Value.available).Key("all").Int(kvp.Value.all).CloseObj();
                 }
                 jw.CloseArr();
             }
             else
             {
+                // nested: {"District 1": {"Water": {"available": N, "all": N}}}
                 jw.OpenObj();
-                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                foreach (var dc in _cache.Districts)
                 {
-                    var counter = dc.GetComponent<DistrictResourceCounter>();
-                    if (counter == null) continue;
-                    jw.Key(dc.DistrictName).OpenObj();
-                    foreach (var goodId in goods)
-                    {
-                        var rc = counter.GetResourceCount(goodId);
-                        if (rc.AllStock > 0)
-                            jw.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
-                    }
+                    jw.Key(dc.Name).OpenObj();
+                    if (dc.ResourcesJson != null) jw.Raw(dc.ResourcesJson);
                     jw.CloseObj();
                 }
                 jw.CloseObj();
@@ -522,14 +497,13 @@ namespace Timberbot
         public object CollectPopulation()
         {
             var jw = _cache.Jw.Reset().OpenArr();
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            foreach (var dc in _cache.Districts)
             {
-                var pop = dc.DistrictPopulation;
                 jw.OpenObj()
-                    .Key("district").Str(dc.DistrictName)
-                    .Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
-                    .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
-                    .Key("bots").Int(pop != null ? pop.NumberOfBots : 0)
+                    .Key("district").Str(dc.Name)
+                    .Key("adults").Int(dc.Adults)
+                    .Key("children").Int(dc.Children)
+                    .Key("bots").Int(dc.Bots)
                     .CloseObj();
             }
             jw.CloseArr();
