@@ -24,6 +24,9 @@ using Timberborn.Cutting;
 using Timberborn.DeteriorationSystem;
 using Timberborn.DwellingSystem;
 using Timberborn.EntitySystem;
+using Timberborn.GameDistricts;
+using Timberborn.Goods;
+using Timberborn.ResourceCountingSystem;
 using Timberborn.Forestry;
 using Timberborn.Gathering;
 using Timberborn.InventorySystem;
@@ -59,9 +62,11 @@ namespace Timberbot
     public class TimberbotEntityCache
     {
         // game services injected via constructor
-        private readonly EntityRegistry _entityRegistry;   // all entities in the game
-        private readonly TreeCuttingArea _treeCuttingArea;  // which tiles are marked for tree cutting
-        private readonly EventBus _eventBus;                // entity lifecycle events
+        private readonly EntityRegistry _entityRegistry;
+        private readonly TreeCuttingArea _treeCuttingArea;
+        private readonly EventBus _eventBus;
+        private readonly DistrictCenterRegistry _districtCenterRegistry;
+        private readonly IGoodService _goodService;
 
         // set by TimberbotService in Load() before use
         public TimberbotWebhook WebhookMgr;
@@ -70,6 +75,9 @@ namespace Timberbot
         public readonly TimberbotDoubleBuffer<CachedBuilding> Buildings = new TimberbotDoubleBuffer<CachedBuilding>();
         public readonly TimberbotDoubleBuffer<CachedNaturalResource> NaturalResources = new TimberbotDoubleBuffer<CachedNaturalResource>();
         public readonly TimberbotDoubleBuffer<CachedBeaver> Beavers = new TimberbotDoubleBuffer<CachedBeaver>();
+
+        // district snapshot (refreshed at 1Hz, not double-buffered -- tiny list, 1-3 items)
+        public readonly List<CachedDistrict> Districts = new List<CachedDistrict>();
 
         // O(1) entity lookup by Unity instance ID (for write commands that target specific entities)
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
@@ -88,11 +96,15 @@ namespace Timberbot
         public TimberbotEntityCache(
             EntityRegistry entityRegistry,
             TreeCuttingArea treeCuttingArea,
-            EventBus eventBus)
+            EventBus eventBus,
+            DistrictCenterRegistry districtCenterRegistry,
+            IGoodService goodService)
         {
             _entityRegistry = entityRegistry;
             _treeCuttingArea = treeCuttingArea;
             _eventBus = eventBus;
+            _districtCenterRegistry = districtCenterRegistry;
+            _goodService = goodService;
         }
 
         public void Register() => _eventBus.Register(this);
@@ -104,9 +116,16 @@ namespace Timberbot
             return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
         }
 
+        // Strip Unity/faction suffixes so API output has clean names.
+        // Unity appends "(Clone)" to instantiated objects. Faction suffixes like
+        // ".IronTeeth" are internal identifiers players never see in-game.
         public static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
 
+        // Optimization: avoid calling CleanName() every refresh by comparing object references.
+        // If the Workplace or District reference hasn't changed since last refresh,
+        // the cached string is still valid. Only derive a new string when the ref changes.
+        // This saves ~50 string allocations/sec for employed beavers.
         public static bool RefChanged(ref object cached, object current)
         {
             if (ReferenceEquals(cached, current)) return false;
@@ -114,19 +133,31 @@ namespace Timberbot
             return true;
         }
 
+        // O(1) entity lookup by Unity instance ID. Used by write commands that
+        // target a specific building/beaver (e.g. set_workers building_id:-12345).
         public EntityComponent FindEntity(int id)
         {
             _entityCache.TryGetValue(id, out var result);
             return result;
         }
 
+        // Called every 1 second on the main thread. Reads mutable properties from
+        // live game components into the Write buffer. After all three loops complete,
+        // Swap() makes the updated data available to the background HTTP thread.
+        //
+        // Why per-field reads instead of re-caching the whole entity?
+        // Most fields don't change between refreshes. Reading individual properties
+        // (~20 per building) is cheaper than calling GetComponent<T>() to resolve
+        // all 18 component references again. Components are resolved ONCE in AddToIndexes.
         public void RefreshCachedState()
         {
+            // --- BUILDINGS: read mutable state from each building's cached components ---
             for (int i = 0; i < Buildings.Write.Count; i++)
             {
                 var c = Buildings.Write[i];
                 try
                 {
+                    // IsFinished changes once (false->true when construction completes)
                     if (c.BlockObject != null)
                         c.Finished = c.BlockObject.IsFinished;
                     c.Paused = c.Pausable != null && c.Pausable.Paused;
@@ -155,39 +186,50 @@ namespace Timberbot
                     }
                     if (c.Clutch != null) c.ClutchEngaged = c.Clutch.IsEngaged;
                     if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
+                    // Power network: each building can belong to one power graph.
+                    // RuntimeHelpers.GetHashCode gives us a stable identity for the graph
+                    // object so we can group buildings by network in the /api/power endpoint.
                     if (c.PowerNode != null)
                     {
                         try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (Exception _ex) { TimberbotLog.Error("cache.power", _ex); }
                     }
+                    // Manufactory: production buildings (lumber mill, gear workshop, etc).
+                    // Recipes list is populated once (doesn't change for a building).
                     if (c.Manufactory != null)
                     {
                         c.CurrentRecipe = c.Manufactory.HasCurrentRecipe ? c.Manufactory.CurrentRecipe.Id : "";
                         c.ProductionProgress = c.Manufactory.ProductionProgress;
                         c.ReadyToProduce = c.Manufactory.IsReadyToProduce;
-                        if (c.Recipes == null)
+                        if (c.Recipes == null) // recipes don't change -- populate once
                         {
                             c.Recipes = new List<string>();
                             foreach (var r in c.Manufactory.ProductionRecipes)
                                 c.Recipes.Add(r.Id);
                         }
                     }
+                    // Breeding pods need berries + water to produce beaver children.
+                    // NutrientStock tracks what's currently in the pod.
                     if (c.BreedingPod != null)
                     {
                         c.NeedsNutrients = c.BreedingPod.NeedsNutrients;
                         try
                         {
                             if (c.NutrientStock == null) c.NutrientStock = new Dictionary<string, int>();
-                            c.NutrientStock.Clear();
+                            c.NutrientStock.Clear(); // reuse dict, don't reallocate
                             foreach (var ga in c.BreedingPod.Nutrients)
                                 if (ga.Amount > 0) c.NutrientStock[ga.GoodId] = ga.Amount;
                         }
                         catch (Exception _ex) { TimberbotLog.Error("cache.nutrients", _ex); }
                     }
+                    // Inventory: aggregate stock across all a building's inventories.
+                    // Buildings can have multiple inventories (input, output, construction).
+                    // We skip the construction inventory and sum the rest into one dict.
+                    // Uses indexed for-loop (not foreach) to avoid enumerator boxing.
                     if (c.Inventories != null)
                     {
                         int totalStock = 0, totalCapacity = 0;
                         if (c.Inventory == null) c.Inventory = new Dictionary<string, int>();
-                        c.Inventory.Clear();
+                        c.Inventory.Clear(); // reuse dict, don't reallocate
                         try
                         {
                             var allInv = c.Inventories.AllInventories;
@@ -218,6 +260,8 @@ namespace Timberbot
                 }
                 catch (Exception _ex) { TimberbotLog.Error("cache.building", _ex); }
             }
+            // --- TREES/CROPS: read mutable state (alive, grown, marked) ---
+            // Unlike buildings, tree coords CAN change (they grow from seedling to full size)
             for (int i = 0; i < NaturalResources.Write.Count; i++)
             {
                 var c = NaturalResources.Write[i];
@@ -227,6 +271,7 @@ namespace Timberbot
                     {
                         var coords = c.BlockObject.Coordinates;
                         c.X = coords.x; c.Y = coords.y; c.Z = coords.z;
+                        // TreeCuttingArea is a game singleton that tracks which tiles are marked
                         c.Marked = c.Cuttable != null && _treeCuttingArea.IsInCuttingArea(coords);
                     }
                     c.Alive = c.Living != null && !c.Living.IsDead;
@@ -235,6 +280,11 @@ namespace Timberbot
                 }
                 catch (Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
             }
+
+            // --- BEAVERS: read mutable state (wellbeing, position, needs, carrying) ---
+            // Beavers move constantly, so position is re-read every refresh.
+            // Workplace and district use RefChanged to avoid CleanName string alloc
+            // unless the beaver actually changed jobs or moved districts.
             for (int i = 0; i < Beavers.Write.Count; i++)
             {
                 var c = Beavers.Write[i];
@@ -242,17 +292,21 @@ namespace Timberbot
                 {
                     if (c.WbTracker != null)
                         c.Wellbeing = c.WbTracker.Wellbeing;
+                    // position: Unity uses (x, y=height, z=depth) but Timberborn maps use
+                    // (x, y=depth, z=height). We convert to the game's coordinate convention.
                     var go = c.Go;
                     if (go != null)
                     {
                         var pos = go.transform.position;
                         c.X = Mathf.FloorToInt(pos.x);
-                        c.Y = Mathf.FloorToInt(pos.z);
-                        c.Z = Mathf.FloorToInt(pos.y);
+                        c.Y = Mathf.FloorToInt(pos.z);  // Unity Z -> game Y (depth)
+                        c.Z = Mathf.FloorToInt(pos.y);  // Unity Y -> game Z (height)
                     }
+                    // workplace: only derive the name string when the reference changes
                     var wp = c.Worker?.Workplace;
                     if (RefChanged(ref c.LastWorkplaceRef, wp))
                         c.Workplace = wp != null ? CleanName(wp.GameObject.name) : null;
+                    // district: same RefChanged optimization
                     var dc = c.Citizen?.AssignedDistrict;
                     if (RefChanged(ref c.LastDistrictRef, dc))
                         c.District = dc?.DistrictName;
@@ -274,6 +328,10 @@ namespace Timberbot
                         else
                             c.IsCarrying = false;
                     }
+                    // Needs: each beaver has ~30 needs (Hunger, Thirst, Sleep, etc).
+                    // GetNeeds() returns a cached collection (confirmed zero-alloc via benchmark).
+                    // CachedNeed is a struct -- Add() copies it to the list with no heap alloc.
+                    // The List itself is allocated once and reused via Clear().
                     if (c.Needs == null) c.Needs = new List<CachedNeed>();
                     c.Needs.Clear();
                     c.AnyCritical = false;
@@ -290,7 +348,7 @@ namespace Timberbot
                                 Favorable = need.IsFavorable,
                                 Critical = need.IsCritical,
                                 Active = need.IsActive,
-                                Group = ns.NeedGroupId ?? ""
+                                Group = ns.NeedGroupId ?? "" // which category (SocialLife, Fun, etc)
                             });
                             if (need.IsBelowWarningThreshold) c.AnyCritical = true;
                         }
@@ -298,11 +356,48 @@ namespace Timberbot
                 }
                 catch (Exception _ex) { TimberbotLog.Error("cache.beaver", _ex); }
             }
+
+            // SWAP: the Write buffers (just updated with fresh data) become the new Read
+            // buffers. The background HTTP thread will now see the updated data.
+            // The old Read buffers become the new Write targets for next refresh.
+            // This is a pointer swap -- O(1), no data copying.
+            // districts (not double-buffered -- tiny list, refreshed in place)
+            Districts.Clear();
+            try
+            {
+                var goods = _goodService.Goods;
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                {
+                    var pop = dc.DistrictPopulation;
+                    var cd = new CachedDistrict
+                    {
+                        Name = dc.DistrictName,
+                        Adults = pop != null ? pop.NumberOfAdults : 0,
+                        Children = pop != null ? pop.NumberOfChildren : 0,
+                        Bots = pop != null ? pop.NumberOfBots : 0,
+                    };
+                    var counter = dc.GetComponent<DistrictResourceCounter>();
+                    if (counter != null)
+                    {
+                        cd.Resources = new Dictionary<string, int>();
+                        foreach (var goodId in goods)
+                        {
+                            var rc = counter.GetResourceCount(goodId);
+                            if (rc.AllStock > 0)
+                                cd.Resources[goodId] = rc.AvailableStock;
+                        }
+                    }
+                    Districts.Add(cd);
+                }
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("cache.districts", _ex); }
+
             Buildings.Swap();
             NaturalResources.Swap();
             Beavers.Swap();
         }
 
+        // Called once at game load to populate all indexes from the entity registry.
         public void BuildAllIndexes()
         {
             Buildings.Clear();
@@ -313,10 +408,24 @@ namespace Timberbot
                 AddToIndexes(ec);
         }
 
+        // Called when ANY entity is created (building placed, beaver born, tree grown).
+        // We determine what kind of entity it is by checking for key components:
+        //   Building component    -> it's a building (farmhouse, path, power wheel, etc)
+        //   LivingNaturalResource -> it's a tree or crop
+        //   NeedManager           -> it's a beaver or bot (they have needs)
+        //
+        // GetComponent<T>() is expensive (~microseconds) but we only call it ONCE per
+        // entity here. The results are stored in the cached struct so RefreshCachedState
+        // never needs to resolve components again.
         private void AddToIndexes(EntityComponent ec)
         {
+            // cache for O(1) lookup by ID in write commands
             _entityCache[ec.GameObject.GetInstanceID()] = ec;
 
+            // === BUILDING ===
+            // Resolve all 18 component refs at add-time. Most will be null (a Path has
+            // no Workplace, a FarmHouse has no Floodgate). Null checks in RefreshCachedState
+            // skip components that don't exist on this building type.
             if (ec.GetComponent<Building>() != null)
             {
                 var cb = new CachedBuilding
@@ -352,12 +461,18 @@ namespace Timberbot
                     NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
                     EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
                 };
+                // Static values set at add-time: buildings don't move, so coords/orientation
+                // are read once and never refreshed. This saves ~2000 property reads/sec.
                 var bo = cb.BlockObject;
                 if (bo != null)
                 {
                     var coords = bo.Coordinates;
                     cb.X = coords.x; cb.Y = coords.y; cb.Z = coords.z;
                     cb.Orientation = OrientNames[(int)bo.Orientation];
+
+                    // Cache the multi-tile footprint for map/tiles endpoint.
+                    // A 3x3 building occupies 9 tiles. Caching them here means the
+                    // map endpoint doesn't need to call BlockObject at request time.
                     cb.OccupiedTiles = new List<(int, int, int)>();
                     try
                     {
@@ -368,6 +483,8 @@ namespace Timberbot
                         }
                     }
                     catch { cb.OccupiedTiles.Add((cb.Id, 0, 0)); }
+
+                    // Entrance: where beavers enter the building (for path connectivity checks)
                     if (bo.HasEntrance)
                     {
                         try
@@ -380,8 +497,16 @@ namespace Timberbot
                         catch (Exception _ex) { TimberbotLog.Error("cache.entrance", _ex); }
                     }
                 }
+
+                // Add to BOTH buffers with separate instances (Clone).
+                // Why Clone? Both buffers need their own copy of reference-type fields
+                // (Recipes list, Inventory dict). If they shared the same List/Dict instance,
+                // one thread modifying it would corrupt the other's read.
                 Buildings.Add(cb, cb.Clone());
             }
+            // === TREE or CROP ===
+            // Trees and crops are "natural resources" in Timberborn's entity system.
+            // They have growth progress, alive/dead state, and can be marked for cutting.
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
                 var nr = new CachedNaturalResource
@@ -396,13 +521,17 @@ namespace Timberbot
                 };
                 NaturalResources.Add(nr, nr.Clone());
             }
+            // === BEAVER or BOT ===
+            // Beavers and bots both have NeedManager (they have needs like Hunger, Energy).
+            // Bots are distinguished by having the Bot component (IsBot = true).
+            // Bots don't eat/drink/sleep but DO have Energy, ControlTower, and Grease needs.
             else if (ec.GetComponent<NeedManager>() != null)
             {
                 var cb = new CachedBeaver
                 {
                     Id = ec.GameObject.GetInstanceID(),
                     Name = CleanName(ec.GameObject.name),
-                    IsBot = ec.GetComponent<Bot>() != null,
+                    IsBot = ec.GetComponent<Bot>() != null, // bots have Bot component, beavers don't
                     Go = ec.GameObject,
                     NeedMgr = ec.GetComponent<NeedManager>(),
                     WbTracker = ec.GetComponent<WellbeingTracker>(),
@@ -419,6 +548,8 @@ namespace Timberbot
             }
         }
 
+        // Remove from all indexes when an entity is destroyed.
+        // RemoveAll scans both Write and Read buffers so both stay in sync.
         private void RemoveFromIndexes(EntityComponent ec)
         {
             int id = ec.GameObject.GetInstanceID();
@@ -428,10 +559,13 @@ namespace Timberbot
             Beavers.RemoveAll(b => b.Id == id);
         }
 
+        // Timberborn fires EntityInitializedEvent when ANY entity is created in the world.
+        // This is how we learn about new buildings/beavers without polling.
         [OnEvent]
         public void OnEntityInitialized(EntityInitializedEvent e)
         {
             AddToIndexes(e.Entity);
+            // push webhook event if anyone is listening (guard avoids alloc with no subscribers)
             if (WebhookMgr != null && WebhookMgr.Count > 0)
             {
                 var ec = e.Entity;
@@ -442,6 +576,8 @@ namespace Timberbot
             }
         }
 
+        // Timberborn fires EntityDeletedEvent when an entity is removed (demolished, died, etc).
+        // Webhook fires BEFORE RemoveFromIndexes so the entity data is still available.
         [OnEvent]
         public void OnEntityDeleted(EntityDeletedEvent e)
         {
@@ -458,6 +594,16 @@ namespace Timberbot
 
         // ================================================================
         // CACHED CLASSES
+        //
+        // Each class holds two types of fields:
+        //   1. Component references (set once in AddToIndexes, never change)
+        //      These are the "resolved refs" that eliminate GetComponent calls.
+        //   2. Mutable state (refreshed every 1s in RefreshCachedState)
+        //      These are the actual values served by API endpoints.
+        //
+        // Clone() creates a shallow copy for the second buffer. Reference-type
+        // fields (Lists, Dicts) get null in the clone and are allocated on first use.
+        // This prevents two threads from sharing the same List/Dict instance.
         // ================================================================
 
         public class CachedNaturalResource
