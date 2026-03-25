@@ -37,6 +37,10 @@ namespace Timberbot
         public int Id;
         public string Name;
         public string Error;
+        public string Prefab;
+        public int ScienceCost;
+        public int CurrentPoints;
+        public string Occupant;
         public int X, Y, Z;
         public string Orientation;
         public bool Success => Id != 0;
@@ -46,17 +50,31 @@ namespace Timberbot
 
         public string ToJson(TimberbotJw jw)
         {
+            jw.Reset().OpenObj();
             if (Error != null)
             {
-                jw.Reset().OpenObj().Prop("error", Error);
+                jw.Prop("error", Error);
                 if (X != 0 || Y != 0) jw.Prop("x", X).Prop("y", Y).Prop("z", Z);
-                return jw.CloseObj().ToString();
+                if (Prefab != null) jw.Prop("prefab", Prefab);
+                if (ScienceCost > 0) jw.Prop("scienceCost", ScienceCost).Prop("currentPoints", CurrentPoints);
+                if (Occupant != null) jw.Prop("occupant", Occupant);
             }
-            return jw.Reset().OpenObj()
-                .Prop("id", Id).Prop("name", Name)
-                .Prop("x", X).Prop("y", Y).Prop("z", Z)
-                .Prop("orientation", Orientation)
-                .CloseObj().ToString();
+            else
+            {
+                jw.Prop("id", Id).Prop("name", Name)
+                  .Prop("x", X).Prop("y", Y).Prop("z", Z)
+                  .Prop("orientation", Orientation);
+            }
+            return jw.CloseObj().ToString();
+        }
+
+        public void WriteErrorJson(TimberbotJw jw)
+        {
+            jw.OpenObj();
+            if (Prefab != null) jw.Prop("prefab", Prefab);
+            jw.Prop("error", Error ?? "unknown");
+            if (ScienceCost > 0) jw.Prop("scienceCost", ScienceCost).Prop("currentPoints", CurrentPoints);
+            jw.CloseObj();
         }
     }
 
@@ -240,21 +258,13 @@ namespace Timberbot
         }
 
         // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
-        // Only axis-aligned lines (x1==x2 or y1==y2). This replaces dozens of individual
-        // PlaceBuilding calls with a single intelligent route that handles:
-        //   - flat path tiles on level ground
-        //   - stairs at single z-level changes
-        //   - stacked platforms + stairs for multi-level jumps (e.g. z=2 to z=5 = 3 platforms + stairs)
-        //   - demolishing existing paths that overlap with ramp positions
-        //   - skipping occupied tiles (existing paths, buildings)
+        // Two-pass: first plan what goes on each tile, then place everything.
+        // No demolishing needed -- each tile gets the right thing the first time.
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
                 return Jw.Error("invalid_param: path must be a straight line (x1==x2 or y1==y2)");
 
-            // Check if stairs and platforms are unlocked before we start.
-            // Stairs are needed for any z-level change. Platforms are needed for
-            // multi-level jumps (2+ z-levels) where we stack platforms under stairs.
             string stairsPrefab = "Stairs" + _factionSuffix;
             string platformPrefab = "Platform" + _factionSuffix;
             var stairsSpec = _buildingService.GetBuildingTemplate(stairsPrefab);
@@ -264,14 +274,15 @@ namespace Timberbot
             bool stairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
             bool platformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
 
-            // step direction: +1, -1, or 0 for each axis
             int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
             int dy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
             // stairs face the direction of uphill travel
-            // enum: south=0, west=1, north=2, east=3
             int stairsOrient = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
 
-            int placed = 0, skipped = 0, stairs = 0;
+            // --- PASS 1: PLAN ---
+            // Each entry: (x, y, z, prefab, orientation)
+            // prefab is "Path", "Stairs.Faction", "Platform.Faction", or null (skip)
+            var plan = new List<(int x, int y, int z, string prefab, string orient)>();
             var errors = new List<string>();
             int cx = x1, cy = y1;
             int prevZ = GetTerrainHeight(cx, cy);
@@ -288,13 +299,9 @@ namespace Timberbot
                 }
 
                 int zDiff = tz - prevZ;
-
                 if (zDiff != 0)
                 {
                     int levels = System.Math.Abs(zDiff);
-
-                    // Check unlock requirements before attempting z-level change.
-                    // Stairs needed for any z change. Platforms needed for 2+ levels.
                     if (!stairsUnlocked)
                     {
                         errors.Add($"z-change at ({cx},{cy}): stairs not unlocked (need {stairsPrefab})");
@@ -312,108 +319,83 @@ namespace Timberbot
                         continue;
                     }
 
-                    // Multi-level ramp building:
-                    // Each ramp tile gets (step) platforms stacked underneath + 1 stair on top.
-                    // Example: 3-level climb needs 3 tiles, each progressively taller:
-                    //   tile 0: 0 platforms + stair (ground level)
-                    //   tile 1: 1 platform + stair (z+1)
-                    //   tile 2: 2 platforms + stair (z+2)
                     int baseZ = System.Math.Min(prevZ, tz);
                     bool goingUp = zDiff > 0;
-                    // going down = reverse the stair orientation (rotate 180 degrees)
                     int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
 
-                    // helper: demolish any path at a tile position
-                    // O(n) scan but only called once per z-level change (max ~6 times per route)
-                    void DemolishPathAt(int px, int py, int pz)
-                    {
-                        foreach (var cb in _cache.Buildings.Read)
-                        {
-                            if (cb.BlockObject == null) continue;
-                            var c = cb.BlockObject.Coordinates;
-                            if (c.x == px && c.y == py && c.z == pz && cb.Name.Contains("Path"))
-                            {
-                                DemolishBuilding(cb.Id);
-                                placed--;
-                                break;
-                            }
-                        }
-                    }
-
-                    // build ramp: N tiles, each with (tileIndex) platforms + 1 stair on top
-                    // going up: ramp starts at previous tile, extends backward
-                    // going down: ramp starts at current tile, extends forward
                     for (int step = 0; step < levels; step++)
                     {
                         int rampTileX, rampTileY;
                         if (goingUp)
                         {
-                            // going up: first ramp tile is the previous tile, then go backward
                             rampTileX = cx - dx * (levels - step);
                             rampTileY = cy - dy * (levels - step);
                         }
                         else
                         {
-                            // going down: ramp tiles go forward from current position
                             rampTileX = cx + dx * step;
                             rampTileY = cy + dy * step;
                         }
 
-                        // demolish any path we placed on this ramp tile
-                        DemolishPathAt(rampTileX, rampTileY, GetTerrainHeight(rampTileX, rampTileY));
+                        // remove any path we planned for this tile (going up replaces previous tile)
+                        plan.RemoveAll(p => p.x == rampTileX && p.y == rampTileY);
 
-                        // stack platforms: step count of them
+                        // stack platforms under the stair
                         for (int p = 0; p < step; p++)
-                        {
-                            var platResult = PlaceBuilding("Platform" + _factionSuffix, rampTileX, rampTileY, baseZ + p, "south");
-                            if (!platResult.Success && platResult.Error != null && !platResult.Error.Contains("occupied"))
-                                errors.Add($"platform at ({rampTileX},{rampTileY},z={baseZ + p}): {platResult.Error}");
-                        }
+                            plan.Add((rampTileX, rampTileY, baseZ + p, platformPrefab, "south"));
 
                         // place stair on top
-                        int stairZ = baseZ + step;
-                        var stairResult = PlaceBuilding("Stairs" + _factionSuffix, rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
-                        if (stairResult.Success)
-                            stairs++;
-                        else if (stairResult.Error != null && !stairResult.Error.Contains("occupied"))
-                            errors.Add($"stairs at ({rampTileX},{rampTileY},z={stairZ}): {stairResult.Error}");
+                        plan.Add((rampTileX, rampTileY, baseZ + step, stairsPrefab, OrientNames[rampOrient]));
                     }
 
                     if (!goingUp)
                     {
-                        // skip past the ramp tiles we just built
                         for (int skip = 0; skip < levels - 1; skip++)
-                        {
-                            cx += dx; cy += dy;
-                        }
+                        { cx += dx; cy += dy; }
                     }
 
                     prevZ = tz;
-                    // fall through to place path at current tile (first tile at new z-level)
+                    // fall through to place path at current tile
                 }
 
-                // place path at current tile
-                var result = PlaceBuilding("Path", cx, cy, tz, "south");
-                if (result.Success)
-                    placed++;
-                else if (result.Error != null && !result.Error.Contains("occupied"))
-                    errors.Add($"path at ({cx},{cy}): {result.Error}");
-                else
-                    skipped++;
-
+                plan.Add((cx, cy, tz, "Path", "south"));
                 prevZ = tz;
                 if (cx == x2 && cy == y2) break;
                 cx += dx; cy += dy;
             }
 
-            var ret = new
+            // --- PASS 2: EXECUTE ---
+            int placed = 0, skipped = 0, stairCount = 0;
+            var failedResults = new List<PlaceBuildingResult>();
+            foreach (var (px, py, pz, prefab, orient) in plan)
             {
-                placed,
-                stairs,
-                skipped,
-                errors = errors.Count > 0 ? errors.ToArray() : null
-            };
-            return ret;
+                var result = PlaceBuilding(prefab, px, py, pz, orient);
+                if (result.Success)
+                {
+                    if (prefab.Contains("Stairs")) stairCount++;
+                    else if (prefab == "Path") placed++;
+                }
+                else
+                {
+                    skipped++;
+                    failedResults.Add(result);
+                }
+            }
+
+            // serialize -- PlaceBuildingResult already has all context
+            var jw = _cache.Jw.BeginObj()
+                .Prop("placed", placed).Prop("stairs", stairCount).Prop("skipped", skipped);
+            if (failedResults.Count > 0 || errors.Count > 0)
+            {
+                jw.Arr("errors");
+                foreach (var r in failedResults)
+                    r.WriteErrorJson(jw);
+                foreach (var e in errors)
+                    jw.OpenObj().Prop("error", e).CloseObj();
+                jw.CloseArr();
+            }
+            jw.CloseObj();
+            return jw.ToString();
         }
 
         // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
@@ -734,9 +716,9 @@ namespace Timberbot
 
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
-            catch { return PlaceBuildingResult.Fail("not_found", x, y, z); }
+            catch { return new PlaceBuildingResult { Error = "not_found", X = x, Y = y, Z = z, Prefab = prefabName }; }
             if (buildingSpec == null)
-                return PlaceBuildingResult.Fail("not_found", x, y, z);
+                return new PlaceBuildingResult { Error = "not_found", X = x, Y = y, Z = z, Prefab = prefabName };
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
@@ -745,7 +727,7 @@ namespace Timberbot
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
             if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
-                return PlaceBuildingResult.Fail("not_unlocked", x, y, z);
+                return new PlaceBuildingResult { Error = "not_unlocked", X = x, Y = y, Z = z, Prefab = prefabName, ScienceCost = bs.ScienceCost, CurrentPoints = _scienceService.SciencePoints };
 
             // Origin correction: user always specifies bottom-left corner (smallest x,y).
             var size = blockObjectSpec.Size;
@@ -759,8 +741,9 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
-                return PlaceBuildingResult.Fail($"invalid_param: cannot place at ({gx}, {gy}, {z})", x, y, z);
+            var validationReason = ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation);
+            if (validationReason != null)
+                return new PlaceBuildingResult { Error = validationReason, X = x, Y = y, Z = z, Prefab = prefabName };
 
             var orient = (Timberborn.Coordinates.Orientation)orientation;
             var placement = new Placement(new Vector3Int(gx, gy, z), orient, FlipMode.Unflipped);
@@ -775,12 +758,14 @@ namespace Timberbot
             });
 
             if (placedId == 0)
-                return PlaceBuildingResult.Fail("operation_failed: placement rejected by game engine", x, y, z);
+                return new PlaceBuildingResult { Error = "operation_failed", X = x, Y = y, Z = z, Prefab = prefabName };
 
             return new PlaceBuildingResult { Id = placedId, Name = placedName, X = x, Y = y, Z = z, Orientation = OrientNames[orientation] };
         }
 
-        private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
+        // Returns null if valid, or a reason string if invalid.
+        // Iterates game's 9 validators individually to get the specific failure reason.
+        private string ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
         {
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
@@ -793,7 +778,7 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
             var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
-            if (placeableSpec == null) return false;
+            if (placeableSpec == null) return "no placeable spec";
             Preview preview = null;
             try
             {
@@ -801,12 +786,43 @@ namespace Timberbot
                     (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
                 preview = _previewFactory.Create(placeableSpec);
                 preview.Reposition(placement);
-                return preview.BlockObject.IsValid();
+                if (preview.BlockObject.IsValid()) return null; // valid
+
+                // invalid -- check block-level conflicts first (occupancy, terrain)
+                var bv = preview.BlockObject._blockValidator;
+                if (bv != null)
+                {
+                    foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
+                    {
+                        if (bv.BlockConflictsWithExistingObject(block))
+                            return $"occupied at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                        if (bv.BlockConflictsWithTerrain(block))
+                            return $"terrain conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                        if (bv.BlockConflictsWithBlocksBelow(block))
+                            return $"blocked below at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                        if (bv.BlockConflictsWithBlockAbove(block))
+                            return $"blocked above at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                    }
+                }
+
+                // check service-level validators (district, water buildings, etc)
+                var validationSvc = preview.BlockObject._blockObjectValidationService;
+                if (validationSvc != null)
+                {
+                    var validators = validationSvc._blockObjectValidators;
+                    for (int i = 0; i < validators.Length; i++)
+                    {
+                        string reason = null;
+                        if (!validators[i].IsValid(preview.BlockObject, out reason))
+                            return reason ?? validators[i].GetType().Name;
+                    }
+                }
+                return "placement invalid";
             }
             catch (System.Exception ex)
             {
                 TimberbotLog.Error($"ValidatePlacement at ({x},{y},{z})", ex);
-                return false;
+                return ex.Message;
             }
             finally
             {
