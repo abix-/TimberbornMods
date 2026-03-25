@@ -206,15 +206,13 @@ namespace Timberbot
         // WRITE ENDPOINTS -- Tier 1
         // ================================================================
 
-        private static readonly int[] SpeedScale = { 0, 1, 3, 7 };
-
         // game speed 0-3, mapped to internal values 0,1,3,7
         public object SetSpeed(int speed)
         {
             if (speed < 0 || speed > 3)
                 return new { error = "speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)" };
 
-            _speedManager.ChangeSpeed(SpeedScale[speed]);
+            _speedManager.ChangeSpeed(TimberbotRead.SpeedScale[speed]);
             return new { speed };
         }
 

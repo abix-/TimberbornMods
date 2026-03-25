@@ -14,6 +14,7 @@ namespace Timberbot
         {
             Bind<TimberbotEntityCache>().AsSingleton();
             Bind<TimberbotWebhook>().AsSingleton();
+            Bind<TimberbotRead>().AsSingleton();
             Bind<TimberbotDebug>().AsSingleton();
             Bind<TimberbotService>().AsSingleton();
         }

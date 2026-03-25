@@ -189,31 +189,31 @@ namespace Timberbot
                 switch (path)
                 {
                     case "/api/summary":
-                        return _service.CollectSummary(format);
+                        return _service.Read.CollectSummary(format);
                     case "/api/alerts":
-                        return _service.CollectAlerts();
+                        return _service.Read.CollectAlerts();
                     case "/api/tree_clusters":
-                        return _service.CollectTreeClusters();
+                        return _service.Read.CollectTreeClusters();
                     case "/api/resources":
-                        return _service.CollectResources(format);
+                        return _service.Read.CollectResources(format);
                     case "/api/population":
-                        return _service.CollectPopulation();
+                        return _service.Read.CollectPopulation();
                     case "/api/time":
-                        return _service.CollectTime();
+                        return _service.Read.CollectTime();
                     case "/api/weather":
-                        return _service.CollectWeather();
+                        return _service.Read.CollectWeather();
                     case "/api/districts":
-                        return _service.CollectDistricts(format);
+                        return _service.Read.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.CollectBuildings(format, detail);
+                        return _service.Read.CollectBuildings(format, detail);
                     case "/api/trees":
-                        return _service.CollectTrees();
+                        return _service.Read.CollectTrees();
                     case "/api/crops":
-                        return _service.CollectCrops();
+                        return _service.Read.CollectCrops();
                     case "/api/gatherables":
-                        return _service.CollectGatherables();
+                        return _service.Read.CollectGatherables();
                     case "/api/beavers":
-                        return _service.CollectBeavers(format, detail);
+                        return _service.Read.CollectBeavers(format, detail);
                     case "/api/distribution":
                         return _service.CollectDistribution();
                     case "/api/science":
@@ -223,12 +223,12 @@ namespace Timberbot
                     case "/api/notifications":
                         return _service.CollectNotifications();
                     case "/api/workhours":
-                        return _service.CollectWorkHours();
+                        return _service.Read.CollectWorkHours();
 
                     case "/api/power":
-                        return _service.CollectPowerNetworks();
+                        return _service.Read.CollectPowerNetworks();
                     case "/api/speed":
-                        return _service.CollectSpeed();
+                        return _service.Read.CollectSpeed();
                     case "/api/prefabs":
                         return _service.CollectPrefabs();
                     case "/api/webhooks":
@@ -324,10 +324,10 @@ namespace Timberbot
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
                     case "/api/workhours":
-                        return _service.SetWorkHours(
+                        return _service.Read.SetWorkHours(
                             body?.Value<int>("endHours") ?? 16);
                     case "/api/district/migrate":
-                        return _service.MigratePopulation(
+                        return _service.Read.MigratePopulation(
                             body?.Value<string>("from") ?? "",
                             body?.Value<string>("to") ?? "",
                             body?.Value<int>("count") ?? 1);

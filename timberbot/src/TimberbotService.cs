@@ -125,6 +125,7 @@ namespace Timberbot
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
         private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
         public readonly TimberbotWebhook WebhookMgr;                      // batched webhook push notifications
+        public readonly TimberbotRead Read;                                   // all GET read endpoints
         public readonly TimberbotDebug DebugTool;                              // benchmark + reflection inspector
         private TimberbotHttpServer _server;
 
@@ -175,6 +176,7 @@ namespace Timberbot
             PreviewFactory previewFactory,
             EventBus eventBus,
             TimberbotWebhook webhookMgr,
+            TimberbotRead read,
             TimberbotDebug debug)
         {
             _goodService = goodService;
@@ -214,6 +216,7 @@ namespace Timberbot
             _previewFactory = previewFactory;
             _eventBus = eventBus;
             WebhookMgr = webhookMgr;
+            Read = read;
             DebugTool = debug;
         }
 
