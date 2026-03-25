@@ -13,34 +13,7 @@
 //   TimberbotService.Webhooks.cs   -- Push event notifications to registered URLs
 //   TimberbotService.Debug.cs      -- Reflection inspector and benchmark endpoint
 
-using Timberborn.BlockSystem;
-using Timberborn.Buildings;
-using Timberborn.BlockObjectTools;
-using Timberborn.MapIndexSystem;
-using Timberborn.TerrainSystem;
-using Timberborn.WaterSystem;
-using Timberborn.EntitySystem;
-using Timberborn.Forestry;
-using Timberborn.Planting;
-using Timberborn.GameCycleSystem;
-using Timberborn.GameDistricts;
-using Timberborn.Goods;
 using Timberborn.SingletonSystem;
-using Timberborn.TimeSystem;
-using Timberborn.WeatherSystem;
-using Timberborn.WorkSystem;
-using Timberborn.ScienceSystem;
-using Timberborn.NotificationSystem;
-using Timberborn.SoilContaminationSystem;
-using Timberborn.Workshops;
-using Timberborn.GameDistrictsMigration;
-using Timberborn.ToolButtonSystem;
-using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
-using Timberborn.BuildingsNavigation;
-using Timberborn.SoilMoistureSystem;
-using Timberborn.NeedSpecs;
-using Timberborn.GameFactionSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -54,48 +27,13 @@ namespace Timberbot
     // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
     public partial class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
-        // -- game services (injected via Bindito constructor) --
-        private readonly IGoodService _goodService;                         // list of all good types (Water, Log, Plank, etc)
-        private readonly DistrictCenterRegistry _districtCenterRegistry;    // all district centers -> population + resources
-        private readonly GameCycleService _gameCycleService;                // cycle number, day within cycle
-        private readonly WeatherService _weatherService;                    // drought/temperate durations
-        private readonly IDayNightCycle _dayNightCycle;                     // day number, progress (0-1)
-        private readonly SpeedManager _speedManager;                        // game speed (raw values: 0,1,3,7 mapped to levels 0-3)
-        public readonly TimberbotEntityCache Cache;                          // double-buffered entity indexes
-        private readonly TreeCuttingArea _treeCuttingArea;                  // which tiles are marked for tree cutting
-        private readonly PlantingService _plantingService;                  // mark/clear crop planting areas
-        private readonly BuildingService _buildingService;                  // building templates/specs (not placed buildings)
-        private readonly BlockObjectPlacerService _blockObjectPlacerService;// Place() to create buildings in world
-        private readonly EntityService _entityService;                      // Delete() to remove entities
-        private readonly ITerrainService _terrainService;                   // terrain height queries
-        private readonly IThreadSafeWaterMap _waterMap;                     // water height + column contamination
-        private readonly MapIndexService _mapIndexService;                  // 2D/3D index math for water columns
-        private readonly IThreadSafeColumnTerrainMap _terrainMap;           // column terrain heights
-        private readonly ScienceService _scienceService;                    // science points
-        private readonly BuildingUnlockingService _buildingUnlockingService;// unlock buildings with science
-        private readonly NotificationSaver _notificationSaver;              // game event history
-        private readonly WorkingHoursManager _workingHoursManager;          // work schedule (end hours)
-        private readonly ISoilContaminationService _soilContaminationService;// soil contamination from badwater
-        private readonly PopulationDistributorRetriever _populationDistributorRetriever; // migrate beavers between districts
-        private readonly ToolButtonService _toolButtonService;              // UI toolbar buttons (for unlock UI update)
-        private readonly ToolUnlockingService _toolUnlockingService;      // full unlock flow (cost + UI + events)
-        private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry; // plantable groups (for unlock UI)
-        private readonly RecipeSpecService _recipeSpecService;              // manufactory recipe lookup
-        private readonly StackableBlockService _stackableBlockService;    // stackable block checks (platforms)
-        private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
-        private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
-        private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
-        private readonly PlantingAreaValidator _plantingAreaValidator;     // planting spot validation (same as player UI green/red)
-        private readonly PlantablePreviewFactory _plantablePreviewFactory; // crop preview for placement validation
-        private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
-        private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
-        private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
-        private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
-        public readonly TimberbotWebhook WebhookMgr;                      // batched webhook push notifications
-        public readonly TimberbotRead Read;                                   // all GET read endpoints
-        public readonly TimberbotWrite Write;                                 // all POST write endpoints (tiles, science, etc)
-        public readonly TimberbotPlacement Placement;                          // building placement, path routing, terrain
-        public readonly TimberbotDebug DebugTool;                              // benchmark + reflection inspector
+        private readonly EventBus _eventBus;
+        public readonly TimberbotEntityCache Cache;
+        public readonly TimberbotWebhook WebhookMgr;
+        public readonly TimberbotRead Read;
+        public readonly TimberbotWrite Write;
+        public readonly TimberbotPlacement Placement;
+        public readonly TimberbotDebug DebugTool;
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
@@ -108,84 +46,16 @@ namespace Timberbot
         private int _webhookCircuitBreaker = 30;
 
         public TimberbotService(
-            IGoodService goodService,
-            DistrictCenterRegistry districtCenterRegistry,
-            GameCycleService gameCycleService,
-            WeatherService weatherService,
-            IDayNightCycle dayNightCycle,
-            SpeedManager speedManager,
-            TimberbotEntityCache cache,
-            TreeCuttingArea treeCuttingArea,
-            PlantingService plantingService,
-            BuildingService buildingService,
-            BlockObjectPlacerService blockObjectPlacerService,
-            EntityService entityService,
-            ITerrainService terrainService,
-            IThreadSafeWaterMap waterMap,
-            MapIndexService mapIndexService,
-            IThreadSafeColumnTerrainMap terrainMap,
-            ScienceService scienceService,
-            BuildingUnlockingService buildingUnlockingService,
-            NotificationSaver notificationSaver,
-            WorkingHoursManager workingHoursManager,
-            ISoilContaminationService soilContaminationService,
-            PopulationDistributorRetriever populationDistributorRetriever,
-            ToolButtonService toolButtonService,
-            ToolUnlockingService toolUnlockingService,
-            UnlockedPlantableGroupsRegistry unlockedPlantableGroupsRegistry,
-            RecipeSpecService recipeSpecService,
-            DistrictPathNavRangeDrawerRegistrar districtPathNavRegistrar,
-            Timberborn.Navigation.INavMeshService navMeshService,
-            ISoilMoistureService soilMoistureService,
-            StackableBlockService stackableBlockService,
-            PlantingAreaValidator plantingAreaValidator,
-            PlantablePreviewFactory plantablePreviewFactory,
-            FactionNeedService factionNeedService,
-            NeedGroupSpecService needGroupSpecService,
-            PreviewFactory previewFactory,
             EventBus eventBus,
+            TimberbotEntityCache cache,
             TimberbotWebhook webhookMgr,
             TimberbotRead read,
             TimberbotWrite write,
             TimberbotPlacement placement,
             TimberbotDebug debug)
         {
-            _goodService = goodService;
-            _districtCenterRegistry = districtCenterRegistry;
-            _gameCycleService = gameCycleService;
-            _weatherService = weatherService;
-            _dayNightCycle = dayNightCycle;
-            _speedManager = speedManager;
-            Cache = cache;
-            _treeCuttingArea = treeCuttingArea;
-            _plantingService = plantingService;
-            _buildingService = buildingService;
-            _blockObjectPlacerService = blockObjectPlacerService;
-            _entityService = entityService;
-            _terrainService = terrainService;
-            _waterMap = waterMap;
-            _mapIndexService = mapIndexService;
-            _terrainMap = terrainMap;
-            _scienceService = scienceService;
-            _buildingUnlockingService = buildingUnlockingService;
-            _notificationSaver = notificationSaver;
-            _workingHoursManager = workingHoursManager;
-            _soilContaminationService = soilContaminationService;
-            _populationDistributorRetriever = populationDistributorRetriever;
-            _toolButtonService = toolButtonService;
-            _toolUnlockingService = toolUnlockingService;
-            _unlockedPlantableGroupsRegistry = unlockedPlantableGroupsRegistry;
-            _recipeSpecService = recipeSpecService;
-            _districtPathNavRegistrar = districtPathNavRegistrar;
-            _navMeshService = navMeshService;
-            _soilMoistureService = soilMoistureService;
-            _stackableBlockService = stackableBlockService;
-            _plantingAreaValidator = plantingAreaValidator;
-            _plantablePreviewFactory = plantablePreviewFactory;
-            _factionNeedService = factionNeedService;
-            _needGroupSpecService = needGroupSpecService;
-            _previewFactory = previewFactory;
             _eventBus = eventBus;
+            Cache = cache;
             WebhookMgr = webhookMgr;
             Read = read;
             Write = write;
