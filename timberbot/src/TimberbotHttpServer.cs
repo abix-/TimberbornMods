@@ -122,8 +122,6 @@ namespace Timberbot
                 // extract query params
                 var format = ctx.Request.QueryString["format"] ?? "toon";
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
-                var serial = ctx.Request.QueryString["serial"] ?? "dict";
-
                 // GET requests: handled RIGHT HERE on the background listener thread.
                 // This is the key performance trick -- reads never block the game.
                 // All CollectX() methods read from double-buffered cached data, so they're
@@ -132,7 +130,7 @@ namespace Timberbot
                 {
                     try
                     {
-                        var data = RouteRequest(path, method, null, format, detail, serial);
+                        var data = RouteRequest(path, method, null, format, detail);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -180,7 +178,7 @@ namespace Timberbot
             }
         }
 
-        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", string serial = "dict")
+        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic")
         {
             // GET endpoints (read)
             if (method == "GET")

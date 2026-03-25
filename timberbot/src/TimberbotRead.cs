@@ -577,8 +577,7 @@ namespace Timberbot
         }
 
         // PERF: cached component refs -- zero GetComponent per item.
-        // serial param: dict (default), anon, sb -- for A/B testing serialization methods
-        // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
+        // PERF: TimberbotJw serialization -- 2ms for 3000 trees. Zero Newtonsoft.
         private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species)
         {
             jw.Reset().OpenArr();
