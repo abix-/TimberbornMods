@@ -35,22 +35,22 @@ All endpoints use cached class indexes, double-buffered reads on background thre
 | Endpoint | Items | Min (ms) | GetComponent | Notes |
 |---|---|---|---|---|
 | `ping` | 1 | **0.7** | 0 | Listener thread |
-| `summary` | 3500+ | **0.9** | 0 | JwWriter, cached primitives |
-| `buildings` | 522 | **2.1** | **0** | JwWriter |
-| `buildings detail:full` | 522 | **3.4** | **0** | JwWriter, all fields |
-| `trees` | 2983 | **8.6** | **0** | JwWriter |
-| `gatherables` | 1504 | **6.7** | **0** | JwWriter |
-| `beavers` | 65 | **1.1** | **0** | JwWriter, position/district/carrying |
+| `summary` | 3500+ | **0.9** | 0 | TimberbotJw, cached primitives |
+| `buildings` | 522 | **2.1** | **0** | TimberbotJw |
+| `buildings detail:full` | 522 | **3.4** | **0** | TimberbotJw, all fields |
+| `trees` | 2983 | **8.6** | **0** | TimberbotJw |
+| `gatherables` | 1504 | **6.7** | **0** | TimberbotJw |
+| `beavers` | 65 | **1.1** | **0** | TimberbotJw, position/district/carrying |
 | `beavers detail:full` | 65 | ~1.5 | **0** | all 38 needs, NeedGroupId, deterioration |
-| `alerts` | 19 | **0.8** | **0** | JwWriter, cached primitives |
-| `resources` | 13 | **0.8** | 0 | JwWriter, district registries |
-| `power` | cached | **0.8** | **0** | JwWriter, groups by cached PowerNetworkId |
-| `weather` | 1 | **0.8** | 0 | JwWriter, service fields |
-| `time` | 1 | **0.8** | 0 | JwWriter, service fields |
-| `prefabs` | 157 | **2.9** | 0 | JwWriter, building templates |
-| `wellbeing` | 1 | **0.9** | 0 | JwWriter, cached beaver needs |
-| `tree_clusters` | 5 | **0.9** | 0 | JwWriter, cached natural resources |
-| `map` (stacking) | varies | ~10 | **0** | JwWriter, cached tile footprints, thread-safe |
+| `alerts` | 19 | **0.8** | **0** | TimberbotJw, cached primitives |
+| `resources` | 13 | **0.8** | 0 | TimberbotJw, district registries |
+| `power` | cached | **0.8** | **0** | TimberbotJw, groups by cached PowerNetworkId |
+| `weather` | 1 | **0.8** | 0 | TimberbotJw, service fields |
+| `time` | 1 | **0.8** | 0 | TimberbotJw, service fields |
+| `prefabs` | 157 | **2.9** | 0 | TimberbotJw, building templates |
+| `wellbeing` | 1 | **0.9** | 0 | TimberbotJw, cached beaver needs |
+| `tree_clusters` | 5 | **0.9** | 0 | TimberbotJw, cached natural resources |
+| `map` (stacking) | varies | ~10 | **0** | TimberbotJw, cached tile footprints, thread-safe |
 | **burst (7 calls)** | -- | **17** | -- | 2ms avg per call |
 
 ### Optimization gaps
@@ -59,7 +59,7 @@ None. All GET endpoints read entirely from cached double buffers. Zero live `Get
 
 ## Serialization
 
-All endpoints use a single shared `JwWriter` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300KB pre-allocated instance, `Reset()` per request. Serial on listener thread, never concurrent.
+All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300KB pre-allocated instance, `Reset()` per request. Serial on listener thread, never concurrent.
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). Main-thread cost for reads is **zero**.
 
@@ -95,9 +95,9 @@ See [zero-alloc.md](zero-alloc.md) for the full allocation audit with per-field 
 |---|---|---|---|
 | ~~1~~ | ~~Webhook rate limiting~~ | -- | **FIXED** -- 200ms batching window (configurable via `webhookBatchMs`). Events accumulate, one POST per webhook per flush |
 | ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 5 consecutive failures disables webhook, logged via TimberbotLog |
-| 3 | TimberbotService split | 3-4 hr | 35 constructor params, 4668 lines across 7 partial files. Extract `WebhookManager`, `EntityCache`. Move DI params to only the services that need them |
-| ~~4~~ | ~~RefreshCachedState error isolation~~ | -- | **Already done** -- per-entity try/catch in all 3 loops (buildings, natural resources, beavers). Bad entity logs error, loop continues |
-| 5 | NeedMgr.GetNeeds() allocation | 1 hr | Marked "unknown" severity. 65 calls + 2470 List.Add per refresh. May allocate new collection per call. Profile and fix or document as acceptable |
+| ~~3~~ | ~~TimberbotService split~~ | -- | **FIXED** -- 8 independent classes (TimberbotService 7 DI params, TimberbotRead 10, TimberbotWrite 20, TimberbotPlacement 13, TimberbotEntityCache 5, TimberbotWebhook 5, TimberbotDebug 1) |
+| ~~4~~ | ~~RefreshCachedState error isolation~~ | -- | **Already done** -- per-entity try/catch in all 3 loops |
+| ~~5~~ | ~~NeedMgr.GetNeeds() allocation~~ | -- | **CONFIRMED zero-alloc** via 10K benchmark (0 GC0 across 760K calls) |
 
 ## Optimization history
 
@@ -161,14 +161,14 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 | `Formatting.Indented` whitespace bloat | Medium | **FIXED** -- switched to `Formatting.None` (~30% smaller) |
 | `GetBytes()` byte array alloc per response | Medium | **FIXED** -- `StreamWriter` writes directly to output stream |
 | UTF-8 BOM prefix from StreamWriter | Critical | **FIXED** -- `new UTF8Encoding(false)` |
-| JwWriter responses bypass Newtonsoft entirely | Good | Already optimized |
+| TimberbotJw responses bypass Newtonsoft entirely | Good | Already optimized |
 
 ### Webhook flush (every 200ms)
 
 | Issue | Severity | Status |
 |---|---|---|
 | `new StringBuilder(256)` per webhook per flush | Medium | **FIXED** -- reuses field-level `_webhookSb` |
-| `JsonConvert.SerializeObject` per event in PushEvent | Medium | Acceptable -- only fires with subscribers |
+| ~~`JsonConvert.SerializeObject` per event~~ | -- | **FIXED** -- TimberbotJw writes directly, zero Newtonsoft on hot path |
 | Batching (200ms window) | Good | Reduces ThreadPool items for high-frequency events |
 | Circuit breaker (5 failures) | Good | Disables dead URLs automatically |
 

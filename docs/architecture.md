@@ -12,7 +12,7 @@ UpdateSingleton() [60fps]              ListenLoop() [blocking accept]
   +-- RefreshCachedState() [1s cadence]  +-- GET request arrives
   |     |                                |     |
   |     +-- update _*Write buffers       |     +-- RouteRequest() reads _*Read
-  |     +-- swap refs (atomic)           |     +-- JwWriter serialization
+  |     +-- swap refs (atomic)           |     +-- TimberbotJw serialization
   |     |   _*Read <-> _*Write           |     +-- Respond() sends JSON
   |     |                                |
   +-- DrainRequests() [POST only]        +-- POST request arrives
@@ -155,7 +155,7 @@ Loaded once on game load. Missing file or fields use defaults.
 
 ```
 HTTP request -> ListenLoop -> RouteRequest -> read _*Read buffers
-  -> JwWriter serialization -> Respond -> HTTP response
+  -> TimberbotJw serialization -> Respond -> HTTP response
 ```
 
 ### POST (main thread via queue)
