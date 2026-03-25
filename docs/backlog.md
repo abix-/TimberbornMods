@@ -6,17 +6,21 @@ Prioritized technical debt and improvements. Ordered by criticality.
 
 All resolved.
 
+## Resolved
+
+| # | Issue | Fix |
+|---|---|---|
+| ~~1~~ | Dead StringContent alloc | deleted dead line |
+| ~~2~~ | Data payload alloc before count check | guarded with `if (_webhooks.Count > 0)` |
+| ~~3~~ | `_webhooks.ToArray()` per event | replaced with index loop |
+| ~~4~~ | Silent catches in Cache + Webhooks | `TimberbotLog.Error(context, ex)` -- file + console logging |
+| ~~4b~~ | Silent catches in Write, Placement, Debug | same `TimberbotLog.Error` pattern, all 22 catch sites covered |
+| ~~5~~ | No error logging | `TimberbotLog` class -- file-based, timestamped, fresh per session |
+| ~~6~~ | CachedBuilding 48-field struct copy | converted to class + `Clone()` via MemberwiseClone. Zero value copies |
+
 ## Soon (next release cycle)
 
-| # | Issue | Effort | Details |
-|---|---|---|---|
-| ~~1~~ | ~~Dead StringContent alloc~~ | -- | **FIXED** -- deleted dead line |
-| ~~2~~ | ~~Data payload alloc before count check~~ | -- | **FIXED** -- guarded with `if (_webhooks.Count > 0)` |
-| ~~3~~ | ~~`_webhooks.ToArray()` per event~~ | -- | **FIXED** -- replaced with index loop |
-| ~~4~~ | ~~Silent catches in Cache + Webhooks~~ | -- | **FIXED** -- `LogOnce(site, ex)` logs first occurrence per catch site |
-| 4b | Silent catches in Write, Placement, Debug (13 sites) | 30 min | Lower priority -- per-request paths, not per-frame. Same LogOnce pattern |
-| 5 | No webhook error logging | 15 min | Can't troubleshoot "my webhook doesn't work." Log first failure per URL to Unity console |
-| 6 | CachedBuilding 48-field struct copy | 1 hr | 24K field copies per refresh at 1500 buildings. Convert to class (ref copy instead of value copy) |
+None pending.
 
 ## Later (quality of life)
 

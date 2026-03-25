@@ -145,18 +145,19 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 |---|---|---|---|---|
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
-| 3 | **Webhook data alloc with 0 subscribers** | 68 anonymous objects/sec (high-freq events) | data payload created before count check | move alloc inside PushEvent or use lazy pattern |
-| 4 | **Webhook ToArray per event** | 1 array per event fire | `_webhooks.ToArray()` snapshot | replace with index loop |
-| 5 | **Dead StringContent alloc** | 1 per event fire | line 159 creates unused object | remove dead code |
-| ~~6~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | ~~GetComponent to get GameObject for position~~ | **FIXED** -- cached `Go` field at add-time |
-| ~~7~~ | ~~Building X,Y,Z,Orientation re-read~~ | ~~522 wasted reads/sec~~ | ~~immutable after placement~~ | **FIXED** -- moved to add-time in AddToIndexes |
+| ~~3~~ | ~~Webhook data alloc with 0 subscribers~~ | ~~68 objects/sec~~ | ~~data before count check~~ | **FIXED** -- `if (_webhooks.Count > 0)` guard |
+| ~~4~~ | ~~Webhook ToArray per event~~ | ~~1 array per fire~~ | ~~ToArray snapshot~~ | **FIXED** -- index loop |
+| ~~5~~ | ~~Dead StringContent alloc~~ | ~~1 per fire~~ | ~~unused object~~ | **FIXED** -- deleted |
+| ~~6~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | | **FIXED** -- cached `Go` field |
+| ~~7~~ | ~~Building X,Y,Z,Orientation re-read~~ | ~~522 reads/sec~~ | | **FIXED** -- add-time only |
+| ~~8~~ | ~~CachedBuilding 48-field struct copy~~ | ~~144K copies/sec at 1500 buildings~~ | ~~struct value copy in RefreshCachedState~~ | **FIXED** -- converted to class, modify in-place, Clone() for double-buffer |
 
 ## Resolved bottlenecks
 
 | Bottleneck | Was | Fix applied |
 |---|---|---|
-| GetComponent per item (trees) | 5 calls x 2986 items/request | cached component refs in `CachedNaturalResource` struct |
-| GetComponent per item (buildings) | 18 calls x 522 items/request | cached component refs in `CachedBuilding` struct |
+| GetComponent per item (trees) | 5 calls x 2986 items/request | cached component refs in `CachedNaturalResource` class |
+| GetComponent per item (buildings) | 18 calls x 522 items/request | cached component refs in `CachedBuilding` class |
 | Full entity scan per endpoint | O(4161) every call | event-driven typed indexes via `EventBus` |
 | Per-frame index rebuild | O(4161) every frame | eliminated -- indexes update on entity add/remove only |
 | Per-frame entity cache rebuild | O(4161) every frame | eliminated -- `_entityCache` updates via EventBus |
@@ -177,6 +178,11 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 | LINQ `.Select().ToList()` in map stacking | anonymous objects + LINQ alloc per stacked tile | simple loop with Dictionary |
+| Webhook dead StringContent alloc | 1 object per event fire | deleted unused line |
+| Webhook data alloc with 0 subscribers | 68 anonymous objects per event batch | `if (_webhooks.Count > 0)` guard before alloc |
+| Webhook ToArray per event fire | 1 array alloc per fire | index loop (main thread, safe) |
+| 22 silent `catch { }` blocks | invisible failures | `TimberbotLog.Error()` -- file + console, timestamped, all errors |
+| CachedBuilding 48-field struct copy | 144K field copies/sec at 1500 buildings | converted to class, modify in-place, `Clone()` for double-buffer |
 
 ## Optimization history
 
