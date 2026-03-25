@@ -282,7 +282,7 @@ Set game speed.
 #### Response (error)
 
 ```json
-{"error": "speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)"}
+{"error": "invalid_param: speed must be 0-3"}
 ```
 
 ---
@@ -327,7 +327,7 @@ Set when beavers stop working.
 #### Response (error)
 
 ```json
-{"error": "endHours must be 1-24"}
+{"error": "invalid_param: endHours must be 1-24"}
 ```
 
 ---
@@ -528,7 +528,7 @@ Set import/export for a specific good in a district.
 #### Response (error)
 
 ```json
-{"error": "district not found", "district": "Bad Name"}
+{"error": "not_found", "district": "Bad Name"}
 ```
 
 ---
@@ -556,11 +556,11 @@ Move adult beavers between districts.
 #### Response (error)
 
 ```json
-{"error": "from district not found", "from": "Bad Name"}
+{"error": "not_found", "from": "Bad Name"}
 ```
 
 ```json
-{"error": "no population to migrate", "from": "District 1", "available": 0}
+{"error": "no_population", "from": "District 1", "available": 0}
 ```
 
 ---
@@ -1032,11 +1032,11 @@ Pause or unpause a building.
 #### Response (error)
 
 ```json
-{"error": "building not found", "id": 99999}
+{"error": "not_found", "id": 99999}
 ```
 
 ```json
-{"error": "building is not pausable", "id": 12340}
+{"error": "invalid_type: not pausable", "id": 12340}
 ```
 
 ---
@@ -1083,7 +1083,7 @@ Remove a building from the world.
 #### Response (error)
 
 ```json
-{"error": "entity not found", "id": 99999}
+{"error": "not_found", "id": 99999}
 ```
 
 ---
@@ -1178,7 +1178,7 @@ Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non
 #### Response (error)
 
 ```json
-{"error": "unknown prefab", "prefab": "BadName"}
+{"error": "not_found", "prefab": "BadName"}
 ```
 
 ---
@@ -1205,7 +1205,7 @@ Set floodgate water gate height. Value is clamped to max.
 #### Response (error)
 
 ```json
-{"error": "not a floodgate", "id": 12340}
+{"error": "invalid_type: not a floodgate", "id": 12340}
 ```
 
 ---
@@ -1237,7 +1237,7 @@ Set construction or workplace priority.
 #### Response (error)
 
 ```json
-{"error": "invalid priority, use: VeryLow, Normal, VeryHigh", "value": "Bad"}
+{"error": "invalid_param: use VeryLow, Normal, VeryHigh", "value": "Bad"}
 ```
 
 ---
@@ -1264,7 +1264,7 @@ Set desired worker count for a workplace.
 #### Response (error)
 
 ```json
-{"error": "not a workplace", "id": 12340}
+{"error": "invalid_type: not a workplace", "id": 12340}
 ```
 
 ---
@@ -1291,7 +1291,7 @@ Prioritize hauling deliveries to a building.
 #### Response (error)
 
 ```json
-{"error": "building has no haul priority", "id": 12340}
+{"error": "invalid_type: no haul priority", "id": 12340}
 ```
 
 ---
@@ -1353,11 +1353,11 @@ Prioritize planting or harvesting for a farmhouse.
 #### Response (error)
 
 ```json
-{"error": "building is not a farmhouse", "id": 12340}
+{"error": "invalid_type: not a farmhouse", "id": 12340}
 ```
 
 ```json
-{"error": "invalid action, use: planting or harvesting", "action": "bad"}
+{"error": "invalid_param: use planting or harvesting", "action": "bad"}
 ```
 
 ---
@@ -1436,7 +1436,7 @@ Set which good a single-good stockpile accepts.
 #### Response (error)
 
 ```json
-{"error": "not a single-good stockpile", "id": 12340}
+{"error": "invalid_type: not a single-good stockpile", "id": 12340}
 ```
 
 ---

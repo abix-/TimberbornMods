@@ -2,9 +2,9 @@
 //
 // FindPlacement: searches a region for valid building spots using the game's own
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
-// CeiledWaterHeight > tz, path connectivity via reflection into NavMesh internals,
-// and power adjacency via cached power tile positions. Returns top 10 spots sorted
-// by: non-flooded > reachable > pathAccess > nearPower.
+// WaterDepth on ground-required tiles, path connectivity via reflection into NavMesh
+// internals, and power adjacency via cached power tile positions. Water buildings
+// sort by waterDepth first. Others: non-flooded > reachable > pathAccess > nearPower.
 //
 // PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
 // creates a preview, validates, then calls BlockObjectPlacerService.Place().
