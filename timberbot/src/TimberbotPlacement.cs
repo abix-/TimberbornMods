@@ -420,8 +420,8 @@ namespace Timberbot
         // 3. POWER ADJACENCY: checks if any power-conducting building is adjacent to
         //    the placement footprint. Buildings need to be adjacent to conduct power.
         //
-        // 4. FLOOD CHECK: CeiledWaterHeight > tz means water surface exceeds the
-        //    building's z-level = submerged. Pumps hanging over lower-z water are fine.
+        // 4. FLOOD CHECK: checks WaterDepth > 0 on ground-required tiles only
+        //    (MatterBelow.GroundOrStackable). Water intake tiles are expected wet.
         //
         // 5. PLACEMENT VALIDATION: uses the game's own PreviewFactory to create a
         //    preview entity, Reposition it, and check IsValid(). This runs the same
@@ -444,6 +444,23 @@ namespace Timberbot
             var waterInputSpec = buildingSpec.GetSpec<WaterInputSpec>();
             Vector3Int? waterInputLocal = waterInputSpec != null
                 ? (Vector3Int?)waterInputSpec.WaterInputCoordinates : null;
+
+            // Build set of footprint tiles (local coords) that require solid ground.
+            // Only these tiles are checked for flooding -- tiles with MatterBelow.Any
+            // (water intake tiles on pumps etc) are expected to have water.
+            var blocks = blockObjectSpec.Blocks;
+            int baseZIdx = blockObjectSpec.BaseZ;
+            int stride2 = size.x * size.y;
+            var groundTiles = new HashSet<long>(); // encoded as ly * 1000 + lx
+            for (int ly = 0; ly < size.y; ly++)
+                for (int lx = 0; lx < size.x; lx++)
+                {
+                    int idx = baseZIdx * stride2 + ly * size.x + lx;
+                    if (idx < blocks.Length && blocks[idx].MatterBelow == MatterBelow.GroundOrStackable)
+                        groundTiles.Add((long)ly * 1000 + lx);
+                }
+            // if no ground tiles found (shouldn't happen), check all tiles
+            bool checkAllTiles = groundTiles.Count == 0;
 
             // STEP 1: REACHABILITY
             // Use reflection to access the game's NavMesh internals. These APIs are
@@ -637,13 +654,24 @@ namespace Timberbot
                                         nearPower = true;
                                 }
 
-                            // check flooding: any footprint tile with water depth > 0 = submerged
-                            int frx = size.x, fry = size.y;
-                            if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
+                            // check flooding: only ground-required tiles (MatterBelow.GroundOrStackable)
+                            // count as flooded. Water intake tiles (MatterBelow.Any) are expected wet.
                             bool flooded = false;
-                            for (int fx = tx; fx < tx + frx && !flooded; fx++)
-                                for (int fy = ty; fy < ty + fry && !flooded; fy++)
-                                    if (GetWaterDepth(fx, fy) > 0) flooded = true;
+                            for (int ly = 0; ly < size.y && !flooded; ly++)
+                                for (int lx = 0; lx < size.x && !flooded; lx++)
+                                {
+                                    if (!checkAllTiles && !groundTiles.Contains((long)ly * 1000 + lx)) continue;
+                                    int wx, wy;
+                                    switch (bestOrient)
+                                    {
+                                        case 0: wx = tx + lx; wy = ty + ly; break;
+                                        case 1: wx = tx + ly; wy = ty + (size.x - 1 - lx); break;
+                                        case 2: wx = tx + (size.x - 1 - lx); wy = ty + (size.y - 1 - ly); break;
+                                        case 3: wx = tx + (size.y - 1 - ly); wy = ty + lx; break;
+                                        default: continue;
+                                    }
+                                    if (GetWaterDepth(wx, wy) > 0) flooded = true;
+                                }
 
                             // check water depth at intake tile for water buildings
                             float waterDepth = 0f;
