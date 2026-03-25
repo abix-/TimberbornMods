@@ -32,6 +32,15 @@ import requests
 # API client
 # ---------------------------------------------------------------------------
 
+class TimberbotError(Exception):
+    """API returned an error response. e.code is the prefix before ':', e.response is the full dict."""
+    def __init__(self, response):
+        self.response = response
+        self.error = response.get("error", "unknown")
+        self.code = self.error.split(":")[0].strip()
+        super().__init__(self.error)
+
+
 class Timberbot:
     """Client for Timberbot API (port 8085).
 
@@ -46,18 +55,23 @@ class Timberbot:
         self.s = requests.Session()
         self.s.headers["Accept"] = "application/json"
 
+    def _check(self, data):
+        if isinstance(data, dict) and "error" in data:
+            raise TimberbotError(data)
+        return data
+
     def _get(self, path, params=None):
         p = {"format": self._format}
         if params:
             p.update(params)
         r = self.s.get(f"{self.url}{path}", params=p, timeout=5)
         r.raise_for_status()
-        return r.json()
+        return self._check(r.json())
 
     def _post(self, path, data):
         data["format"] = self._format
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
-        return r.json()
+        return self._check(r.json())
 
     # -- connection --
 
@@ -1010,7 +1024,11 @@ def main():
             print(f"usage: {_format_usage(method_name, method).strip()}", file=sys.stderr)
             sys.exit(1)
 
-    result = method(**kwargs)
+    try:
+        result = method(**kwargs)
+    except TimberbotError as e:
+        print(json.dumps(e.response, indent=2) if json_mode else e.error, file=sys.stderr)
+        sys.exit(1)
     if isinstance(result, str):
         print(result)
     elif isinstance(result, dict) and result.get("rendered"):
