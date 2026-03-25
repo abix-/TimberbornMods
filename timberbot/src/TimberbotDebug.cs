@@ -726,6 +726,32 @@ namespace Timberbot
                 return new { id, type = "beaver", name = c.Name, fields, mismatches, total };
             }
 
+            // check natural resources
+            var natRes = Service.Cache.NaturalResources.Read;
+            for (int i = 0; i < natRes.Count; i++)
+            {
+                var c = natRes[i];
+                if (c.Id != id) continue;
+
+                if (c.BlockObject != null)
+                {
+                    var coords = c.BlockObject.Coordinates;
+                    Add("x", c.X, coords.x);
+                    Add("y", c.Y, coords.y);
+                    Add("z", c.Z, coords.z);
+                }
+                if (c.Living != null)
+                    Add("alive", c.Alive, !c.Living.IsDead);
+                if (c.Growable != null)
+                {
+                    Add("grown", c.Grown, c.Growable.IsGrown);
+                    Add("growth", c.Growth, c.Growable.GrowthProgress);
+                }
+                Add("name", c.Name, c.Name);
+
+                return new { id, type = "naturalResource", name = c.Name, fields, mismatches, total };
+            }
+
             return new { error = "entity not found in cache", id };
         }
 
@@ -768,6 +794,65 @@ namespace Timberbot
                 totalMismatches += mm;
                 if (mm > 0) results.Add(result);
             }
+
+            // validate all natural resources
+            var natRes = Service.Cache.NaturalResources.Read;
+            for (int i = 0; i < natRes.Count; i++)
+            {
+                var result = ValidateEntity(natRes[i].Id);
+                totalEntities++;
+                var rt = result.GetType();
+                var mmProp = rt.GetProperty("mismatches");
+                if (mmProp == null) continue;
+                var mm = (int)mmProp.GetValue(result);
+                var tf = (int)rt.GetProperty("total").GetValue(result);
+                totalFields += tf;
+                totalMismatches += mm;
+                if (mm > 0) results.Add(result);
+            }
+
+            // validate districts (cached vs live)
+            try
+            {
+                var cachedDistricts = Service.Cache.Districts;
+                var liveDistricts = new Dictionary<string, (int adults, int children, int bots)>();
+                foreach (var dc in Service.Cache.DistrictRegistry.FinishedDistrictCenters)
+                {
+                    var pop = dc.DistrictPopulation;
+                    liveDistricts[dc.DistrictName] = (
+                        pop != null ? pop.NumberOfAdults : 0,
+                        pop != null ? pop.NumberOfChildren : 0,
+                        pop != null ? pop.NumberOfBots : 0);
+                }
+                foreach (var cd in cachedDistricts)
+                {
+                    totalEntities++;
+                    var fields = new Dictionary<string, object>();
+                    int mm = 0, tf = 0;
+                    void AddD(string name, object cached, object live)
+                    {
+                        bool match = Equals(cached, live);
+                        if (!match && cached is int ci && live is int li) match = ci == li;
+                        fields[name] = new { cached, live, match };
+                        tf++;
+                        if (!match) mm++;
+                    }
+                    if (liveDistricts.TryGetValue(cd.Name, out var live))
+                    {
+                        AddD("adults", cd.Adults, live.adults);
+                        AddD("children", cd.Children, live.children);
+                        AddD("bots", cd.Bots, live.bots);
+                    }
+                    else
+                    {
+                        AddD("exists", false, true);
+                    }
+                    totalFields += tf;
+                    totalMismatches += mm;
+                    if (mm > 0) results.Add(new { type = "district", name = cd.Name, fields, mismatches = mm, total = tf });
+                }
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("validate.districts", _ex); }
 
             return new
             {
