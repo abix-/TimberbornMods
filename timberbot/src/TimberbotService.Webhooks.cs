@@ -91,6 +91,7 @@ namespace Timberbot
 
         // batching: accumulate events, flush periodically from UpdateSingleton
         private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
+        private readonly System.Text.StringBuilder _webhookSb = new System.Text.StringBuilder(1024);
         private float _lastWebhookFlush = 0f;
         // circuit breaker threshold loaded from _webhookCircuitBreaker field in TimberbotService.cs
 
@@ -143,8 +144,9 @@ namespace Timberbot
                 var wh = _webhooks[i];
                 if (wh.Disabled) continue;
 
-                // build batched payload: JSON array of matching events
-                var sb = new System.Text.StringBuilder(256);
+                // build batched payload: reuse field-level SB to avoid per-flush allocation
+                _webhookSb.Clear();
+                var sb = _webhookSb;
                 sb.Append('[');
                 int count = 0;
                 for (int j = 0; j < _pendingEvents.Count; j++)

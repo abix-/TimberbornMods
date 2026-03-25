@@ -41,14 +41,25 @@ class TestRunner:
         self.y2 = 158
         self.prefab_names = set()
 
+    def _safe_call(self, fn, fallback=None):
+        """Call a bot method, return fallback on any error (bad JSON, timeout, etc)."""
+        try:
+            return fn()
+        except Exception:
+            return fallback
+
     def discover(self):
         """Detect game state: faction, map bounds, existing buildings, prefabs."""
         print("\n=== discovery ===\n")
 
-        buildings = self.bot.buildings()
+        buildings = self._safe_call(lambda: self.bot.buildings(), [])
 
         # detect faction from prefab list (building names have faction stripped by CleanName)
-        prefabs = self.bot.prefabs()
+        try:
+            prefabs = self.bot.prefabs()
+        except Exception:
+            prefabs = []
+            print("  WARNING: prefabs endpoint returned bad data, faction detection may fail")
         self.faction = ""
         if isinstance(prefabs, list):
             for p in prefabs:
@@ -91,12 +102,15 @@ class TestRunner:
 
         # find a locked building for the "not unlocked" test
         self._locked_prefab = None
-        science = self.bot.science()
-        if isinstance(science, dict):
-            for u in science.get("unlockables", []):
-                if isinstance(u, dict) and not u.get("unlocked") and u.get("cost", 0) > 5000:
-                    self._locked_prefab = u.get("name", "")
-                    break
+        try:
+            science = self.bot.science()
+            if isinstance(science, dict):
+                for u in science.get("unlockables", []):
+                    if isinstance(u, dict) and not u.get("unlocked") and u.get("cost", 0) > 5000:
+                        self._locked_prefab = u.get("name", "")
+                        break
+        except Exception:
+            print("  WARNING: science endpoint returned bad data")
 
         print(f"  faction: {self.faction or 'unknown'}")
         print(f"  map: {self.map_x}x{self.map_y}")
@@ -232,6 +246,11 @@ class TestRunner:
         self.test_bot_durability()
         self.test_power_networks()
         self.test_webhooks()
+        self.test_map_render()
+        self.test_find_helper()
+        self.test_clear_planting()
+        self.test_clear_trees()
+        self.test_migrate()
         self.test_data_accuracy()
         self.test_performance()
 
@@ -1817,126 +1836,133 @@ class TestRunner:
             if single:
                 self.check("single has full fields", "finished" in single[0])
 
+    def test_map_render(self):
+        """Test the ASCII map render (was visual)."""
+        print("\n=== map render ===\n")
+        result = self.bot.map(self.center_x, self.center_y, 5)
+        self.check("map returns rendered dict",
+                   isinstance(result, dict) and result.get("rendered"),
+                   f"got: {type(result).__name__}")
+
+    def test_find_helper(self):
+        """Test the find CLI search helper."""
+        print("\n=== find helper ===\n")
+
+        # find buildings by name
+        result = self.bot.find(source="buildings", name="DistrictCenter")
+        self.check("find building by name",
+                   isinstance(result, list) and len(result) > 0,
+                   f"got {len(result) if isinstance(result, list) else 0} results")
+
+        # find buildings by location
+        result2 = self.bot.find(source="buildings", x=self.center_x, y=self.center_y, radius=10)
+        self.check("find building by location",
+                   isinstance(result2, list) and len(result2) > 0,
+                   f"got {len(result2) if isinstance(result2, list) else 0} results")
+
+        # find trees
+        result3 = self.bot.find(source="trees", name="Pine")
+        self.check("find trees by name",
+                   isinstance(result3, list),
+                   f"got: {type(result3).__name__}")
+
+    def test_clear_planting(self):
+        """Test clearing planting marks."""
+        print("\n=== clear planting ===\n")
+        result = self.bot.clear_planting(self.x1, self.y1, self.x1 + 3, self.y1 + 3, 2)
+        self.check("clear_planting no error", not self.err(result),
+                   json.dumps(result)[:100] if self.err(result) else "")
+
+    def test_clear_trees(self):
+        """Test clearing tree cutting marks."""
+        print("\n=== clear trees ===\n")
+        # mark then clear to exercise both directions
+        self.bot.mark_trees(self.x1, self.y1, self.x1 + 5, self.y1 + 5, 2)
+        result = self.bot.clear_trees(self.x1, self.y1, self.x1 + 5, self.y1 + 5, 2)
+        self.check("clear_trees no error", not self.err(result),
+                   json.dumps(result)[:100] if self.err(result) else "")
+
+    def test_migrate(self):
+        """Test beaver migration between districts."""
+        print("\n=== migrate ===\n")
+        districts = self.bot.districts()
+        if not isinstance(districts, list) or len(districts) < 2:
+            self.skip("migrate", "only 1 district")
+            return
+        d1 = districts[0].get("name", "")
+        d2 = districts[1].get("name", "")
+        result = self.bot.migrate(d1, d2, 0)
+        self.check("migrate call returns dict", isinstance(result, dict),
+                   f"got: {type(result).__name__}")
+
     def test_data_accuracy(self):
-        """Verify Python client data matches live game state via debug endpoint.
-        Debug returns all values as strings, so we parse them for comparison."""
-        print("\n=== data accuracy (client vs debug) ===\n")
+        """Validate cached API data matches live game components using debug validate."""
+        print("\n=== data accuracy (cached vs live) ===\n")
 
-        def dval(result):
-            """Extract debug value, parsing strings to int/float/bool."""
-            if not isinstance(result, dict) or "value" not in result:
-                return None
-            v = result["value"]
-            if isinstance(v, str):
-                if v.lower() == "true": return True
-                if v.lower() == "false": return False
-                try: return int(v)
-                except ValueError:
-                    try: return float(v)
-                    except ValueError: return v
-            return v
-
-        # wait for a fresh cache cycle so data is current
+        # wait for a fresh cache cycle
         self.wait_for_refresh()
 
-        # --- speed ---
-        client_speed = self.bot.speed()
-        debug_speed = dval(self.debug_get("_speedManager.CurrentSpeed"))
-        if isinstance(client_speed, dict) and debug_speed is not None:
-            cs = client_speed.get("speed", -1)
-            # game speed raw values: 0,1,3,7 mapped to levels 0-3
-            speed_map = {0: 0, 1: 1, 3: 2, 7: 3}
-            ds_level = speed_map.get(debug_speed, debug_speed)
-            self.check("speed matches debug", cs == ds_level,
-                       f"client={cs}, debug raw={debug_speed} level={ds_level}")
-        else:
-            self.skip("speed accuracy", "couldn't read speed")
-
-        # --- time ---
-        client_time = self.bot.time()
-        debug_day = dval(self.debug_get("_dayNightCycle.DayNumber"))
-        if isinstance(client_time, dict) and debug_day is not None:
-            ct = client_time.get("dayNumber", -1)
-            self.check("dayNumber matches debug", ct == debug_day,
-                       f"client={ct}, debug={debug_day}")
-        else:
-            self.skip("time accuracy", "couldn't read time")
-
-        # --- science ---
-        client_sci = self.bot.science()
-        debug_sci = dval(self.debug_get("_scienceService.SciencePoints"))
-        if isinstance(client_sci, dict) and debug_sci is not None:
-            cs = client_sci.get("points", -1)
-            self.check("science points match debug", cs == debug_sci,
-                       f"client={cs}, debug={debug_sci}")
-        else:
-            self.skip("science accuracy", "couldn't read science")
-
-        # --- building workers ---
-        buildings = self.bot.buildings(detail="full")
-        tested_workers = False
-        if isinstance(buildings, list):
-            for b in buildings:
+        # validate a sample of buildings
+        buildings = self.bot.buildings()
+        if isinstance(buildings, list) and buildings:
+            for b in buildings[:5]:
                 bid = b.get("id")
-                aw = b.get("assignedWorkers")
-                if aw is not None and aw > 0 and bid:
-                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
-                    dw = dval(self.debug_get("$.Workplace.NumberOfAssignedWorkers"))
-                    if dw is not None:
-                        self.check(f"building {bid} workers match debug",
-                                   aw == dw, f"client={aw}, debug={dw}")
-                        tested_workers = True
-                        break
-        if not tested_workers:
-            self.skip("building workers accuracy", "no building with workers found")
+                if not bid:
+                    continue
+                result = self.bot.debug(target="validate", id=str(bid))
+                if isinstance(result, dict) and "mismatches" in result:
+                    mm = result["mismatches"]
+                    total = result["total"]
+                    name = result.get("name", "?")
+                    if mm > 0:
+                        # show which fields mismatched
+                        bad = [f"{k}: cached={v['cached']} live={v['live']}"
+                               for k, v in result.get("fields", {}).items()
+                               if isinstance(v, dict) and not v.get("match")]
+                        self.check(f"building {name} ({bid})", False,
+                                   f"{mm}/{total} mismatched: {'; '.join(bad)}")
+                    else:
+                        self.check(f"building {name} ({bid}) {total} fields", True)
+                elif isinstance(result, dict) and "error" in result:
+                    self.skip(f"building {bid}", result["error"])
+                else:
+                    self.skip(f"building {bid}", "unexpected response")
+        else:
+            self.skip("building validation", "no buildings")
 
-        # --- building paused ---
-        tested_paused = False
-        if isinstance(buildings, list):
-            for b in buildings:
-                bid = b.get("id")
-                paused = b.get("paused")
-                if paused is not None and bid and b.get("pausable"):
-                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
-                    dp = dval(self.debug_get("$.Pausable.Paused"))
-                    if dp is not None:
-                        self.check(f"building {bid} paused matches debug",
-                                   paused == dp, f"client={paused}, debug={dp}")
-                        tested_paused = True
-                        break
-        if not tested_paused:
-            self.skip("building paused accuracy", "no pausable building found")
-
-        # --- beaver wellbeing ---
+        # validate a sample of beavers
         beavers = self.bot.beavers()
-        tested_wb = False
-        if isinstance(beavers, list):
-            for bv in beavers:
+        if isinstance(beavers, list) and beavers:
+            for bv in beavers[:5]:
                 bid = bv.get("id")
-                wb = bv.get("wellbeing")
-                if wb is not None and bid:
-                    self.bot.debug(target="call", method="FindEntity", arg0=str(bid))
-                    dw = dval(self.debug_get("$.WellbeingTracker.WellbeingScore"))
-                    if dw is not None and isinstance(dw, (int, float)):
-                        # allow small float difference due to cache staleness
-                        self.check(f"beaver {bid} wellbeing matches debug",
-                                   abs(float(wb) - float(dw)) < 1.0,
-                                   f"client={wb}, debug={dw}")
-                        tested_wb = True
-                        break
-        if not tested_wb:
-            self.skip("beaver wellbeing accuracy", "no beaver with wellbeing")
-
-        # --- population count ---
-        client_pop = self.bot.population()
-        if isinstance(client_pop, dict):
-            beavers_list = self.bot.beavers()
-            beaver_count = len(beavers_list) if isinstance(beavers_list, list) else 0
-            self.check("beavers endpoint returns data",
-                       beaver_count > 0,
-                       f"beavers list={beaver_count}")
+                if not bid:
+                    continue
+                result = self.bot.debug(target="validate", id=str(bid))
+                if isinstance(result, dict) and "mismatches" in result:
+                    mm = result["mismatches"]
+                    total = result["total"]
+                    name = result.get("name", "?")
+                    if mm > 0:
+                        bad = [f"{k}: cached={v['cached']} live={v['live']}"
+                               for k, v in result.get("fields", {}).items()
+                               if isinstance(v, dict) and not v.get("match")]
+                        self.check(f"beaver {name} ({bid})", False,
+                                   f"{mm}/{total} mismatched: {'; '.join(bad)}")
+                    else:
+                        self.check(f"beaver {name} ({bid}) {total} fields", True)
+                elif isinstance(result, dict) and "error" in result:
+                    self.skip(f"beaver {bid}", result["error"])
+                else:
+                    self.skip(f"beaver {bid}", "unexpected response")
         else:
-            self.skip("population accuracy", "couldn't read population")
+            self.skip("beaver validation", "no beavers")
+
+        # validate_all summary
+        result = self.bot.debug(target="validate_all")
+        if isinstance(result, dict) and "mismatches" in result:
+            self.check(f"validate_all: {result['entities']} entities, {result['fields']} fields",
+                       result["mismatches"] == 0,
+                       f"{result['mismatches']} total mismatches across {result['entities']} entities")
 
     def test_performance(self):
         print("\n=== performance ===\n")

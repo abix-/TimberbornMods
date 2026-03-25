@@ -174,6 +174,42 @@ All scaling is linear with item count. Zero main-thread cost for GET-only bot tu
 - **Vertical builds:** heavy platform/stair stacking increases map `occupants` arrays (more allocs per tile)
 - **Power networks:** complex power grids fragment into many small networks. `power` endpoint iterates all buildings per call
 
+## Pre-release audit (v0.7.0)
+
+### HTTP response
+
+| Issue | Severity | Status |
+|---|---|---|
+| `JsonConvert.SerializeObject(data, Formatting.Indented)` allocates oversized string with whitespace | Medium | **TODO** -- switch to `Formatting.None` |
+| `Encoding.UTF8.GetBytes(json)` allocates byte array per response | Medium | **TODO** -- write directly to output stream with `StreamWriter` |
+| JwWriter responses bypass serialization entirely (return string) | Good | Already optimized |
+
+### Webhook flush (every 200ms)
+
+| Issue | Severity | Status |
+|---|---|---|
+| `new StringBuilder(256)` per webhook per flush | Medium | **TODO** -- reuse field-level SB |
+| `JsonConvert.SerializeObject` per event in PushEvent | Medium | Acceptable -- only fires when webhooks registered |
+| `new StringContent(...)` per webhook per flush | Low | ThreadPool, acceptable |
+| Circuit breaker disables dead URLs after N failures | Good | Already implemented |
+
+### RefreshCachedState (every 1s on main thread)
+
+| Issue | Severity | Status |
+|---|---|---|
+| `GetNeeds()` IEnumerable may box enumerator (~80 beavers * ~30 needs) | Medium | Can't fix without game source |
+| Inventory Dictionary.Clear() + repopulate per building | Low | Dict reused, not reallocated |
+| BreedingPod.Nutrients IEnumerable foreach | Low | Only ~5 breeding pods |
+| All other struct fields: direct property reads | Good | Zero-alloc |
+
+### JsonWriter
+
+| Issue | Severity | Status |
+|---|---|---|
+| `Key().OpenArr()` double-comma bug | Critical | **FIXED** -- `_hasValue[_depth] = false` after Key |
+| `Float(v).ToString(fmt)` allocates string per call | Low | **FIXED** -- zero-alloc digit writing |
+| StringBuilder reused via `Reset()` | Good | Already optimized |
+
 ## Test coverage
 
 Performance tests in `timberbot/script/test_validation.py`:

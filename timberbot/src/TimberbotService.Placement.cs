@@ -117,20 +117,24 @@ namespace Timberbot
                 {
                     if (bs.ScienceCost > 0)
                         jw.Key("scienceCost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs));
+                    // collect costs first, then write -- avoids partial JSON if iteration throws
                     try
                     {
-                        bool hasCost = false;
+                        var costs = new List<(string good, int amount)>();
                         foreach (var ga in bs.BuildingCost)
                         {
                             var goodProp = ga.GetType().GetProperty("GoodId") ?? ga.GetType().GetProperty("Id");
                             var amtProp = ga.GetType().GetProperty("Amount");
                             if (goodProp != null && amtProp != null)
-                            {
-                                if (!hasCost) { jw.Key("cost").OpenArr(); hasCost = true; }
-                                jw.OpenObj().Key("good").Str(goodProp.GetValue(ga)?.ToString()).Key("amount").Int((int)amtProp.GetValue(ga)).CloseObj();
-                            }
+                                costs.Add((goodProp.GetValue(ga)?.ToString(), (int)amtProp.GetValue(ga)));
                         }
-                        if (hasCost) jw.CloseArr();
+                        if (costs.Count > 0)
+                        {
+                            jw.Key("cost").OpenArr();
+                            for (int ci = 0; ci < costs.Count; ci++)
+                                jw.OpenObj().Key("good").Str(costs[ci].good).Key("amount").Int(costs[ci].amount).CloseObj();
+                            jw.CloseArr();
+                        }
                     }
                     catch (System.Exception _ex) { TimberbotLog.Error("prefabs.cost", _ex); }
                 }

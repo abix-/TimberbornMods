@@ -426,13 +426,13 @@ namespace Timberbot
         {
             try
             {
-                var json = data is string s ? s : JsonConvert.SerializeObject(data, Formatting.Indented);
-                var bytes = Encoding.UTF8.GetBytes(json);
+                var json = data is string s ? s : JsonConvert.SerializeObject(data);
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";
-                ctx.Response.ContentLength64 = bytes.Length;
                 ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
-                ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+                // write directly to output stream -- avoids intermediate byte[] allocation
+                using (var sw = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8))
+                    sw.Write(json);
                 ctx.Response.OutputStream.Close();
             }
             catch (Exception ex)
