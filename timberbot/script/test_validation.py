@@ -360,7 +360,7 @@ class TestRunner:
             # verify via map
             tile = self.bot.tiles(sx, sy, sx, sy)
             tiles = tile.get("tiles", [])
-            has_path = any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles)
+            has_path = any(any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles)
             self.check("verify placement via map", has_path)
 
             # demolish
@@ -370,7 +370,7 @@ class TestRunner:
             # verify gone
             tile2 = self.bot.tiles(sx, sy, sx, sy)
             tiles2 = tile2.get("tiles", [])
-            no_path = not any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles2)
+            no_path = not any(any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles2)
             self.check("verify demolish via map", no_path)
 
         # multi-tile z mismatch: find a spot where terrain changes within a footprint
@@ -381,7 +381,7 @@ class TestRunner:
             if len(tiles) < 6:
                 continue
             heights = set(t.get("terrain", 0) for t in tiles)
-            occupied = any(t.get("occupant") for t in tiles)
+            occupied = any(t.get("occupants") for t in tiles)
             if len(heights) > 1 and not occupied and all(h >= 2 for h in heights):
                 z = min(heights)
                 result = self.bot.place_building(self.prefab("Barrack"), tx, self.center_y, z)
@@ -561,7 +561,7 @@ class TestRunner:
                 tz = heights.pop()
                 if tz < 2:
                     continue
-                occupants = [t for t in tiles if t.get("occupant") or t.get("water", 0) > 0]
+                occupants = [t for t in tiles if t.get("occupants") or t.get("water", 0) > 0]
                 if occupants:
                     continue
                 test = self.bot.place_building("Path", cx, cy, tz, orientation="south")
@@ -611,9 +611,8 @@ class TestRunner:
                 pname = prefab.split(".")[0]
                 occupied = []
                 for t in region.get("tiles", []):
-                    occ = t.get("occupant", "")
                     occs = t.get("occupants", [])
-                    if (occ and pname in occ) or any(pname in o.get("name", "") for o in occs):
+                    if any(pname in o.get("name", "") for o in occs):
                         occupied.append((t["x"], t["y"]))
                 min_x = min(t[0] for t in occupied) if occupied else -1
                 min_y = min(t[1] for t in occupied) if occupied else -1
@@ -897,7 +896,7 @@ class TestRunner:
                 tz = heights.pop()
                 if tz < 2:
                     continue
-                occupants = [t for t in tiles if t.get("occupant") or t.get("water", 0) > 0]
+                occupants = [t for t in tiles if t.get("occupants") or t.get("water", 0) > 0]
                 if occupants:
                     continue
                 test_spot = (cx, cy, tz)
@@ -920,7 +919,7 @@ class TestRunner:
         # verify tiles are occupied (wait for cache refresh)
         self.wait_for_refresh()
         region = self.bot.tiles(sx, sy, sx + 3, sy)
-        paths = [t for t in region.get("tiles", []) if t.get("occupant") == "Path"]
+        paths = [t for t in region.get("tiles", []) if any("Path" in o.get("name", "") for o in t.get("occupants", []))]
         self.check("verify paths on map", len(paths) >= 3, f"found {len(paths)} paths")
 
         # cleanup: demolish placed paths
@@ -948,7 +947,7 @@ class TestRunner:
                 if len(tiles) < 2:
                     continue
                 t0, t1 = tiles[0], tiles[1]
-                if t0.get("occupant") or t1.get("occupant"):
+                if t0.get("occupants") or t1.get("occupants"):
                     continue
                 if t0.get("water", 0) > 0 or t1.get("water", 0) > 0:
                     continue
@@ -972,7 +971,7 @@ class TestRunner:
                 # verify stairs on map (wait for cache refresh)
                 self.wait_for_refresh()
                 region = self.bot.tiles(sx1, sy1, sx2, sy2)
-                has_stairs = any("Stairs" in str(t.get("occupant", "")) or any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
+                has_stairs = any(any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
                 self.check("verify stairs on map", has_stairs)
 
             # cleanup
@@ -1721,33 +1720,21 @@ class TestRunner:
         tiles = result.get("tiles", [])
         self.check("map returns tiles", len(tiles) > 0)
 
-        # check for stacked tiles (occupants array)
-        stacked = [t for t in tiles if "occupants" in t]
-        single = [t for t in tiles if "occupant" in t and "occupants" not in t]
-
-        if stacked:
-            t = stacked[0]
-            self.check("stacked tile has occupants array",
-                       isinstance(t["occupants"], list))
-            self.check("stacked has multiple occupants",
-                       len(t["occupants"]) >= 2,
-                       f"count={len(t['occupants'])}")
+        # check occupants array format (always array, never singular "occupant")
+        occupied = [t for t in tiles if "occupants" in t]
+        if occupied:
+            t = occupied[0]
+            self.check("occupants is array", isinstance(t["occupants"], list))
             occ = t["occupants"][0]
-            self.check("stacked occupant has name", "name" in occ)
-            self.check("stacked occupant has z", "z" in occ)
+            self.check("occupant has name", "name" in occ)
+            self.check("occupant has z", "z" in occ)
         else:
-            self.skip("map_stacked", "no stacked tiles in test area")
+            self.skip("occupants format", "no occupied tiles in test area")
 
-        if single:
-            self.check("single occupant is string",
-                       isinstance(single[0]["occupant"], str))
-
-        # backward compat: single occupant tiles still use "occupant" string
+        # no tile should have old singular "occupant" key
         for t in tiles:
-            has_both = "occupant" in t and "occupants" in t
-            self.check(f"tile ({t['x']},{t['y']}) no overlap",
-                       not has_both,
-                       "has both occupant and occupants")
+            self.check(f"tile ({t['x']},{t['y']}) no singular occupant",
+                       "occupant" not in t)
 
     def test_carried_goods(self):
         """Test carried goods fields on beavers."""

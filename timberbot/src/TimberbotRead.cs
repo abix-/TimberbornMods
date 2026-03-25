@@ -1110,14 +1110,9 @@ namespace Timberbot
                     if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
-                        if (occList.Count == 1)
-                            jw.Prop("occupant", occList[0].name);
-                        else
-                        {
-                            jw.Arr("occupants");
-                            foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
-                            jw.CloseArr();
-                        }
+                        jw.Arr("occupants");
+                        foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
+                        jw.CloseArr();
                     }
                     if (entrances.Contains(key)) jw.Prop("entrance", true);
                     if (seedlings.Contains(key)) jw.Prop("seedling", true);
