@@ -29,6 +29,13 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 ### Fixes
 - JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
 
+### Skill (timberbot.md v4.9)
+- Reframe as human-AI collaborative play (not autonomous)
+- Add webhook, crops, tiles, pagination, filtering to API table
+- Add early game road network bootstrapping guide
+- Point API reference to GitHub Pages URL
+- Add flood placement rules
+
 ### Internal
 - TimberbotJw `Result()`/`Error()` one-call builders ([`f97f8d8`][f97f8d8])
 - `BeginArr`/`BeginObj`/`End` shortcuts, migrate 45 builders ([`0938b0c`][0938b0c])
@@ -95,6 +102,12 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Shared reference-type fields between buffers ([`e781c3e`][e781c3e])
 - Map occupant checks for new array format ([`71b8ebf`][71b8ebf])
 
+### Skill (timberbot.md v4.7)
+- Add detail modes for buildings and beavers (`detail:full`, `detail:id:<id>`)
+- Add power networks, beaver position, district, map stacking to API table
+- Add wellbeing building placement rules (effect radius, overlap, spreading)
+- Add settings.json documentation
+
 [v0.6.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.6.0
 [22e1ef4]: https://github.com/abix-/TimberbornMods/commit/22e1ef4
 [0dea90b]: https://github.com/abix-/TimberbornMods/commit/0dea90b
@@ -127,6 +140,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - `find_planting`: irrigated spots within farmhouse range or area
 - `building_range`: work radius for farmhouse, lumberjack, forester, gatherer, scavenger, DC
 - 118 integration tests
+- Skill (timberbot.md v4.4): rewrite as game reference, add full API quick reference table, add clutch/prefabs/beavers fields
 
 [v0.5.5]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.5
 
@@ -145,12 +159,14 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Fix crop planting validation to match player UI behavior
 - Fix placement on dead standing trees
 - 91 integration tests
+- Skill: add wiki lookup guidance, "when you don't know something" section
 
 [v0.5.2]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.2
 
 ## [v0.5.1] (2026-03-23)
 
 - Fix unlock_building deducting science twice
+- Skill: add wellbeing and worker management rules
 
 [v0.5.1]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.1
 
@@ -164,6 +180,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Fix crash when reloading a save (HTTP server port conflict)
 - `PlaceBuilding` validates stackable blocks as valid build surfaces
 - 81 integration tests
+- Skill v3.0: replace manual placement with `find_placement` workflow, add priority rules, food/water urgency
 
 [v0.5.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.0
 
@@ -172,6 +189,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Terrain height shading on map tiles (darker = lower, lighter = higher)
 - Empty ground displays z-level digit instead of dots
 - Height legend when multiple z-levels are in view
+- Skill: use visual for placement checks instead of scan
 
 [v0.4.8]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.8
 
@@ -185,6 +203,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Fix building unlock for all buildings
 - Fix critical needs count (only truly low needs)
 - 88 integration tests
+- Skill: add hauler priority, recipe, farmhouse action, plantable priority; visual placement workflow
 
 [v0.4.7]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.7
 
@@ -194,6 +213,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Soil contamination: `contaminated` field on land tiles near badwater
 - Reject placement when z doesn't match terrain height
 - Dead trees (stumps) no longer block placement
+- Skill v3.0: add z-level rules, placement workflow, dead tree handling
 
 [v0.4.6]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.6
 
@@ -223,6 +243,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - Beaver home field
 - Wellbeing tiers in TOON output
 - 67 integration tests
+- Skill: add alerts, notifications, workhours, pagination to bot loop
 
 [v0.4.3]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.3
 
@@ -255,6 +276,7 @@ Performance overhaul. Double-buffered caching, background GET serving, zero main
 - AI playbook (docs/timberbot.md) works as Claude Code skill
 - Fix beaver needs filter (only active needs)
 - Fix speed scale to match game UI
+- Skill v2.0: initial AI playbook with science, distribution, bot loop
 
 [v0.4.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.0
 
