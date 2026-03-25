@@ -33,12 +33,13 @@ Cadence N+1: main refreshes old .Read         |  background reads freshly update
 ```
 
 **Rules:**
-- `DoubleBuffer.Add(writeItem, readItem)`: add to both buffers with separate reference-type instances
-- `DoubleBuffer.Add(item)`: safe for value-only structs (no reference fields)
-- `DoubleBuffer.RemoveAll()`: removes from both buffers
-- `RefreshCachedState`: updates `.Write` only, then `.Swap()`
+- `DoubleBuffer.Add(writeItem, readItem)`: queued via `ConcurrentQueue`, applied at `Swap()` time
+- `DoubleBuffer.Add(item)`: same deferral, safe for value-only types
+- `DoubleBuffer.RemoveAll()`: queued, applied at `Swap()` time
+- `RefreshCachedState`: updates `.Write` only, then `.Swap()` (which applies pending adds/removes first)
 - No copy-back. Old read buffer (now write) has same entities, 1-cadence-stale values
-- Background thread never modifies any buffer. Zero contention.
+- Structural changes (entity create/delete) have up to 1-cadence delay, same staleness as mutable fields
+- Neither thread modifies `.Read` during iteration. Background foreach is always safe.
 
 **Reference-type fields** (`List<T>`, `Dictionary<K,V>`) must be separate instances per buffer. Shared references cause mutation-during-read corruption. Use `Add(writeItem, readItem)` with distinct instances. Immutable-after-add fields (e.g. `OccupiedTiles`) are safe to share.
 
