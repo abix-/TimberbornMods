@@ -365,7 +365,7 @@ namespace Timberbot
             }
 
             // --- PASS 2: EXECUTE ---
-            int placed = 0, skipped = 0, stairCount = 0;
+            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
             var failedResults = new List<PlaceBuildingResult>();
             foreach (var (px, py, pz, prefab, orient) in plan)
             {
@@ -373,7 +373,8 @@ namespace Timberbot
                 if (result.Success)
                 {
                     if (prefab.Contains("Stairs")) stairCount++;
-                    else if (prefab == "Path") placed++;
+                    else if (prefab.Contains("Platform")) platformCount++;
+                    else if (prefab == "Path") pathCount++;
                 }
                 else
                 {
@@ -382,9 +383,11 @@ namespace Timberbot
                 }
             }
 
-            // serialize -- PlaceBuildingResult already has all context
-            var jw = _cache.Jw.BeginObj()
-                .Prop("placed", placed).Prop("stairs", stairCount).Prop("skipped", skipped);
+            // serialize -- itemized placed counts, only non-zero types
+            var jw = _cache.Jw.BeginObj().Obj("placed").Prop("paths", pathCount);
+            if (stairCount > 0) jw.Prop("stairs", stairCount);
+            if (platformCount > 0) jw.Prop("platforms", platformCount);
+            jw.CloseObj().Prop("skipped", skipped);
             if (failedResults.Count > 0 || errors.Count > 0)
             {
                 jw.Arr("errors");

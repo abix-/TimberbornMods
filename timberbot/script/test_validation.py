@@ -882,84 +882,61 @@ class TestRunner:
     def test_path_routing(self):
         print("\n=== path routing ===\n")
 
-        # place paths directly east of DC on same row
-        sx = self.center_x + 3  # just east of DC (3x3)
-        sy = self.center_y
-        sz = self.bot.tiles(sx, sy, sx, sy).get("tiles", [{}])[0].get("terrain", 2)
+        cx, cy = self.center_x, self.center_y
 
-        # flat path
-        result = self.bot.place_path(sx, sy, sx + 3, sy)
-        self.check("flat path placement",
-                   self.has(result, "placed") and result["placed"] > 0,
-                   json.dumps(result)[:100])
-
-        # verify tiles are occupied (wait for cache refresh)
-        self.wait_for_refresh()
-        region = self.bot.tiles(sx, sy, sx + 3, sy)
-        paths = [t for t in region.get("tiles", []) if any("Path" in o.get("name", "") for o in t.get("occupants", []))]
-        self.check("verify paths on map", len(paths) >= 3, f"found {len(paths)} paths")
-
-        # cleanup: demolish placed paths
-        for t in paths:
-            raw = self.bot._get("/api/buildings", params={"limit": 0})
-            buildings = raw if isinstance(raw, list) else raw.get("items", []) if isinstance(raw, dict) else []
+        def demolish_range(x1, y1, x2, y2):
+            """demolish all paths/stairs/platforms in a range"""
+            self.wait_for_refresh()
+            buildings = self.bot.buildings()
+            if not isinstance(buildings, list):
+                return
             for b in buildings:
-                if isinstance(b, dict) and b.get("x") == t["x"] and b.get("y") == t["y"] and "Path" in str(b.get("name", "")):
+                bx, by = b.get("x", -1), b.get("y", -1)
+                name = str(b.get("name", ""))
+                if name in ("Path", "Stairs", "Platform") and min(x1, x2) <= bx <= max(x1, x2) and min(y1, y2) <= by <= max(y1, y2):
                     self.bot.demolish_building(b["id"])
-                    break
 
-        # non-straight path rejected
+        def place_and_check(label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
+            """place a path and verify results, then cleanup"""
+            result = self.bot.place_path(x1, y1, x2, y2)
+            placed = result.get("placed", {}) if isinstance(result, dict) else {}
+            errs = str(result.get("errors", ""))
+
+            if "not unlocked" in errs or "not_unlocked" in errs:
+                self.skip(label, "stairs/platforms not unlocked")
+                return
+
+            self.check(f"{label}: paths placed", placed.get("paths", 0) > 0, json.dumps(result)[:120])
+            if expect_stairs:
+                self.check(f"{label}: stairs placed", placed.get("stairs", 0) > 0, json.dumps(result)[:120])
+            if expect_platforms:
+                self.check(f"{label}: platforms placed", placed.get("platforms", 0) > 0, json.dumps(result)[:120])
+            self.check(f"{label}: no skipped", result.get("skipped", 0) == 0, json.dumps(result)[:120])
+            demolish_range(x1, y1, x2, y2)
+
+        # --- FLAT PATHS (z=2 area east of DC, far enough to avoid player builds) ---
+        place_and_check("flat EW y=143", 160, 143, 164, 143)
+        place_and_check("flat EW y=142", 160, 142, 164, 142)
+        place_and_check("flat NS x=160", 160, 139, 160, 143)
+        place_and_check("flat NS x=161", 161, 139, 161, 143)
+
+        # --- 1-LEVEL Z-CHANGE (z=2 to z=3, east of gear workshop area) ---
+        # oasis map static coords: z=2->3 transition at x=154->155, NS at y=133->134
+        place_and_check("1z EW y=135", 152, 135, 157, 135, expect_stairs=True)
+        place_and_check("1z EW y=136", 152, 136, 157, 136, expect_stairs=True)
+        place_and_check("1z NS x=155", 155, 131, 155, 136, expect_stairs=True)
+        place_and_check("1z NS x=154", 154, 133, 154, 138, expect_stairs=True)
+
+        # --- 2-LEVEL Z-CHANGE (z=2 to z=4, directly behind lumber mill at 137,143) ---
+        # mill is 2 wide (x=137-138), z=2->4 at y=149->150
+        place_and_check("2z NS x=137", 137, 146, 137, 152, expect_stairs=True, expect_platforms=True)
+        place_and_check("2z NS x=138", 138, 146, 138, 152, expect_stairs=True, expect_platforms=True)
+
+        # --- ERROR HANDLING ---
         result2 = self.bot.place_path(100, 100, 105, 105)
         self.check("diagonal path rejected",
                    self.err(result2) and "invalid_param" in str(result2.get("error", "")),
                    json.dumps(result2)[:100])
-
-        # path across z-level change (should auto-place stairs)
-        # find two adjacent unoccupied tiles with z-height difference of 1
-        stair_spot = None
-        for ty in range(self.center_y - 10, self.center_y + 15):
-            for tx in range(self.center_x - 10, self.center_x + 30):
-                region = self.bot.tiles(tx, ty, tx + 1, ty)
-                tiles = region.get("tiles", [])
-                if len(tiles) < 2:
-                    continue
-                t0, t1 = tiles[0], tiles[1]
-                if t0.get("occupants") or t1.get("occupants"):
-                    continue
-                if t0.get("water", 0) > 0 or t1.get("water", 0) > 0:
-                    continue
-                h0, h1 = t0.get("terrain", 0), t1.get("terrain", 0)
-                if abs(h0 - h1) == 1 and h0 >= 2 and h1 >= 2:
-                    stair_spot = (tx, ty, tx + 1, ty)
-                    break
-            if stair_spot:
-                break
-
-        if stair_spot:
-            sx1, sy1, sx2, sy2 = stair_spot
-            result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
-            errs = str(result3.get("errors", ""))
-            if "not unlocked" in errs or "not_unlocked" in errs:
-                self.skip("path with z-change", "stairs not unlocked")
-            elif self.has(result3, "stairs") and result3.get("stairs", 0) > 0:
-                self.check("path with z-change places stairs", True)
-                self.wait_for_refresh()
-                region = self.bot.tiles(sx1, sy1, sx2, sy2)
-                has_stairs = any(any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
-                self.check("verify stairs on map", has_stairs)
-            else:
-                self.check("path with z-change places stairs", False, json.dumps(result3)[:100])
-
-            # cleanup
-            buildings = self.bot.buildings()
-            if isinstance(buildings, list):
-                for b in buildings:
-                    bx, by = b.get("x", -1), b.get("y", -1)
-                    if (bx == sx1 and by == sy1) or (bx == sx2 and by == sy2):
-                        if "Path" in str(b.get("name", "")) or "Stairs" in str(b.get("name", "")):
-                            self.bot.demolish_building(b["id"])
-        else:
-            self.skip("path with z-change", "no adjacent z-diff=1 tiles found")
 
     def test_overridable_placement(self):
         print("\n=== overridable placement ===\n")
