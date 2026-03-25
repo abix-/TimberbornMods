@@ -342,11 +342,14 @@ namespace Timberbot
                         plan.RemoveAll(p => p.x == rampTileX && p.y == rampTileY);
 
                         // stack platforms under the stair
-                        for (int p = 0; p < step; p++)
+                        // going up: step 0 = no platforms (furthest from cliff), step N = tallest (at cliff)
+                        // going down: reversed -- step 0 = tallest (at cliff), step N = no platforms
+                        int platCount = goingUp ? step : (levels - 1 - step);
+                        for (int p = 0; p < platCount; p++)
                             plan.Add((rampTileX, rampTileY, baseZ + p, platformPrefab, "south"));
 
-                        // place stair on top
-                        plan.Add((rampTileX, rampTileY, baseZ + step, stairsPrefab, OrientNames[rampOrient]));
+                        // place stair on top of platforms
+                        plan.Add((rampTileX, rampTileY, baseZ + platCount, stairsPrefab, OrientNames[rampOrient]));
                     }
 
                     if (!goingUp)

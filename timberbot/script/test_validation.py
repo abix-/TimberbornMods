@@ -924,9 +924,11 @@ class TestRunner:
     def test_path_1z(self):
         print("\n=== path routing: 1 z-level ===\n")
         # east of gear workshop: z=2->3 diagonal boundary
-        # each test uses its own row, no overlap
         self._path_place_and_check("1z east", 152, 133, 158, 133, expect_stairs=True)  # z change at x=155->156
         self._path_place_and_check("1z west", 158, 137, 150, 137, expect_stairs=True)  # z change at x=154->153
+        # south of barrack: z=3->4 at y=150->151
+        self._path_place_and_check("1z north", 153, 148, 153, 153, expect_stairs=True)  # z change at y=150->151
+        self._path_place_and_check("1z south", 154, 153, 154, 148, expect_stairs=True)  # z change at y=151->150
 
     def test_path_2z(self):
         print("\n=== path routing: 2 z-level ===\n")
