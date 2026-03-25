@@ -8,11 +8,14 @@ Push notifications for game events. Instead of polling, the mod sends HTTP POST 
 ```json
 {
   "webhooksEnabled": true,
-  "webhookBatchMs": 200
+  "webhookBatchMs": 200,
+  "webhookCircuitBreaker": 30
 }
 ```
 
 `webhookBatchMs` controls the batching window in milliseconds. Events accumulate and flush in a single POST per webhook. Default 200ms. Set to 0 for immediate dispatch (no batching).
+
+`webhookCircuitBreaker` controls how many consecutive delivery failures before a webhook is automatically disabled. Default 30.
 
 2. Register a webhook:
 ```bash
@@ -109,7 +112,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 | `district.connections.changed` | path connections between districts changed |
 | `migration.district.changed` | migration district selection changed |
 
-### Needs/Wellbeing (4)
+### Needs/Wellbeing (5)
 
 | Event | Fires when |
 |---|---|
@@ -119,7 +122,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 | `status.alert` | status alert added |
 | `status.dynamic.alert` | dynamic status alert added |
 
-### Trees/Crops (6)
+### Trees/Crops (8)
 
 | Event | Fires when |
 |---|---|
@@ -149,7 +152,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 | `power.generator.added` | generator added to network |
 | `power.generator.updated` | generator output changed |
 
-### Game State (7)
+### Game State (8)
 
 | Event | Fires when |
 |---|---|
@@ -176,7 +179,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 | `terrain.destroyed` | terrain destroyed |
 | `wind.changed` | wind direction/speed changed |
 
-### Misc (3)
+### Misc (5)
 
 | Event | Fires when |
 |---|---|
@@ -202,7 +205,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 
 ## Circuit breaker
 
-After 5 consecutive delivery failures, a webhook is automatically disabled. Check status via `GET /api/webhooks` -- disabled webhooks show `"disabled": true` and `"failures": 5`. Re-register to reset.
+After 30 consecutive delivery failures (configurable via `webhookCircuitBreaker`), a webhook is automatically disabled. Check status via `GET /api/webhooks` -- disabled webhooks show `"disabled": true` and `"failures": 30`. Re-register to reset.
 
 ## Architecture
 
@@ -211,5 +214,5 @@ After 5 consecutive delivery failures, a webhook is automatically disabled. Chec
 - `FlushWebhooks()` runs every `webhookBatchMs` from `UpdateSingleton` on main thread
 - Each flush sends ONE batched POST per webhook on background `ThreadPool`
 - Static `HttpClient` with 5s timeout
-- Circuit breaker: 5 consecutive failures disables the webhook
+- Circuit breaker: 30 consecutive failures disables the webhook (configurable)
 - Subscribers filter by event name (null = all events)
