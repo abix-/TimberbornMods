@@ -8,15 +8,17 @@ Goal: allocate once at game load, reuse forever. The only per-request allocation
 
 ```
 Game loads
-  -> allocate DoubleBuffer x3, JwWriter, Dictionaries, Lists
+  -> allocate TimberbotDoubleBuffer x3, TimberbotJw, Dictionaries, Lists
   -> done allocating
 
 Every 1 second (main thread)
-  -> read properties into existing objects (zero alloc)
+  -> read building/beaver/tree properties into existing objects (zero alloc)
+  -> refresh district population + resources into CachedDistrict list
   -> swap buffer pointers (zero alloc)
 
 Every HTTP request (background thread)
-  -> write into existing StringBuilder (zero alloc)
+  -> read from cached buffers (zero alloc)
+  -> write into existing StringBuilder via TimberbotJw (zero alloc)
   -> ToString() to create response string (1 alloc, unavoidable)
 ```
 
@@ -73,7 +75,7 @@ This is the only code that runs every frame-ish on the main thread. Everything h
 | `jw.Key().Int().Str().Bool()` | Appends to existing SB |
 | `jw.Float()` | Zero-alloc digit writing (no ToString) |
 | `jw.OpenObj().CloseObj()` | Appends `{` `}` to existing SB |
-| JwWriter auto-separator commas | `_hasValue` flag, no string alloc |
+| TimberbotJw auto-separator commas | `_hasValue` flag, no string alloc |
 
 ### Accepted allocations
 
@@ -90,7 +92,7 @@ This is the only code that runs every frame-ish on the main thread. Everything h
 |---|---|---|
 | `Formatting.Indented` whitespace | Removed -- compact JSON | ~30% smaller responses |
 | `Encoding.UTF8.GetBytes(json)` byte array | StreamWriter writes directly to output stream | 1 byte[] alloc eliminated per response |
-| `Float(v).ToString(fmt)` per float field | Zero-alloc digit writing in JwWriter | ~20 string allocs per buildings/summary request |
+| `Float(v).ToString(fmt)` per float field | Zero-alloc digit writing in TimberbotJw | ~20 string allocs per buildings/summary request |
 
 ## Webhooks (main thread, only with subscribers)
 
@@ -102,11 +104,12 @@ Every `[OnEvent]` handler checks `_webhooks.Count > 0` before doing anything. Ze
 
 | What | Count | When | Why accepted |
 |---|---|---|---|
-| `new { ... }` anonymous object per event | 1 per event | EventBus fires | ~40 bytes. Only with subscribers |
-| `JsonConvert.SerializeObject` per event | 1 per event | PushEvent | ~200 byte string. Main thread |
+| `TimberbotJw` payload string | 1 per event | PushEvent | ~200 byte string via `_jw.ToString()`. No Newtonsoft, no anonymous objects |
 | `_webhookSb.Clear()` per flush | 0 alloc | Every 200ms | Reuses field-level SB |
 | `sb.ToString()` per flush per webhook | 1 | Every 200ms | Unavoidable |
 | `new StringContent()` per flush | 1 | Every 200ms | On ThreadPool, off main thread |
+
+Previously: each event allocated an anonymous `new { ... }` object (~40 bytes) + `JsonConvert.SerializeObject` (Newtonsoft reflection). Now: `TimberbotJw` writes directly to pre-allocated StringBuilder. Zero anonymous objects, zero Newtonsoft on the hot path.
 
 Batching (200ms window) means high-frequency events like `block.set` (hundreds/sec during construction) produce only ONE ThreadPool dispatch per webhook per flush.
 
@@ -153,5 +156,5 @@ This is the only known allocation remaining on the hot path. All other items res
 | RefreshCachedState | 1Hz | **0** (confirmed by 10K benchmark) | **A+** |
 | HTTP GET response | On demand | 1 (ToString) + ~5 small | **A-** |
 | Webhook (no subscribers) | N/A | 0 | **A+** |
-| Webhook (with subscribers) | 5Hz flush | ~10-50 depending on event rate | **B** |
+| Webhook (with subscribers) | 5Hz flush | ~5-20 (TimberbotJw strings only) | **A-** |
 | Entity lifecycle | Rare | N per entity | **A** (expected) |

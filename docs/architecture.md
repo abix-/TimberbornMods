@@ -91,15 +91,21 @@ CachedBeaver {
   // mutable reference type (SEPARATE instance per buffer!)
   Needs (List<CachedNeed>)
 }
+
+CachedDistrict {
+  Name, Adults, Children, Bots
+  Resources (Dict<string, int>) -- goodId -> availableStock
+  // not double-buffered (tiny list, 1-3 items, refreshed in place)
+}
 ```
 
 ## Serialization
 
-All endpoints use a single shared `JwWriter` instance -- fluent zero-alloc JSON writer with depth-aware auto-separator handling. Allocated once (300KB), `Reset()` per request. Serial on the listener thread, never concurrent.
+All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with depth-aware auto-separator handling. Allocated once (300KB), `Reset()` per request. Serial on the listener thread, never concurrent.
 
 ```csharp
 // single shared instance
-private readonly JwWriter _jw = new JwWriter(300000);
+private readonly TimberbotJw _jw = new TimberbotJw(300000);
 
 // usage -- auto-commas, nesting-aware, fluent chaining
 var jw = _jw.Reset().OpenArr();

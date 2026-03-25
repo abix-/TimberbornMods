@@ -55,10 +55,7 @@ All endpoints use cached class indexes, double-buffered reads on background thre
 
 ### Optimization gaps
 
-| Endpoint | What it does | Frequency | Notes |
-|---|---|---|---|
-| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes, N/A to optimize |
-| `CollectSummary` (districts) | District resource counts | every bot turn | iterates district centers live, partially cached |
+None. All GET endpoints read entirely from cached double buffers. Zero live `GetComponent` calls on the HTTP thread.
 
 ## Serialization
 
