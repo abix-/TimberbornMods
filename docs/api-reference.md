@@ -1576,7 +1576,15 @@ List all registered webhooks.
 **CLI:** `python timberbot.py list_webhooks`
 
 ```json
-[{"Id": "wh_1", "Url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"]}]
+[{"Id": "wh_1", "Url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"], "Disabled": false, "failures": 0}]
+```
+
+Webhooks deliver batched JSON arrays (one POST per flush, default every 200ms):
+```json
+[
+  {"event": "drought.start", "day": 45, "timestamp": 1711300000, "data": {"duration": 8}},
+  {"event": "beaver.died", "day": 45, "timestamp": 1711300000, "data": null}
+]
 ```
 
 ---

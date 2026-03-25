@@ -65,6 +65,8 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
   "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": false,
   "webhooksEnabled": true,
+  "webhookBatchMs": 200,
+  "webhookCircuitBreaker": 30,
   "httpPort": 8085
 }
 [/code]
