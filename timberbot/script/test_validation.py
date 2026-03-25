@@ -193,11 +193,11 @@ class TestRunner:
 
     def find_building(self, name):
         """find first building matching name, return id"""
-        buildings = self.bot._get("/api/buildings")
-        if isinstance(buildings, list):
-            for b in buildings:
-                if name.lower() in str(b.get("name", "")).lower():
-                    return b.get("id")
+        raw = self.bot._get("/api/buildings", params={"limit": 0})
+        buildings = raw if isinstance(raw, list) else raw.get("items", []) if isinstance(raw, dict) else []
+        for b in buildings:
+            if isinstance(b, dict) and name.lower() in str(b.get("name", "")).lower():
+                return b.get("id")
         return None
 
     def run(self):
@@ -748,12 +748,12 @@ class TestRunner:
 
         # cleanup: demolish placed paths
         for t in paths:
-            buildings = self.bot._get("/api/buildings")
-            if isinstance(buildings, list):
-                for b in buildings:
-                    if b.get("x") == t["x"] and b.get("y") == t["y"] and "Path" in str(b.get("name", "")):
-                        self.bot.demolish_building(b["id"])
-                        break
+            raw = self.bot._get("/api/buildings", params={"limit": 0})
+            buildings = raw if isinstance(raw, list) else raw.get("items", []) if isinstance(raw, dict) else []
+            for b in buildings:
+                if isinstance(b, dict) and b.get("x") == t["x"] and b.get("y") == t["y"] and "Path" in str(b.get("name", "")):
+                    self.bot.demolish_building(b["id"])
+                    break
 
         # non-straight path rejected
         result2 = self.bot.place_path(100, 100, 105, 105)
@@ -1392,8 +1392,9 @@ class TestRunner:
 
     def test_bot_data(self):
         """Test bot-specific fields in beavers endpoint."""
-        beavers = self.bot._get("/api/beavers", params={"detail": "full"})
-        bots = [b for b in beavers if b.get("isBot")]
+        raw = self.bot._get("/api/beavers", params={"detail": "full", "limit": 0})
+        beavers = raw if isinstance(raw, list) else raw.get("items", raw) if isinstance(raw, dict) else []
+        bots = [b for b in beavers if isinstance(b, dict) and b.get("isBot")]
         if not bots:
             self.skip("bot_data", "no bots in colony")
             return
