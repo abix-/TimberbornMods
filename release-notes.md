@@ -11,4 +11,7 @@
 - [fix] top dashboard crash when district resources are dicts
 - [fix] top dashboard crash when district resources default to 0
 - [fix] map renderer: handle occupants list (multiple z-level stacking)
+- [fix] place_path counting: paths/stairs were miscounted due to reflection on JSON strings
+- [breaking] place_building errors: simplified to {error, x?, y?, z?} -- no longer includes prefab, scienceCost, currentPoints
+- [internal] PlaceBuilding returns struct instead of JSON string, ToJson at HTTP boundary
 - [internal] Removed CHANGELOG.md -- GitHub releases are the single source

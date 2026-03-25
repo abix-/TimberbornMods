@@ -997,13 +997,13 @@ Unlock a building using science points. Matches the exact UI flow (cost deductio
 #### Response (error -- insufficient points)
 
 ```json
-{"error": "not enough science", "building": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
+{"error": "insufficient_science", "building": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
 ```
 
 #### Response (error -- not found)
 
 ```json
-{"error": "building not found in toolbar", "building": "BadName"}
+{"error": "not_found", "building": "BadName"}
 ```
 
 ---
@@ -1116,23 +1116,15 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 #### Response (error)
 
 ```json
-{"error": "unknown prefab", "prefab": "BadName"}
+{"error": "not_found", "x": 120, "y": 130, "z": 2}
 ```
 
 ```json
-{"error": "building not unlocked", "prefab": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
+{"error": "not_unlocked", "x": 120, "y": 130, "z": 2}
 ```
 
 ```json
-{"error": "tile (121,131,2) already occupied", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
-```
-
-```json
-{"error": "tile (120,130) is water", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
-```
-
-```json
-{"error": "terrain too low at (120,130): height 1 < 2", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
+{"error": "invalid_param: cannot place at (120, 130, 2)", "x": 120, "y": 130, "z": 2}
 ```
 
 ---
