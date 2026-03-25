@@ -127,10 +127,17 @@ namespace Timberbot
 
         private static readonly int[] SpeedScale = TimberbotRead.SpeedScale;
 
+        // Tile data for a rectangular region. Returns terrain height, water depth,
+        // badwater contamination, occupants (with vertical stacking), soil moisture,
+        // and soil contamination per tile.
+        //
+        // Why is this in Write (not Read)? It accesses _waterMap and _soilMoistureService
+        // which are live game services, not cached data. These services are only safe to
+        // call from the main thread. The POST routing ensures this runs on main thread.
         public object CollectTiles(int x1, int y1, int x2, int y2)
         {
             var size = _terrainService.Size;
-            var stride = _mapIndexService.VerticalStride;
+            var stride = _mapIndexService.VerticalStride; // used for 3D water column indexing
 
             // default to full map if no region specified
             if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)

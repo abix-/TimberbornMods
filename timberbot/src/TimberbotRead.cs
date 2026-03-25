@@ -80,8 +80,14 @@ namespace Timberbot
 
         // PERF: uses typed indexes instead of scanning all entities.
         // Three passes over subsets (buildings, natural resources, beavers) instead of one pass over everything.
+        // The summary endpoint is the most-called endpoint. AI bots call it every turn
+        // to get a complete colony snapshot in one request. It aggregates data from all
+        // three cached indexes (buildings, natural resources, beavers) plus district data.
+        //
+        // Everything here reads from cached data -- zero Unity calls, zero main thread cost.
         public object CollectSummary(string format = "toon")
         {
+            // --- aggregate counters (built from cached data) ---
             int treeMarkedGrown = 0, treeMarkedSeedling = 0, treeUnmarkedGrown = 0;
             int cropReady = 0, cropGrowing = 0;
             int occupiedBeds = 0, totalBeds = 0;
@@ -91,48 +97,58 @@ namespace Timberbot
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
             int miserable = 0, critical = 0;
 
-            // natural resources: split into trees vs crops
+            // --- TREES vs CROPS ---
+            // Both are "natural resources" in the game. We split them by name to give
+            // separate counts. Trees are tracked by marked/unmarked/grown status (for
+            // the lumberjack). Crops by ready/growing (for food planning).
             var _cropNames = new System.Collections.Generic.HashSet<string>
                 { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
             foreach (var c in _cache.NaturalResources.Read)
             {
-                if (c.Cuttable == null) continue;
-                if (!c.Alive) continue;
+                if (c.Cuttable == null) continue; // skip non-cuttable resources
+                if (!c.Alive) continue;            // dead stumps don't count
                 if (_cropNames.Contains(c.Name))
                 {
-                    if (c.Grown) cropReady++;
-                    else cropGrowing++;
+                    if (c.Grown) cropReady++;      // harvestable now
+                    else cropGrowing++;            // still growing
                 }
                 else
                 {
+                    // trees: markedGrown = ready to chop, markedSeedling = marked but too young
                     if (c.Marked && c.Grown) treeMarkedGrown++;
                     else if (c.Marked && !c.Grown) treeMarkedSeedling++;
                     else if (!c.Marked && c.Grown) treeUnmarkedGrown++;
                 }
             }
 
-            // buildings (read cached primitives only -- zero Unity calls)
+            // --- BUILDINGS ---
+            // Aggregate housing, employment, and alert data from cached building state.
+            // All fields were snapshotted in RefreshCachedState -- we just sum them here.
             foreach (var c in _cache.Buildings.Read)
             {
-                if (c.Dwelling != null)
+                if (c.Dwelling != null) // housing (barracks, rowhouses, lodges)
                 {
                     occupiedBeds += c.Dwellers;
                     totalBeds += c.MaxDwellers;
                 }
-                if (c.Workplace != null)
+                if (c.Workplace != null) // any building with workers
                 {
                     assignedWorkers += c.AssignedWorkers;
                     totalVacancies += c.DesiredWorkers;
+                    // unstaffed = wants workers but doesn't have enough
                     if (c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
                         alertUnstaffed++;
                 }
+                // unpowered = consumes power but isn't getting any
                 if (c.IsConsumer && !c.Powered)
                     alertUnpowered++;
                 if (c.Unreachable)
                     alertUnreachable++;
             }
 
-            // beavers: cached wellbeing + critical needs
+            // --- BEAVERS ---
+            // miserable = wellbeing below 4 (struggling, may die soon)
+            // critical = any need below warning threshold (immediate danger)
             foreach (var c in _cache.Beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
@@ -140,11 +156,14 @@ namespace Timberbot
                 if (c.Wellbeing < 4) miserable++;
                 if (c.AnyCritical) critical++;
             }
-            // count adults only (children can't work, shouldn't count as idle haulers)
+
+            // --- DERIVED STATS ---
             int totalAdults = 0;
             foreach (var dc in _cache.Districts)
                 totalAdults += dc.Adults;
+            // homeless = beavers with no bed (children count, adults count)
             int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
+            // unemployed = adults not assigned to any workplace (available for hauling)
             int unemployed = System.Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
 
@@ -211,12 +230,14 @@ namespace Timberbot
                 }
             }
 
-            // resource projection
+            // Resource projection: how many days of each resource at current consumption.
+            // Beavers eat ~1 food/day and drink ~2 water/day. These projections help
+            // the AI decide when to build more farms/pumps/tanks before a drought.
             int totalPop = beaverCount;
             if (totalPop > 0)
             {
                 jw.Key("foodDays").Float((float)((double)totalFood / totalPop), "F1");
-                jw.Key("waterDays").Float((float)((double)totalWater / (totalPop * 2.0)), "F1");
+                jw.Key("waterDays").Float((float)((double)totalWater / (totalPop * 2.0)), "F1"); // 2x because beavers drink twice/day
                 jw.Key("logDays").Float((float)((double)logStock / totalPop), "F1");
                 jw.Key("plankDays").Float((float)((double)plankStock / totalPop), "F1");
                 jw.Key("gearDays").Float((float)((double)gearStock / totalPop), "F1");
@@ -432,9 +453,16 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // PERF: StringBuilder serialization for buildings. Zero Dictionary alloc.
+        // List all buildings. Three modes:
+        //   "basic" (default) -- compact: id, name, coords, finished, paused, priority, workers
+        //   "full" -- all fields: inventory, recipes, power, floodgate, effect radius, etc
+        //   "id:N" -- single building with full detail (for inspecting one building)
+        //
+        // Uses JwWriter to build JSON directly in a pre-allocated StringBuilder.
+        // No Newtonsoft, no Dictionary, no anonymous objects. Just string appends.
         public object CollectBuildings(string format = "toon", string detail = "basic")
         {
+            // parse "id:-12345" to filter to a single building
             int? singleId = null;
             if (detail != null && detail.StartsWith("id:"))
             {
@@ -449,6 +477,7 @@ namespace Timberbot
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
 
+                // every building gets these base fields
                 jw.OpenObj()
                     .Key("id").Int(c.Id)
                     .Key("name").Str(c.Name)
@@ -457,6 +486,7 @@ namespace Timberbot
                     .Key("finished").Bool(c.Finished)
                     .Key("paused").Bool(c.Paused);
 
+                // basic mode: just priority + workers, then close
                 if (!fullDetail)
                 {
                     jw.Key("priority").Str(c.ConstructionPriority ?? "")
@@ -465,7 +495,7 @@ namespace Timberbot
                     continue;
                 }
 
-                // full detail
+                // full detail: conditional fields (only present if building has that component)
                 if (c.Pausable != null) jw.Key("pausable").Bool(true);
                 if (c.HasFloodgate) jw.Key("floodgate").Bool(true).Key("height").Float(c.FloodgateHeight, "F1").Key("maxHeight").Float(c.FloodgateMaxHeight, "F1");
                 if (c.ConstructionPriority != null) jw.Key("constructionPriority").Str(c.ConstructionPriority);
@@ -648,16 +678,23 @@ namespace Timberbot
 
         private struct PowerNetwork { public int Id, Supply, Demand; public List<int> BuildingIndices; }
 
+        // Power networks: groups of buildings connected by adjacent power-conducting buildings.
+        // In Timberborn, power transfers through ADJACENT buildings only (paths don't conduct).
+        // Each building on a power network shares the same Graph object in the game engine.
+        // We use the Graph's hash code (cached as PowerNetworkId) to group buildings by network.
+        //
+        // Supply = total generator output, Demand = total consumer input.
+        // If demand > supply, buildings brownout (cycle power between consumers).
         public object CollectPowerNetworks()
         {
-            // group buildings by power network using cached PowerNetworkId
+            // pass 1: group buildings by their power network ID
             var networks = new Dictionary<int, PowerNetwork>();
             var buildings = _cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
                 if (c.PowerNode == null || c.PowerNetworkId == 0) continue;
-                int netId = c.PowerNetworkId;
+                int netId = c.PowerNetworkId; // RuntimeHelpers.GetHashCode of the Graph object
                 if (!networks.ContainsKey(netId))
                     networks[netId] = new PowerNetwork { Id = netId, Supply = c.PowerSupply, Demand = c.PowerDemand, BuildingIndices = new List<int>() };
                 networks[netId].BuildingIndices.Add(i);
