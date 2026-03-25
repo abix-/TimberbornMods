@@ -2069,26 +2069,81 @@ class TestRunner:
         errs = validate(prefabs, [{"name": str}])
         self.check("schema: prefabs (json)", len(errs) == 0, "; ".join(errs[:5]))
 
+        gatherables = jbot.gatherables()
+        errs = validate(gatherables, [{"id": int, "name": str, "x": int, "y": int, "z": int, "alive": bool}])
+        self.check("schema: gatherables (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        crops = jbot.crops()
+        errs = validate(crops, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                                  "marked": bool, "alive": bool, "grown": bool, "growth": float}])
+        self.check("schema: crops (json)", len(errs) == 0, "; ".join(errs[:5]))
+
         power = jbot.power()
-        errs = validate(power, [{"id": int, "supply": int, "demand": int, "buildings": list}])
+        errs = validate(power, [{"id": int, "supply": int, "demand": int,
+                                  "buildings": [{"name": str, "id": int, "isGenerator": bool,
+                                                 "nominalOutput": int, "nominalInput": int}]}])
         self.check("schema: power (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         districts = jbot.districts()
-        errs = validate(districts, [{"name": str, "population": {"adults": int}}])
+        errs = validate(districts, [{"name": str, "population": {"adults": int, "children": int, "bots": int},
+                                     "resources": dict}])
         self.check("schema: districts (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         resources = jbot.resources()
-        self.check("schema: resources (json)", isinstance(resources, (list, dict)), f"got {type(resources).__name__}")
+        self.check("schema: resources (json)", isinstance(resources, dict), f"got {type(resources).__name__}")
+        if isinstance(resources, dict):
+            # nested: {"District 1": {"Water": {"available": N, "all": N}}}
+            for dname, goods in resources.items():
+                if isinstance(goods, dict):
+                    for gname, val in goods.items():
+                        errs = validate(val, {"available": int, "all": int})
+                        if errs:
+                            self.check(f"schema: resources.{dname}.{gname}", False, "; ".join(errs[:3]))
+                            break
+                    else:
+                        continue
+                    break
+            else:
+                self.check("schema: resources nested (json)", True, "")
 
         population = jbot.population()
-        errs = validate(population, [{"district": str, "adults": int}])
+        errs = validate(population, [{"district": str, "adults": int, "children": int, "bots": int}])
         self.check("schema: population (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         alerts = jbot.alerts()
         self.check("schema: alerts (json)", isinstance(alerts, list), f"got {type(alerts).__name__}")
+        if isinstance(alerts, list) and alerts:
+            errs = validate(alerts, [{"type": str, "id": int, "name": str}])
+            self.check("schema: alerts[] (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         wellbeing = jbot.wellbeing()
-        self.check("schema: wellbeing (json)", isinstance(wellbeing, (dict, str)), f"got {type(wellbeing).__name__}")
+        errs = validate(wellbeing, {"beavers": int, "categories": list})
+        self.check("schema: wellbeing (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        notifications = jbot.notifications()
+        errs = validate(notifications, [{"subject": str, "description": str, "cycle": int, "cycleDay": int}])
+        self.check("schema: notifications (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        distribution = jbot.distribution()
+        errs = validate(distribution, [{"district": str, "goods": list}])
+        self.check("schema: distribution (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tree_clusters = jbot.tree_clusters()
+        errs = validate(tree_clusters, [{"x": int, "y": int, "z": int, "grown": int, "total": int}])
+        self.check("schema: tree_clusters (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tiles = jbot.tiles(self.center_x, self.center_y, self.center_x + 3, self.center_y + 3)
+        errs = validate(tiles, {"mapSize": dict, "region": dict, "tiles": [{"x": int, "y": int, "terrain": int}]})
+        self.check("schema: tiles (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        fp = jbot.find_placement("Path", self.center_x, self.center_y, self.center_x + 5, self.center_y + 5)
+        errs = validate(fp, {"prefab": str, "sizeX": int, "sizeY": int, "placements": list})
+        self.check("schema: find_placement (json)", len(errs) == 0, "; ".join(errs[:5]))
+        if isinstance(fp, dict) and fp.get("placements"):
+            errs = validate(fp["placements"], [{"x": int, "y": int, "z": int, "orientation": str,
+                                                 "pathAccess": bool, "pathCount": int, "reachable": bool,
+                                                 "nearPower": bool, "flooded": bool}])
+            self.check("schema: placement[] (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         webhooks = jbot.list_webhooks()
         self.check("schema: webhooks (json)", isinstance(webhooks, list), f"got {type(webhooks).__name__}")
@@ -2116,6 +2171,15 @@ class TestRunner:
         errs = validate(tt, [{"id": int, "name": str, "x": int, "y": int, "z": int,
                               "marked": bool, "alive": bool, "grown": bool, "growth": float}])
         self.check("schema: trees (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tc = tbot.crops()
+        errs = validate(tc, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                              "marked": bool, "alive": bool, "grown": bool, "growth": float}])
+        self.check("schema: crops (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tg = tbot.gatherables()
+        errs = validate(tg, [{"id": int, "name": str, "x": int, "y": int, "z": int, "alive": bool}])
+        self.check("schema: gatherables (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         tbv = tbot.beavers()
         errs = validate(tbv, [{"id": int, "name": str, "x": int, "y": int, "z": int,
