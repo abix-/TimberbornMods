@@ -6,15 +6,30 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 
 ## [Unreleased]
 
+### Architecture
+- Extract 8 classes from god object ([`8e0c841`][8e0c841], [`63655ec`][63655ec], [`6caf19c`][6caf19c], [`558b156`][558b156], [`55e7501`][55e7501], [`67904d6`][67904d6])
+- TimberbotJw: fluent zero-alloc JSON writer ([`329d3ac`][329d3ac])
+- TimberbotLog: file-based error logging ([`a73cf1a`][a73cf1a])
+- Zero-alloc hot path confirmed ([`8b191b2`][8b191b2])
+- Cached classes (struct to class, eliminate 144K field copies/sec) ([`13da06a`][13da06a])
+- District population/resources cached in RefreshCachedState ([`e50c432`][e50c432])
+- Faction detection via `FactionService.Current.Id` ([`9d29f3e`][9d29f3e])
+
 ### Features
+- 68 webhook push events with 200ms batching and circuit breaker ([`ff4fb12`][ff4fb12], [`a9d5fcb`][a9d5fcb], [`f47484e`][f47484e])
+- Separate `/api/trees` and `/api/crops` endpoints ([`c25de95`][c25de95])
+- `/api/benchmark` endpoint ([`c24c4b5`][c24c4b5])
+- Live `top` dashboard ([`cfec1a5`][cfec1a5])
+- Flood validation in `find_placement` ([`04feca0`][04feca0])
 - Server-side pagination on list endpoints ([`dea094e`][dea094e])
 - Server-side name and proximity filtering ([`7c7fb80`][7c7fb80])
 - Structured error codes: snake_case `error` values with optional `detail` ([`05b5a0d`][05b5a0d])
 - RoutePath validates stairs/platform unlock before placing ([`668a44b`][668a44b])
 
+### Fixes
+- JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
+
 ### Internal
-- Faction detection via `FactionService.Current.Id` ([`9d29f3e`][9d29f3e])
-- District population/resources cached in RefreshCachedState ([`e50c432`][e50c432])
 - TimberbotJw `Result()`/`Error()` one-call builders ([`f97f8d8`][f97f8d8])
 - `BeginArr`/`BeginObj`/`End` shortcuts, migrate 45 builders ([`0938b0c`][0938b0c])
 - Migrate 200+ calls to Prop/Obj/Arr/RawProp ([`1fa9cd1`][1fa9cd1])
@@ -32,75 +47,73 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 [1fa9cd1]: https://github.com/abix-/TimberbornMods/commit/1fa9cd1
 [f7990b9]: https://github.com/abix-/TimberbornMods/commit/f7990b9
 [b81e951]: https://github.com/abix-/TimberbornMods/commit/b81e951
-
-## [v0.6.0] (2026-03-24)
-
-Major performance overhaul. All GET requests now served on a background thread with zero main-thread cost.
-
-### Architecture
-- Event-driven entity indexes via EventBus ([`63655ec`][63655ec])
-- Double-buffered cached classes for thread-safe reads ([`13da06a`][13da06a])
-- All GETs on background listener thread ([`6caf19c`][6caf19c])
-- Extract 8 classes from god object ([`8e0c841`][8e0c841], [`67904d6`][67904d6], [`6caf19c`][6caf19c], [`558b156`][558b156], [`55e7501`][55e7501])
-- TimberbotJw: fluent zero-alloc JSON writer ([`329d3ac`][329d3ac])
-- TimberbotLog: file-based error logging ([`a73cf1a`][a73cf1a])
-- Zero-alloc hot path confirmed ([`8b191b2`][8b191b2])
-
-### Features
-- 68 webhook push events with 200ms batching and circuit breaker ([`ff4fb12`][ff4fb12], [`a9d5fcb`][a9d5fcb], [`f47484e`][f47484e])
-- Separate `/api/trees` and `/api/crops` endpoints ([`c25de95`][c25de95])
-- `detail` param on buildings and beavers ([`79ccde1`][79ccde1])
-- `effectRadius` on ranged effect buildings ([`79ccde1`][79ccde1])
-- Per-good inventory breakdown on buildings ([`c55ed30`][c55ed30])
-- `liftingCapacity` on beavers ([`c55ed30`][c55ed30])
-- `/api/benchmark` endpoint ([`c24c4b5`][c24c4b5])
-- Live `top` dashboard ([`cfec1a5`][cfec1a5])
-- Flood validation in `find_placement` ([`04feca0`][04feca0])
-- Resource projection: logDays, plankDays, gearDays ([`f0a3ccf`][f0a3ccf])
-- Carried goods, bot durability on beavers ([`79ccde1`][79ccde1])
-- Power networks, beaver position, district, map stacking ([`79ccde1`][79ccde1])
-- `manager` command: auto-manage haulers by pausing low-priority buildings ([`15f5bcc`][15f5bcc])
-- Cadenced cache refresh with `settings.json` config ([`17469fa`][17469fa])
-
-### Fixes
-- Pause/unpause uses game methods for proper UI icon ([`57e7323`][57e7323])
-- Unemployed count uses adults only (children can't work) ([`f8b8bd2`][f8b8bd2])
-- Double-buffer race condition on entity add/remove ([`f9a3ffe`][f9a3ffe])
-- JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
-- Shared reference-type fields between buffers ([`e781c3e`][e781c3e])
-
-### Tests
-- 247 integration tests, 2000/2000 reliability
-
-[v0.6.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.6.0
-[63655ec]: https://github.com/abix-/TimberbornMods/commit/63655ec
-[13da06a]: https://github.com/abix-/TimberbornMods/commit/13da06a
-[6caf19c]: https://github.com/abix-/TimberbornMods/commit/6caf19c
 [8e0c841]: https://github.com/abix-/TimberbornMods/commit/8e0c841
-[67904d6]: https://github.com/abix-/TimberbornMods/commit/67904d6
+[63655ec]: https://github.com/abix-/TimberbornMods/commit/63655ec
+[6caf19c]: https://github.com/abix-/TimberbornMods/commit/6caf19c
 [558b156]: https://github.com/abix-/TimberbornMods/commit/558b156
 [55e7501]: https://github.com/abix-/TimberbornMods/commit/55e7501
+[67904d6]: https://github.com/abix-/TimberbornMods/commit/67904d6
 [329d3ac]: https://github.com/abix-/TimberbornMods/commit/329d3ac
 [a73cf1a]: https://github.com/abix-/TimberbornMods/commit/a73cf1a
 [8b191b2]: https://github.com/abix-/TimberbornMods/commit/8b191b2
+[13da06a]: https://github.com/abix-/TimberbornMods/commit/13da06a
 [ff4fb12]: https://github.com/abix-/TimberbornMods/commit/ff4fb12
 [a9d5fcb]: https://github.com/abix-/TimberbornMods/commit/a9d5fcb
 [f47484e]: https://github.com/abix-/TimberbornMods/commit/f47484e
 [c25de95]: https://github.com/abix-/TimberbornMods/commit/c25de95
-[79ccde1]: https://github.com/abix-/TimberbornMods/commit/79ccde1
-[c55ed30]: https://github.com/abix-/TimberbornMods/commit/c55ed30
 [c24c4b5]: https://github.com/abix-/TimberbornMods/commit/c24c4b5
 [cfec1a5]: https://github.com/abix-/TimberbornMods/commit/cfec1a5
 [04feca0]: https://github.com/abix-/TimberbornMods/commit/04feca0
-[f0a3ccf]: https://github.com/abix-/TimberbornMods/commit/f0a3ccf
-[57e7323]: https://github.com/abix-/TimberbornMods/commit/57e7323
-[f9a3ffe]: https://github.com/abix-/TimberbornMods/commit/f9a3ffe
 [38597be]: https://github.com/abix-/TimberbornMods/commit/38597be
 [e65f7ed]: https://github.com/abix-/TimberbornMods/commit/e65f7ed
-[15f5bcc]: https://github.com/abix-/TimberbornMods/commit/15f5bcc
+
+## [v0.6.0] (2026-03-24)
+
+Performance overhaul. Double-buffered caching, background GET serving, zero main-thread cost for reads.
+
+### Architecture
+- Event-driven entity indexes via EventBus ([`22e1ef4`][22e1ef4])
+- Double-buffered indexes, background GET serving ([`0dea90b`][0dea90b])
+- All GETs on background listener thread ([`4582b96`][4582b96])
+- Cached component refs, eliminate GetComponent per request ([`a8bfc58`][a8bfc58])
+- Cached beavers with zero live GetComponent ([`cf64b52`][cf64b52])
+- Cadenced cache refresh with `settings.json` config ([`17469fa`][17469fa])
+- RefChanged helper, building coords to add-time ([`0a6ab2f`][0a6ab2f])
+- DoubleBuffer\<T\> generic, JsonWriter helper ([`daf384d`][daf384d])
+
+### Features
+- Carried goods, bot durability, power networks, beaver position, district, map stacking, detail modes ([`79ccde1`][79ccde1])
+- Resource projection: logDays, plankDays, gearDays ([`f0a3ccf`][f0a3ccf])
+- Per-good inventory, recipes, liftingCapacity on beavers ([`c55ed30`][c55ed30])
+- `manager` command: auto-manage haulers ([`15f5bcc`][15f5bcc])
+- Live `top` dashboard replaces `watch` ([`7a758bf`][7a758bf])
+
+### Fixes
+- Pause/unpause uses game methods for proper UI icon ([`57e7323`][57e7323])
+- Unemployed count uses adults only ([`f8b8bd2`][f8b8bd2])
+- Double-buffer race condition on entity add/remove ([`f9a3ffe`][f9a3ffe])
+- Shared reference-type fields between buffers ([`e781c3e`][e781c3e])
+- Map occupant checks for new array format ([`71b8ebf`][71b8ebf])
+
+[v0.6.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.6.0
+[22e1ef4]: https://github.com/abix-/TimberbornMods/commit/22e1ef4
+[0dea90b]: https://github.com/abix-/TimberbornMods/commit/0dea90b
+[4582b96]: https://github.com/abix-/TimberbornMods/commit/4582b96
+[a8bfc58]: https://github.com/abix-/TimberbornMods/commit/a8bfc58
+[cf64b52]: https://github.com/abix-/TimberbornMods/commit/cf64b52
 [17469fa]: https://github.com/abix-/TimberbornMods/commit/17469fa
+[0a6ab2f]: https://github.com/abix-/TimberbornMods/commit/0a6ab2f
+[daf384d]: https://github.com/abix-/TimberbornMods/commit/daf384d
+[79ccde1]: https://github.com/abix-/TimberbornMods/commit/79ccde1
+[f0a3ccf]: https://github.com/abix-/TimberbornMods/commit/f0a3ccf
+[c55ed30]: https://github.com/abix-/TimberbornMods/commit/c55ed30
+[15f5bcc]: https://github.com/abix-/TimberbornMods/commit/15f5bcc
+[7a758bf]: https://github.com/abix-/TimberbornMods/commit/7a758bf
+[57e7323]: https://github.com/abix-/TimberbornMods/commit/57e7323
 [f8b8bd2]: https://github.com/abix-/TimberbornMods/commit/f8b8bd2
+[f9a3ffe]: https://github.com/abix-/TimberbornMods/commit/f9a3ffe
 [e781c3e]: https://github.com/abix-/TimberbornMods/commit/e781c3e
+[71b8ebf]: https://github.com/abix-/TimberbornMods/commit/71b8ebf
 
 ## [v0.5.5] (2026-03-24)
 
