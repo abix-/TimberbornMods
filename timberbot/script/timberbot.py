@@ -528,14 +528,16 @@ class Timberbot:
         print("\n".join(lines))
         return {"rendered": True, "tiles": len(tiles)}
 
-    def find(self, source, name=None, x=None, y=None, radius=20):
-        """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity."""
-        items = getattr(self, source)()
+    def find(self, source, name=None, x=None, y=None, radius=20, limit=0):
+        """Find entities from a source (buildings/trees/gatherables/beavers). Filters server-side."""
+        params = {"limit": limit}
         if name:
-            items = self.named(items, name)
+            params["name"] = name
         if x is not None and y is not None:
-            items = self.near(items, x, y, radius)
-        return items
+            params["x"] = x
+            params["y"] = y
+            params["radius"] = radius
+        return self._get(f"/api/{source}", params=params)
 
 
 # ---------------------------------------------------------------------------

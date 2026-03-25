@@ -114,7 +114,24 @@ namespace Timberbot
         // Each returns an object serialized to JSON. The "format" param controls shape:
         //   toon: flat dicts/lists for tabular TOON display (default for CLI)
         //   json: full nested data for programmatic access (--json flag)
+        //
+        // Server-side filtering:
+        //   name: case-insensitive substring match on entity name
+        //   x, y, radius: Manhattan distance proximity filter
+        // Filters apply BEFORE pagination (limit/offset).
         // ================================================================
+
+        // Helper: check if an entity passes name and proximity filters.
+        // Returns false if the entity should be skipped.
+        private static bool PassesFilter(string entityName, int entityX, int entityY,
+            string filterName, int filterX, int filterY, int filterRadius)
+        {
+            if (filterName != null && entityName.IndexOf(filterName, System.StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+            if (filterRadius > 0 && (System.Math.Abs(entityX - filterX) + System.Math.Abs(entityY - filterY)) > filterRadius)
+                return false;
+            return true;
+        }
 
         // PERF: uses typed indexes instead of scanning all entities.
         // Three passes over subsets (buildings, natural resources, beavers) instead of one pass over everything.
@@ -541,7 +558,8 @@ namespace Timberbot
         // Server-side pagination: limit=100 default, limit=0 means unlimited.
         // When limit/offset are used, response wraps in {total, offset, limit, items:[...]}.
         // When unlimited (limit=0), returns flat array for backward compatibility.
-        public object CollectBuildings(string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
+        public object CollectBuildings(string format = "toon", string detail = "basic", int limit = 100, int offset = 0,
+            string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             // parse "id:-12345" to filter to a single building
             int? singleId = null;
@@ -551,8 +569,15 @@ namespace Timberbot
                     singleId = parsed;
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
+            bool hasFilter = filterName != null || filterRadius > 0;
             bool paginated = limit > 0 && !singleId.HasValue;
             int total = _cache.Buildings.Read.Count;
+            if (paginated && hasFilter)
+            {
+                total = 0;
+                foreach (var b in _cache.Buildings.Read)
+                    if (PassesFilter(b.Name, b.X, b.Y, filterName, filterX, filterY, filterRadius)) total++;
+            }
             int skipped = 0, emitted = 0;
 
             var jw = _cache.Jw.Reset();
@@ -561,6 +586,8 @@ namespace Timberbot
             foreach (var c in _cache.Buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
+                    continue;
+                if (hasFilter && !PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius))
                     continue;
                 if (offset > 0 && skipped < offset) { skipped++; continue; }
                 if (paginated && emitted >= limit) break;
@@ -648,15 +675,17 @@ namespace Timberbot
         // Shared implementation for trees and crops endpoints.
         // Filters the NaturalResources cache by species name (TreeSpecies or CropSpecies HashSet).
         // Using JwWriter instead of Newtonsoft: ~2ms for 3000 trees vs ~15ms with serialization.
-        private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species, int limit = 100, int offset = 0)
+        private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species, int limit = 100, int offset = 0,
+            string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             bool paginated = limit > 0;
+            bool hasFilter = filterName != null || filterRadius > 0;
             int skipped = 0, emitted = 0;
             // count matching items for total (needed for pagination metadata)
             int total = 0;
             if (paginated)
                 foreach (var c in _cache.NaturalResources.Read)
-                    if (c.Cuttable != null && species.Contains(c.Name)) total++;
+                    if (c.Cuttable != null && species.Contains(c.Name) && (!hasFilter || PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius))) total++;
 
             jw.Reset();
             if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
@@ -665,6 +694,7 @@ namespace Timberbot
             {
                 if (c.Cuttable == null) continue;
                 if (!species.Contains(c.Name)) continue;
+                if (hasFilter && !PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius)) continue;
                 if (offset > 0 && skipped < offset) { skipped++; continue; }
                 if (paginated && emitted >= limit) break;
                 emitted++;
@@ -683,16 +713,20 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        public object CollectTrees(int limit = 100, int offset = 0) => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies, limit, offset);
-        public object CollectCrops(int limit = 100, int offset = 0) => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies, limit, offset);
+        public object CollectTrees(int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+            => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
+        public object CollectCrops(int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+            => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
 
-        public object CollectGatherables(int limit = 100, int offset = 0)
+        public object CollectGatherables(int limit = 100, int offset = 0,
+            string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             bool paginated = limit > 0;
+            bool hasFilter = filterName != null || filterRadius > 0;
             int skipped = 0, emitted = 0, total = 0;
             if (paginated)
                 foreach (var c in _cache.NaturalResources.Read)
-                    if (c.Gatherable != null) total++;
+                    if (c.Gatherable != null && (!hasFilter || PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius))) total++;
 
             var jw = _cache.Jw.Reset();
             if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
@@ -700,6 +734,7 @@ namespace Timberbot
             foreach (var c in _cache.NaturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
+                if (hasFilter && !PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius)) continue;
                 if (offset > 0 && skipped < offset) { skipped++; continue; }
                 if (paginated && emitted >= limit) break;
                 emitted++;
@@ -720,7 +755,8 @@ namespace Timberbot
         // critical and unmet need summaries as "+"-separated strings for compact display.
         // Full mode includes all ~30 individual needs with points, wellbeing contribution,
         // favorable/critical flags, and need group (SocialLife, Fun, Nutrition, etc).
-        public object CollectBeavers(string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
+        public object CollectBeavers(string format = "toon", string detail = "basic", int limit = 100, int offset = 0,
+            string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             int? singleId = null;
             if (detail != null && detail.StartsWith("id:"))
@@ -729,8 +765,15 @@ namespace Timberbot
                     singleId = parsed;
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
+            bool hasFilter = filterName != null || filterRadius > 0;
             bool paginated = limit > 0 && !singleId.HasValue;
             int total = _cache.Beavers.Read.Count;
+            if (paginated && hasFilter)
+            {
+                total = 0;
+                foreach (var b in _cache.Beavers.Read)
+                    if (PassesFilter(b.Name, b.X, b.Y, filterName, filterX, filterY, filterRadius)) total++;
+            }
             int skipped = 0, emitted = 0;
 
             var jw = _cache.Jw.Reset();
@@ -739,6 +782,8 @@ namespace Timberbot
             foreach (var c in _cache.Beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
+                    continue;
+                if (hasFilter && !PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius))
                     continue;
                 if (offset > 0 && skipped < offset) { skipped++; continue; }
                 if (paginated && emitted >= limit) break;

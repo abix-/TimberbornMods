@@ -99,7 +99,7 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset);
+                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius);
                     Respond(req.Context, 200, data);
                 }
                 catch (Exception ex)
@@ -156,7 +156,7 @@ namespace Timberbot
                 {
                     try
                     {
-                        var data = RouteRequest(path, method, null, format, detail, limit, offset);
+                        var data = RouteRequest(path, method, null, format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -195,6 +195,10 @@ namespace Timberbot
                 detail = body?.Value<string>("detail") ?? detail;
                 if (body?["limit"] != null) limit = body.Value<int>("limit");
                 if (body?["offset"] != null) offset = body.Value<int>("offset");
+                if (body?["name"] != null) filterName = body.Value<string>("name");
+                if (body?["x"] != null) filterX = body.Value<int>("x");
+                if (body?["y"] != null) filterY = body.Value<int>("y");
+                if (body?["radius"] != null) filterRadius = body.Value<int>("radius");
 
                 _pending.Enqueue(new PendingRequest
                 {
@@ -205,7 +209,11 @@ namespace Timberbot
                     Format = format,
                     Detail = detail,
                     Limit = limit,
-                    Offset = offset
+                    Offset = offset,
+                    FilterName = filterName,
+                    FilterX = filterX,
+                    FilterY = filterY,
+                    FilterRadius = filterRadius
                 });
             }
         }
@@ -219,7 +227,7 @@ namespace Timberbot
         //   /api/building/range (POST): reads work radius but needs body param for building ID
         //   /api/placement/find (POST): reads valid spots but needs body params for search area
         // These are logically reads but use POST because GET has no request body.
-        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
+        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             // GET endpoints (read from double-buffered cache -- zero contention with game thread)
             if (method == "GET")
@@ -243,15 +251,15 @@ namespace Timberbot
                     case "/api/districts":
                         return _service.Read.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.Read.CollectBuildings(format, detail, limit, offset);
+                        return _service.Read.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/trees":
-                        return _service.Read.CollectTrees(limit, offset);
+                        return _service.Read.CollectTrees(limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/crops":
-                        return _service.Read.CollectCrops(limit, offset);
+                        return _service.Read.CollectCrops(limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/gatherables":
-                        return _service.Read.CollectGatherables(limit, offset);
+                        return _service.Read.CollectGatherables(limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/beavers":
-                        return _service.Read.CollectBeavers(format, detail, limit, offset);
+                        return _service.Read.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/distribution":
                         return _service.Read.CollectDistribution();
                     case "/api/science":
