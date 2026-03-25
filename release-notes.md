@@ -18,5 +18,5 @@
 - [fix] stair placement: stairs always on lower z tile, skip path on tiles planned for stairs
 - [internal] PlaceBuildingResult struct with rich context (prefab, scienceCost, occupant), ToJson at HTTP boundary
 - [feature] all list endpoints accept format param (toon/json) for consistent output control
-- [feature] tiles toon mode: omit water:0, occupants as compact "Name:z" string
+- [feature] tiles toon mode: occupants as compact "Name:z" string
 - [internal] Removed CHANGELOG.md -- GitHub releases are the single source

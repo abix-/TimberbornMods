@@ -876,7 +876,7 @@ Terrain, water, occupants, and contamination for a rectangular region.
 | tiles | array | Per-tile data |
 | tiles[].x, y | int | Tile coordinates |
 | tiles[].terrain | int | Terrain height |
-| tiles[].water | float | Water depth at tile. Omitted when 0 in toon mode, always present in json mode |
+| tiles[].water | float | Water depth at tile |
 | tiles[].badwater | float | (optional) Water contamination 0-1 |
 | tiles[].occupants | array/string | (optional) json: `[{name, z}, ...]` array. toon: flat string `"Path:2/Stairs:3"` |
 | tiles[].entrance | bool | (optional) Is an entrance tile |
