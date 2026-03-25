@@ -1322,7 +1322,7 @@ Set which recipe a manufactory produces.
 #### Response (error -- recipe not found)
 
 ```json
-{"error": "recipe not found", "recipeId": "BadRecipe", "available": ["PlankRecipe", "TreatedPlankRecipe"]}
+{"error": "not_found", "recipeId": "BadRecipe", "available": ["PlankRecipe", "TreatedPlankRecipe"]}
 ```
 
 ---
@@ -1388,7 +1388,7 @@ Prioritize which tree/resource type a forester plants.
 #### Response (error -- not found)
 
 ```json
-{"error": "plantable not found", "plantableName": "BadTree", "available": ["Pine", "Birch", "Oak"]}
+{"error": "not_found", "plantableName": "BadTree", "available": ["Pine", "Birch", "Oak"]}
 ```
 
 ---
