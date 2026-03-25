@@ -184,11 +184,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Reset().OpenObj().Prop("error", "entity not found").Prop("id", buildingId).CloseObj().ToString();
+                return _jw.Error("entity not found", ("id", buildingId));
 
             var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
-            return _jw.Reset().OpenObj().Prop("id", buildingId).Prop("name", name).Prop("demolished", true).CloseObj().ToString();
+            return _jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
         // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
@@ -413,10 +413,10 @@ namespace Timberbot
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return _jw.Reset().OpenObj().Prop("error", "unknown prefab").Prop("prefab", prefabName).CloseObj().ToString();
+                return _jw.Error("unknown prefab", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Reset().OpenObj().Prop("error", "no block object spec").Prop("prefab", prefabName).CloseObj().ToString();
+                return _jw.Error("no block object spec", ("prefab", prefabName));
 
             var size = blockObjectSpec.Size;
 
@@ -709,11 +709,11 @@ namespace Timberbot
 
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return _jw.Reset().OpenObj().Prop("error", "unknown prefab").Prop("prefab", prefabName).CloseObj().ToString();
+                return _jw.Error("unknown prefab", ("prefab", prefabName));
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return _jw.Reset().OpenObj().Prop("error", "no block object spec").Prop("prefab", prefabName).CloseObj().ToString();
+                return _jw.Error("no block object spec", ("prefab", prefabName));
 
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
@@ -792,7 +792,7 @@ namespace Timberbot
                 };
             }
 
-            return _jw.Reset().OpenObj().Prop("id", placedId).Prop("name", placedName).Prop("x", x).Prop("y", y).Prop("z", z).Prop("orientation", OrientNames[orientation]).CloseObj().ToString();
+            return _jw.Result(("id", placedId), ("name", placedName), ("x", x), ("y", y), ("z", z), ("orientation", (OrientNames[orientation])));
         }
 
         private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)

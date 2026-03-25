@@ -898,7 +898,7 @@ namespace Timberbot
             var raw = _speedManager.CurrentSpeed;
             int level = System.Array.IndexOf(SpeedScale, raw);
             if (level < 0) level = 0;  // unknown internal speed -> treat as paused
-            return _cache.Jw.Reset().OpenObj().Prop("speed", level).CloseObj().ToString();
+            return _cache.Jw.Result(("speed", level));
         }
 
         public object CollectWorkHours()

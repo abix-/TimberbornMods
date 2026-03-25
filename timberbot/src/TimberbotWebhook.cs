@@ -82,7 +82,7 @@ namespace Timberbot
         public object UnregisterWebhook(string id)
         {
             int removed = _webhooks.RemoveAll(w => w.Id == id);
-            return _jw.Reset().OpenObj().Prop("id", id).Prop("removed", removed > 0).CloseObj().ToString();
+            return _jw.Result(("id", id), ("removed", (removed > 0)));
         }
 
         public object ListWebhooks()
