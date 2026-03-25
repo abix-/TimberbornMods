@@ -34,9 +34,9 @@ All errors return JSON with an `error` field:
 All HTTP endpoints are accessible via the Python client:
 
 ```bash
-python timberbot.py <command>              # TOON format
-python timberbot.py --json <command>       # JSON format
-python timberbot.py <command> key:value    # with parameters
+timberbot.py <command>              # TOON format
+timberbot.py --json <command>       # JSON format
+timberbot.py <command> key:value    # with parameters
 ```
 
 ### Pagination
@@ -90,7 +90,7 @@ GET /api/beavers?name=Bot&limit=0               # all bots (unlimited)
 
 Health check. Answered on listener thread (works even when game is paused/loading).
 
-**CLI:** `python timberbot.py ping`
+**CLI:** `timberbot.py ping`
 
 #### Response
 
@@ -109,7 +109,7 @@ Health check. Answered on listener thread (works even when game is paused/loadin
 
 Full game state snapshot: time, weather, population, resources, trees, housing, employment, wellbeing, science, and alerts.
 
-**CLI:** `python timberbot.py summary` | `python timberbot.py --json summary`
+**CLI:** `timberbot.py summary` | `timberbot.py --json summary`
 
 #### Response (format=json)
 
@@ -151,7 +151,7 @@ Flat key-value pairs including `day`, `dayProgress`, `cycle`, `cycleDay`, `isHaz
 
 Current day number and progress.
 
-**CLI:** `python timberbot.py time`
+**CLI:** `timberbot.py time`
 
 #### Response
 
@@ -171,7 +171,7 @@ Current day number and progress.
 
 Current weather cycle and drought info.
 
-**CLI:** `python timberbot.py weather`
+**CLI:** `timberbot.py weather`
 
 #### Response
 
@@ -201,7 +201,7 @@ Current weather cycle and drought info.
 
 Power networks. Groups all powered buildings by their connected network. Buildings sharing a power network have the same supply and demand values.
 
-**CLI:** `python timberbot.py power`
+**CLI:** `timberbot.py power`
 
 #### Response
 
@@ -225,7 +225,7 @@ Networks with `supply < demand` are underpowered — powered buildings run inter
 
 Current game speed. Answered on listener thread (works when paused).
 
-**CLI:** `python timberbot.py speed`
+**CLI:** `timberbot.py speed`
 
 #### Response
 
@@ -243,7 +243,7 @@ Current game speed. Answered on listener thread (works when paused).
 
 Set game speed.
 
-**CLI:** `python timberbot.py set_speed speed:2`
+**CLI:** `timberbot.py set_speed speed:2`
 
 #### Request Body
 
@@ -273,7 +273,7 @@ Set game speed.
 
 Current work schedule.
 
-**CLI:** `python timberbot.py workhours`
+**CLI:** `timberbot.py workhours`
 
 #### Response
 
@@ -292,7 +292,7 @@ Current work schedule.
 
 Set when beavers stop working.
 
-**CLI:** `python timberbot.py set_workhours end_hours:14`
+**CLI:** `timberbot.py set_workhours end_hours:14`
 
 #### Request Body
 
@@ -318,7 +318,7 @@ Set when beavers stop working.
 
 Game event history.
 
-**CLI:** `python timberbot.py notifications`
+**CLI:** `timberbot.py notifications`
 
 #### Response
 
@@ -343,7 +343,7 @@ Array of notification objects.
 
 Buildings with problems: unstaffed, unpowered, unreachable, or status messages.
 
-**CLI:** `python timberbot.py alerts`
+**CLI:** `timberbot.py alerts`
 
 #### Response
 
@@ -373,7 +373,7 @@ Array of alert objects.
 
 Beaver and bot counts per district.
 
-**CLI:** `python timberbot.py population`
+**CLI:** `timberbot.py population`
 
 #### Response
 
@@ -398,7 +398,7 @@ Array of district population objects.
 
 Resource stocks per district.
 
-**CLI:** `python timberbot.py resources` | `python timberbot.py --json resources`
+**CLI:** `timberbot.py resources` | `timberbot.py --json resources`
 
 #### Response (format=toon)
 
@@ -430,7 +430,7 @@ Keyed by district name, each containing resource objects with `{available, all}`
 
 Districts with population and resource data combined.
 
-**CLI:** `python timberbot.py districts` | `python timberbot.py --json districts`
+**CLI:** `timberbot.py districts` | `timberbot.py --json districts`
 
 #### Response (format=json)
 
@@ -460,7 +460,7 @@ Flat rows with `name`, `adults`, `children`, `bots`, plus one key per resource w
 
 Import/export settings per good per district.
 
-**CLI:** `python timberbot.py distribution`
+**CLI:** `timberbot.py distribution`
 
 #### Response
 
@@ -490,7 +490,7 @@ Import/export settings per good per district.
 
 Set import/export for a specific good in a district.
 
-**CLI:** `python timberbot.py set_distribution district:"District 1" good:Log import_option:Forced export_threshold:50`
+**CLI:** `timberbot.py set_distribution district:"District 1" good:Log import_option:Forced export_threshold:50`
 
 #### Request Body
 
@@ -519,7 +519,7 @@ Set import/export for a specific good in a district.
 
 Move adult beavers between districts.
 
-**CLI:** `python timberbot.py migrate from_district:"District 1" to_district:"District 2" count:3`
+**CLI:** `timberbot.py migrate from_district:"District 1" to_district:"District 2" count:3`
 
 #### Request Body
 
@@ -553,7 +553,7 @@ Move adult beavers between districts.
 
 All placed buildings with state.
 
-**CLI:** `python timberbot.py buildings` | `python timberbot.py --json buildings`
+**CLI:** `timberbot.py buildings` | `timberbot.py --json buildings`
 
 Supports server-side pagination (`?limit=10&offset=20`) and filtering (`?name=Farm`). See [Pagination](#pagination) above.
 
@@ -635,7 +635,7 @@ Flat rows with: `id`, `name`, `x`, `y`, `z`, `orientation`, `finished`, `paused`
 
 All trees (alive and dead).
 
-**CLI:** `python timberbot.py trees`
+**CLI:** `timberbot.py trees`
 
 Supports server-side pagination (`?limit=10`) and filtering (`?name=Pine`). See [Pagination](#pagination) above.
 
@@ -663,7 +663,7 @@ Supports server-side pagination (`?limit=10`) and filtering (`?name=Pine`). See 
 
 All crops (Kohlrabi, Soybean, Corn, etc) with growth status.
 
-**CLI:** `python timberbot.py crops`
+**CLI:** `timberbot.py crops`
 
 #### Response
 
@@ -681,7 +681,7 @@ Same fields as `/api/trees`. Filters to crop species only.
 
 Berry bushes and other gatherable resources.
 
-**CLI:** `python timberbot.py gatherables`
+**CLI:** `timberbot.py gatherables`
 
 #### Response
 
@@ -704,7 +704,7 @@ Berry bushes and other gatherable resources.
 
 All beavers and bots with wellbeing and needs.
 
-**CLI:** `python timberbot.py beavers` | `python timberbot.py --json beavers`
+**CLI:** `timberbot.py beavers` | `timberbot.py --json beavers`
 
 Supports server-side pagination (`?limit=10`) and filtering (`?name=Bot`). See [Pagination](#pagination) above.
 
@@ -716,7 +716,7 @@ Supports server-side pagination (`?limit=10`) and filtering (`?name=Bot`). See [
 | `detail=full` | All needs (active + inactive) with `group` category field |
 | `detail=id:<id>` | Single beaver/bot by ID, all needs with `group` field |
 
-**CLI:** `python timberbot.py beavers detail:full` | `python timberbot.py beavers detail:id:-12345`
+**CLI:** `timberbot.py beavers detail:full` | `timberbot.py beavers detail:id:-12345`
 
 Bots always show all 3 needs (Energy, ControlTower, Grease) regardless of detail mode.
 
@@ -783,7 +783,7 @@ Tier thresholds: >= 16 ecstatic, >= 12 happy, >= 8 okay, >= 4 unhappy, < 4 miser
 
 All building templates with dimensions.
 
-**CLI:** `python timberbot.py prefabs`
+**CLI:** `timberbot.py prefabs`
 
 #### Response
 
@@ -812,7 +812,7 @@ All building templates with dimensions.
 
 Top 5 clusters of grown trees by density.
 
-**CLI:** `python timberbot.py tree_clusters`
+**CLI:** `timberbot.py tree_clusters`
 
 #### Response
 
@@ -838,7 +838,7 @@ Top 5 clusters of grown trees by density.
 
 Terrain, water, occupants, and contamination for a rectangular region.
 
-**CLI:** `python timberbot.py tiles x1:100 y1:100 x2:110 y2:110`
+**CLI:** `timberbot.py tiles x1:100 y1:100 x2:110 y2:110`
 
 #### Request Body
 
@@ -888,7 +888,7 @@ Terrain, water, occupants, and contamination for a rectangular region.
 
 Science points and unlockable buildings.
 
-**CLI:** `python timberbot.py science`
+**CLI:** `timberbot.py science`
 
 #### Response
 
@@ -918,7 +918,7 @@ Science points and unlockable buildings.
 
 Population wellbeing breakdown by category. Shows current vs max score for each need group across all beavers.
 
-**CLI:** `python timberbot.py wellbeing`
+**CLI:** `timberbot.py wellbeing`
 
 #### Response
 
@@ -957,7 +957,7 @@ Population wellbeing breakdown by category. Shows current vs max score for each 
 
 Unlock a building using science points. Matches the exact UI flow (cost deduction + events + UI refresh).
 
-**CLI:** `python timberbot.py unlock_building building:"Engine.IronTeeth"`
+**CLI:** `timberbot.py unlock_building building:"Engine.IronTeeth"`
 
 #### Request Body
 
@@ -997,7 +997,7 @@ Unlock a building using science points. Matches the exact UI flow (cost deductio
 
 Pause or unpause a building.
 
-**CLI:** `python timberbot.py pause_building building_id:12340` | `python timberbot.py unpause_building building_id:12340`
+**CLI:** `timberbot.py pause_building building_id:12340` | `timberbot.py unpause_building building_id:12340`
 
 #### Request Body
 
@@ -1049,7 +1049,7 @@ Engage or disengage a clutch on a building.
 
 Remove a building from the world.
 
-**CLI:** `python timberbot.py demolish_building building_id:12340`
+**CLI:** `timberbot.py demolish_building building_id:12340`
 
 #### Request Body
 
@@ -1075,7 +1075,7 @@ Remove a building from the world.
 
 Place a building in the world. Validates all tiles before placing: occupancy, terrain height, water, unlock status, underground clipping. Coordinates refer to the bottom-left corner regardless of orientation.
 
-**CLI:** `python timberbot.py place_building prefab:Path x:120 y:130 z:2 orientation:south`
+**CLI:** `timberbot.py place_building prefab:Path x:120 y:130 z:2 orientation:south`
 
 #### Request Body
 
@@ -1124,7 +1124,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 
 Find valid placements for a building within a rectangular area. Results sorted by: district reachability > path access > power adjacency > path count. Returns at most 10 results.
 
-**CLI:** `python timberbot.py find_placement prefab:LumberjackFlag x1:110 y1:125 x2:130 y2:145`
+**CLI:** `timberbot.py find_placement prefab:LumberjackFlag x1:110 y1:125 x2:130 y2:145`
 
 #### Request Body
 
@@ -1176,7 +1176,7 @@ Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
 
 Set floodgate water gate height. Value is clamped to max.
 
-**CLI:** `python timberbot.py set_floodgate building_id:12340 height:1.5`
+**CLI:** `timberbot.py set_floodgate building_id:12340 height:1.5`
 
 #### Request Body
 
@@ -1203,7 +1203,7 @@ Set floodgate water gate height. Value is clamped to max.
 
 Set construction or workplace priority.
 
-**CLI:** `python timberbot.py set_priority building_id:12340 priority:VeryHigh`
+**CLI:** `timberbot.py set_priority building_id:12340 priority:VeryHigh`
 
 #### Request Body
 
@@ -1235,7 +1235,7 @@ Set construction or workplace priority.
 
 Set desired worker count for a workplace.
 
-**CLI:** `python timberbot.py set_workers building_id:12340 count:2`
+**CLI:** `timberbot.py set_workers building_id:12340 count:2`
 
 #### Request Body
 
@@ -1262,7 +1262,7 @@ Set desired worker count for a workplace.
 
 Prioritize hauling deliveries to a building.
 
-**CLI:** `python timberbot.py set_haul_priority building_id:12340 prioritized:true`
+**CLI:** `timberbot.py set_haul_priority building_id:12340 prioritized:true`
 
 #### Request Body
 
@@ -1289,7 +1289,7 @@ Prioritize hauling deliveries to a building.
 
 Set which recipe a manufactory produces.
 
-**CLI:** `python timberbot.py set_recipe building_id:12340 recipe:PlankRecipe`
+**CLI:** `timberbot.py set_recipe building_id:12340 recipe:PlankRecipe`
 
 #### Request Body
 
@@ -1320,7 +1320,7 @@ Set which recipe a manufactory produces.
 
 Prioritize planting or harvesting for a farmhouse.
 
-**CLI:** `python timberbot.py set_farmhouse_action building_id:12340 action:planting`
+**CLI:** `timberbot.py set_farmhouse_action building_id:12340 action:planting`
 
 #### Request Body
 
@@ -1355,7 +1355,7 @@ Prioritize planting or harvesting for a farmhouse.
 
 Prioritize which tree/resource type a forester plants.
 
-**CLI:** `python timberbot.py set_plantable_priority building_id:12340 plantable:Pine`
+**CLI:** `timberbot.py set_plantable_priority building_id:12340 plantable:Pine`
 
 #### Request Body
 
@@ -1386,7 +1386,7 @@ Prioritize which tree/resource type a forester plants.
 
 Set maximum capacity on a stockpile.
 
-**CLI:** `python timberbot.py set_capacity building_id:12340 capacity:100`
+**CLI:** `timberbot.py set_capacity building_id:12340 capacity:100`
 
 #### Request Body
 
@@ -1407,7 +1407,7 @@ Set maximum capacity on a stockpile.
 
 Set which good a single-good stockpile accepts.
 
-**CLI:** `python timberbot.py set_good building_id:12340 good:Log`
+**CLI:** `timberbot.py set_good building_id:12340 good:Log`
 
 #### Request Body
 
@@ -1436,7 +1436,7 @@ Set which good a single-good stockpile accepts.
 
 Mark or clear a rectangular area for tree cutting.
 
-**CLI:** `python timberbot.py mark_trees x1:110 y1:130 x2:120 y2:140 z:2` | `python timberbot.py clear_trees x1:110 y1:130 x2:120 y2:140 z:2`
+**CLI:** `timberbot.py mark_trees x1:110 y1:130 x2:120 y2:140 z:2` | `timberbot.py clear_trees x1:110 y1:130 x2:120 y2:140 z:2`
 
 #### Request Body
 
@@ -1461,7 +1461,7 @@ Mark or clear a rectangular area for tree cutting.
 
 Mark an area for crop planting. Validates tiles: skips occupied, water, and wrong terrain.
 
-**CLI:** `python timberbot.py plant_crop x1:110 y1:130 x2:115 y2:135 z:2 crop:Carrot`
+**CLI:** `timberbot.py plant_crop x1:110 y1:130 x2:115 y2:135 z:2 crop:Carrot`
 
 #### Request Body
 
@@ -1486,7 +1486,7 @@ Mark an area for crop planting. Validates tiles: skips occupied, water, and wron
 
 Clear planting marks from an area.
 
-**CLI:** `python timberbot.py clear_planting x1:110 y1:130 x2:115 y2:135 z:2`
+**CLI:** `timberbot.py clear_planting x1:110 y1:130 x2:115 y2:135 z:2`
 
 #### Request Body
 
@@ -1564,7 +1564,7 @@ Get the work range tiles for a building. Same green circle the player sees when 
 
 Route a straight-line path from point A to point B, auto-placing stairs at z-level changes. Path must be axis-aligned (x1==x2 or y1==y2). Checks science unlocks: stairs must be unlocked for any z-change, platforms must be unlocked for multi-level jumps (2+ z-levels). Skips z-changes with an error if the required building isn't unlocked.
 
-**CLI:** `python timberbot.py place_path x1:120 y1:130 x2:120 y2:145`
+**CLI:** `timberbot.py place_path x1:120 y1:130 x2:120 y2:145`
 
 #### Request Body
 
@@ -1597,7 +1597,7 @@ Push notifications for game events. See [webhooks.md](webhooks.md) for the full 
 
 Register a webhook URL.
 
-**CLI:** `python timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died`
+**CLI:** `timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died`
 
 #### Request Body
 
@@ -1616,7 +1616,7 @@ Register a webhook URL.
 
 List all registered webhooks.
 
-**CLI:** `python timberbot.py list_webhooks`
+**CLI:** `timberbot.py list_webhooks`
 
 ```json
 [{"Id": "wh_1", "Url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"], "Disabled": false, "failures": 0}]
@@ -1636,7 +1636,7 @@ Webhooks deliver batched JSON arrays (one POST per flush, default every 200ms):
 
 Remove a webhook by ID.
 
-**CLI:** `python timberbot.py unregister_webhook webhook_id:wh_1`
+**CLI:** `timberbot.py unregister_webhook webhook_id:wh_1`
 
 #### Request Body
 
@@ -1652,7 +1652,7 @@ Remove a webhook by ID.
 
 Reflection-based inspector for game internals. Navigates object graphs, lists fields/properties/methods, and calls methods with arguments. Results can be chained with `$`.
 
-**CLI:** `python timberbot.py debug target:help`
+**CLI:** `timberbot.py debug target:help`
 
 #### Request Body
 
@@ -1708,7 +1708,7 @@ These are convenience methods in `timberbot.py` that have no direct HTTP equival
 Colored ASCII grid with terrain height display. Background shading encodes z-level, foreground characters represent entities.
 
 ```bash
-python timberbot.py map x:122 y:136 radius:10
+timberbot.py map x:122 y:136 radius:10
 ```
 
 | Char | Color | Meaning |
@@ -1775,7 +1775,7 @@ Background bands: z=0-9 (dark grays), z=10-19 (medium grays), z=20-22 (bright).
 Find entities by name and/or proximity.
 
 ```bash
-python timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
+timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
 ```
 
 ### place_path (CLI-only)
@@ -1783,7 +1783,7 @@ python timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
 Route a straight-line path with auto-stairs. Wraps `POST /api/path/place`.
 
 ```bash
-python timberbot.py place_path x1:120 y1:130 x2:120 y2:145
+timberbot.py place_path x1:120 y1:130 x2:120 y2:145
 ```
 
 ### top (CLI-only)
@@ -1791,7 +1791,7 @@ python timberbot.py place_path x1:120 y1:130 x2:120 y2:145
 Live colony dashboard. Population, resources, weather, drought countdown, wellbeing breakdown, alerts.
 
 ```bash
-python timberbot.py top
+timberbot.py top
 ```
 
 ---

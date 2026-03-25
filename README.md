@@ -14,17 +14,17 @@ Python client
 
 ```bash
 # with Timberborn running + mod loaded
-python timberbot.py summary                              # full colony snapshot
-python timberbot.py buildings                            # list all buildings
-python timberbot.py set_speed speed:3                    # fast forward
-python timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
-python timberbot.py beavers                              # beaver wellbeing + critical needs
-python timberbot.py distribution                         # import/export settings per district
-python timberbot.py science                               # science points + unlockable buildings
-python timberbot.py tree_clusters                         # find densest tree clusters
-python timberbot.py map x:120 y:140 radius:10             # ASCII map with terrain height
-python timberbot.py top                                  # live colony dashboard
-python timberbot.py                                      # list all methods
+timberbot.py summary                              # full colony snapshot
+timberbot.py buildings                            # list all buildings
+timberbot.py set_speed speed:3                    # fast forward
+timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
+timberbot.py beavers                              # beaver wellbeing + critical needs
+timberbot.py distribution                         # import/export settings per district
+timberbot.py science                               # science points + unlockable buildings
+timberbot.py tree_clusters                         # find densest tree clusters
+timberbot.py map x:120 y:140 radius:10             # ASCII map with terrain height
+timberbot.py top                                  # live colony dashboard
+timberbot.py                                      # list all methods
 ```
 
 Or use raw HTTP -- no Python needed:

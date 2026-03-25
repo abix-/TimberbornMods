@@ -9,12 +9,12 @@ Output formats:
     JSON (--json):  full nested data for programmatic access
 
 Usage:
-    python timberbot.py                     list all methods
-    python timberbot.py summary             colony dashboard (one call, all stats)
-    python timberbot.py buildings           list all buildings
-    python timberbot.py --json summary      full JSON output
-    python timberbot.py top                 live colony dashboard
-    python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2
+    timberbot.py                     list all methods
+    timberbot.py summary             colony dashboard (one call, all stats)
+    timberbot.py buildings           list all buildings
+    timberbot.py --json summary      full JSON output
+    timberbot.py top                 live colony dashboard
+    timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2
 
 As a library:
     from timberbot import Timberbot
@@ -952,7 +952,7 @@ def _format_usage(name, method):
 def main():
     if len(sys.argv) < 2:
         bot = Timberbot()
-        print("usage: python timberbot.py <method> key:value ...")
+        print("usage: timberbot.py <method> key:value ...")
         print()
         print("methods:")
         for name in sorted(dir(bot)):
