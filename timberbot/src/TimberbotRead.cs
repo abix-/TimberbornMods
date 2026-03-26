@@ -351,7 +351,8 @@ namespace Timberbot
                         .Prop("adults", dc.Adults).Prop("children", dc.Children).Prop("bots", dc.Bots)
                         .CloseObj();
                     jj.Obj("resources");
-                    if (dc.ResourcesJson != null) jj.Raw(dc.ResourcesJson);
+                    if (dc.Resources != null)
+                        foreach (var kvp in dc.Resources) jj.Prop(kvp.Key, kvp.Value.all);
                     jj.CloseObj();
                     var ds = districtStats.GetValueOrDefault(dc.Name);
                     int dBeds = ds != null ? ds[1] : 0;
