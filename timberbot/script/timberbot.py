@@ -682,17 +682,20 @@ class Timberbot:
             except Exception:
                 pass
 
+        # ensure brain.toon exists with consistent schema
+        import toons as _t
+        os.makedirs(_MEMORY_DIR, exist_ok=True)
+        if not os.path.exists(bpath):
+            with open(bpath, "w") as f:
+                _t.dump({"maps": maps, "tasks": tasks}, f)
+
         # auto-map DC area on first run
         districts = summary.get("districts", []) if isinstance(summary, dict) else []
         dc = next((d.get("dc") for d in districts if d.get("dc")), None)
         if dc and not maps:
-            os.makedirs(_MEMORY_DIR, exist_ok=True)
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
-            # reload maps after auto-map wrote to brain.toon
-            if os.path.exists(bpath):
-                import toons as _t
-                with open(bpath) as f:
-                    maps = _t.load(f).get("maps", {})
+            with open(bpath) as f:
+                maps = _t.load(f).get("maps", {})
 
         return {"summary": summary, "maps": maps, "tasks": tasks}
 
