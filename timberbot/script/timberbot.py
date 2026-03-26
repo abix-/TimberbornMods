@@ -487,24 +487,29 @@ class Timberbot:
         lines = []
         for ty in range(y + radius, y - radius - 1, -1):
             row = f"{DIM}{ty:3d}{R} "
+            pbg = pco = ""
             for tx in range(x - radius, x + radius + 1):
                 t = tiles.get((tx, ty))
                 if not t:
+                    if pbg or pco:
+                        row += R
+                        pbg = pco = ""
                     row += f"{DIM}?{R}"
                     continue
                 occ = t.get("occupants")
                 occupant = occ[0]["name"] if occ else None
                 entrance = t.get("entrance", False)
+                bg = co = ch = None
                 if entrance and not occupant:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
-                    row += f"{bg}{BWHT}@{R}"
+                    co = BWHT
+                    ch = "@"
                     legend["@"] = (BWHT, "entrance")
                 elif occupant:
                     oname = occupant
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
-                    ch, co = None, None
                     for key, (c, s) in STYLE.items():
                         if key.lower() in oname.lower():
                             ch, co = c, s
@@ -513,25 +518,37 @@ class Timberbot:
                     if ch == "T" and t.get("seedling"):
                         ch, co = "t", DIM + GRN
                         legend["t"] = (co, "seedling")
-                    if ch:
-                        row += f"{bg}{co}{ch}{R}"
-                    else:
+                    if not ch:
                         ch = oname[0]
-                        row += f"{bg}{DIM}{ch}{R}"
+                        co = DIM
                         legend[ch] = (DIM, oname)
                 elif t.get("water", 0) > 0:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
-                    row += f"{bg}{BLU}~{R}"
+                    co = BLU
+                    ch = "~"
                     legend["~"] = (BLU, "water")
                 elif t["terrain"] > 0:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
-                    zch = str(t["terrain"] % 10)
-                    zco = GRN if t.get("moist") else DIM
-                    row += f"{bg}{zco}{zch}{R}"
+                    ch = str(t["terrain"] % 10)
+                    co = GRN if t.get("moist") else DIM
                 else:
+                    if pbg or pco:
+                        row += R
+                        pbg = pco = ""
                     row += " "
+                    continue
+                delta = ""
+                if bg != pbg:
+                    delta += bg
+                if co != pco:
+                    delta += co
+                row += delta + ch
+                pbg = bg
+                pco = co
+            if pbg or pco:
+                row += R
             lines.append(row)
 
         axis = f"    {DIM}" + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)) + R
