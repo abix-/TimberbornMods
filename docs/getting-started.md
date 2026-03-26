@@ -173,14 +173,14 @@ The mod ships a thin Claude skill plus docs for AI play:
 mkdir -p ~/.claude/skills/timberbot
 cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
 
-# start Claude from the Timberbot repo root or the distributed mod folder root
-# (the folder that contains ./docs and where timberbot.py is available)
+# start Claude from the Steam Workshop mod folder root first, or from the Timberbot repo root
+# workshop docs live in %USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs
 /loop 1m /timberbot
 ```
 
 ### Other LLMs
 
-Paste the contents of `docs/timberbot.md` as the core system prompt. Keep `docs/timberbot-reference.md` and `docs/api-reference.md` available as reference material for gameplay lookups and exact endpoint details.
+Paste the contents of `docs/timberbot.md` as the core system prompt. Keep `docs/timberbot-reference.md` and `docs/api-reference.md` available as reference material for gameplay lookups and exact endpoint details. The Steam Workshop install ships the same docs under `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs`, and the GitHub repo mirrors the same content if users need another copy.
 
 ## Remote connections
 
@@ -221,5 +221,8 @@ The client reads `httpHost` and `httpPort` from settings.json when no CLI flags 
 - [AI Reference](timberbot-reference.md) -- faction buildings, lookup tables, and gameplay reference
 - [Features](features.md) -- what's implemented vs gaps
 - [Developing](developing.md) -- build from source
+
+
+
 
 

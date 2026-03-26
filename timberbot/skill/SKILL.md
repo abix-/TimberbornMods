@@ -1,23 +1,24 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, and needs met.
-version: "0.7.0"
+version: "0.7.1"
 ---
 # Timberbot
 
 This is the distributable Claude Code entrypoint for playing Timberborn through `timberbot.py`.
 
-This skill is intentionally thin. The authoritative knowledge lives in the mod docs that ship with the repo or mod folder.
+This skill is intentionally thin. The authoritative knowledge lives in the mod docs that ship with the repo or Steam Workshop mod folder.
 
 Before acting:
 
-1. Confirm the current working directory contains `docs/timberbot.md`.
-2. If that file is missing, stop and tell the user to reopen Claude from the Timberbot repo root or the distributed mod folder root.
-3. Use `timberbot.py` directly. In a local clone it lives at `timberbot/script/timberbot.py`; in the distributed mod folder it is shipped alongside the DLL and docs.
-4. Read `docs/timberbot.md` first. It is the core operating guide and defines the boot flow and hard rules.
-5. Read `docs/api-reference.md` only when you need exact endpoint, parameter, response, pagination, or error details.
-6. Read `docs/timberbot-reference.md` only when you need faction-specific building names, gameplay lookup tables, wellbeing details, scaling ratios, or other broad reference material.
-7. Read `docs/getting-started.md` only for install, PATH, remote host, or troubleshooting questions.
+1. Prefer a local docs copy. First check whether the current working directory contains `docs/timberbot.md`.
+2. If not, check the Steam Workshop mod folder docs at `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs\` (for example `C:\Users\Abix\Documents\Timberborn\Mods\Timberbot\docs\`).
+3. If neither local docs location is available, stop and tell the user to reopen Claude from the Timberbot repo root or the Steam Workshop mod folder root. Also tell them the GitHub repo contains the same docs content.
+4. Use `timberbot.py` directly. In a local clone it lives at `timberbot/script/timberbot.py`; in the distributed mod folder it is shipped alongside the DLL and docs.
+5. Read `docs/timberbot.md` first. It is the core operating guide and defines the boot flow and hard rules.
+6. Read `docs/api-reference.md` only when you need exact endpoint, parameter, response, pagination, or error details.
+7. Read `docs/timberbot-reference.md` only when you need faction-specific building names, gameplay lookup tables, wellbeing details, scaling ratios, or other broad reference material.
+8. Read `docs/getting-started.md` only for install, PATH, remote host, or troubleshooting questions.
 
 Runtime rules:
 
@@ -27,4 +28,3 @@ Runtime rules:
 - Never run mutating game API calls in parallel.
 - Prefer `brain`, `find_placement`, and `find_planting` over ad hoc guessing.
 - Keep action batches bounded and re-read state after making changes.
-
