@@ -2279,16 +2279,40 @@ class TestRunner:
         errs = validate(summary, {
             "time": {"dayNumber": int, "dayProgress": float, "partialDayNumber": float, "speed": int},
             "weather": {"cycle": int, "cycleDay": int, "isHazardous": bool},
-            "districts": [{"name": str, "population": {"adults": int, "children": int, "bots": int}, "resources": dict}],
+            "districts": [{"name": str,
+                           "population": {"adults": int, "children": int, "bots": int},
+                           "resources": dict,
+                           "housing": {"occupiedBeds": int, "totalBeds": int, "homeless": int},
+                           "employment": {"assigned": int, "vacancies": int, "unemployed": int}}],
             "trees": {"markedGrown": int, "markedSeedling": int, "unmarkedGrown": int},
             "crops": {"ready": int, "growing": int},
-            "housing": {"occupiedBeds": int, "totalBeds": int, "homeless": int},
-            "employment": {"assigned": int, "vacancies": int, "unemployed": int},
             "wellbeing": {"average": float, "miserable": int, "critical": int},
             "science": int,
             "alerts": {"unstaffed": int, "unpowered": int, "unreachable": int},
         })
         self.check("schema: summary (json)", len(errs) == 0, "; ".join(errs[:5]))
+
+        # verify new summary sub-fields: species breakdowns and wellbeing categories
+        trees_obj = summary.get("trees", {})
+        has_species = isinstance(trees_obj.get("species"), list)
+        self.check("schema: summary trees.species", has_species, f"got {type(trees_obj.get('species'))}")
+        if has_species and trees_obj["species"]:
+            errs = validate(trees_obj["species"], [{"name": str, "markedGrown": int, "unmarkedGrown": int, "seedling": int}])
+            self.check("schema: trees.species[] fields", len(errs) == 0, "; ".join(errs[:5]))
+
+        crops_obj = summary.get("crops", {})
+        has_cspecies = isinstance(crops_obj.get("species"), list)
+        self.check("schema: summary crops.species", has_cspecies, f"got {type(crops_obj.get('species'))}")
+        if has_cspecies and crops_obj["species"]:
+            errs = validate(crops_obj["species"], [{"name": str, "ready": int, "growing": int}])
+            self.check("schema: crops.species[] fields", len(errs) == 0, "; ".join(errs[:5]))
+
+        wb_obj = summary.get("wellbeing", {})
+        has_cats = isinstance(wb_obj.get("categories"), list)
+        self.check("schema: summary wellbeing.categories", has_cats, f"got {type(wb_obj.get('categories'))}")
+        if has_cats and wb_obj["categories"]:
+            errs = validate(wb_obj["categories"], [{"group": str, "current": float, "max": float}])
+            self.check("schema: wellbeing.categories[] fields", len(errs) == 0, "; ".join(errs[:5]))
 
         buildings = jbot.buildings()
         errs = validate(buildings, [{"id": int, "name": str, "x": int, "y": int, "z": int,
@@ -2558,6 +2582,145 @@ class TestRunner:
                        "; ".join(f"{f.get('name','?')}:{f.get('type','?')}" for f in failures[:5]) if failures else "")
         else:
             self.skip("cache vs live", "debug endpoint not available or unexpected response")
+
+    def test_district_accuracy(self):
+        """Cross-validate per-district housing/employment/population in summary against buildings+beavers."""
+        print("\n=== district accuracy ===\n")
+
+        jbot = Timberbot(json_mode=True)
+        summary = jbot.summary()
+        districts = summary.get("districts", [])
+        if not districts:
+            self.skip("district accuracy", "no districts in summary")
+            return
+
+        # get all buildings with full detail to check dwellings/workplaces
+        buildings = jbot.buildings(limit=0, detail="full")
+        items = buildings.get("items", buildings) if isinstance(buildings, dict) else buildings
+        items = items if isinstance(items, list) else []
+
+        # get all beavers for population cross-check (detail=full for district field)
+        beavers = jbot.beavers(limit=0, detail="full")
+        bvr_items = beavers.get("items", beavers) if isinstance(beavers, dict) else beavers
+        bvr_items = bvr_items if isinstance(bvr_items, list) else []
+
+        # --- verify population sums match beaver count ---
+        sum_adults = sum(d["population"]["adults"] for d in districts)
+        sum_children = sum(d["population"]["children"] for d in districts)
+        sum_bots = sum(d["population"]["bots"] for d in districts)
+        sum_pop = sum_adults + sum_children + sum_bots
+        actual_beavers = len(bvr_items)
+        self.check(f"district pop total ({sum_pop}) matches beavers ({actual_beavers})",
+                   sum_pop == actual_beavers,
+                   f"summary districts sum={sum_pop}, beavers endpoint={actual_beavers}")
+
+        # --- verify per-district beaver counts ---
+        beaver_by_district = {}
+        for b in bvr_items:
+            d = b.get("district", "_unknown")
+            beaver_by_district[d] = beaver_by_district.get(d, 0) + 1
+        for d in districts:
+            dname = d["name"]
+            dpop = d["population"]["adults"] + d["population"]["children"] + d["population"]["bots"]
+            bcount = beaver_by_district.get(dname, 0)
+            self.check(f"district '{dname}' pop ({dpop}) matches beavers ({bcount})",
+                       dpop == bcount,
+                       f"population={dpop}, beavers in district={bcount}")
+
+        # --- verify housing per district matches building data ---
+        # count beds from buildings that have dwelling data
+        housing_by_district = {}  # {district: [occupied, total]}
+        workers_by_district = {}  # {district: [assigned, desired]}
+        for b in items:
+            # buildings in full detail have maxDwellers, dwellers, assignedWorkers, desiredWorkers
+            bname = b.get("name", "")
+            # skip paths -- they have no district relevance for housing/employment
+            if bname == "Path":
+                continue
+            # we need to figure out district from the building -- but full detail doesn't include district
+            # instead we verify the totals match
+            max_d = b.get("maxDwellers", 0)
+            if max_d and max_d > 0:
+                dwellers = b.get("dwellers", 0)
+                housing_by_district["_all"] = housing_by_district.get("_all", [0, 0])
+                housing_by_district["_all"][0] += dwellers
+                housing_by_district["_all"][1] += max_d
+            desired = b.get("desiredWorkers", 0)
+            if desired and desired > 0:
+                assigned = b.get("assignedWorkers", 0)
+                workers_by_district["_all"] = workers_by_district.get("_all", [0, 0])
+                workers_by_district["_all"][0] += assigned
+                workers_by_district["_all"][1] += desired
+
+        # verify global sums
+        sum_occ = sum(d["housing"]["occupiedBeds"] for d in districts)
+        sum_beds = sum(d["housing"]["totalBeds"] for d in districts)
+        bld_occ = housing_by_district.get("_all", [0, 0])[0]
+        bld_beds = housing_by_district.get("_all", [0, 0])[1]
+        self.check(f"housing total beds: summary ({sum_beds}) vs buildings ({bld_beds})",
+                   sum_beds == bld_beds,
+                   f"summary={sum_beds}, buildings={bld_beds}")
+        self.check(f"housing occupied: summary ({sum_occ}) vs buildings ({bld_occ})",
+                   sum_occ == bld_occ,
+                   f"summary={sum_occ}, buildings={bld_occ}")
+
+        sum_assigned = sum(d["employment"]["assigned"] for d in districts)
+        sum_vacancies = sum(d["employment"]["vacancies"] for d in districts)
+        bld_assigned = workers_by_district.get("_all", [0, 0])[0]
+        bld_vacancies = workers_by_district.get("_all", [0, 0])[1]
+        self.check(f"employment assigned: summary ({sum_assigned}) vs buildings ({bld_assigned})",
+                   abs(sum_assigned - bld_assigned) <= 1,
+                   f"summary={sum_assigned}, buildings={bld_assigned}")
+        self.check(f"employment vacancies: summary ({sum_vacancies}) vs buildings ({bld_vacancies})",
+                   abs(sum_vacancies - bld_vacancies) <= 1,
+                   f"summary={sum_vacancies}, buildings={bld_vacancies}")
+
+        # verify homeless = pop - occupiedBeds (per district)
+        for d in districts:
+            dname = d["name"]
+            dpop = d["population"]["adults"] + d["population"]["children"] + d["population"]["bots"]
+            expected_homeless = max(0, dpop - d["housing"]["occupiedBeds"])
+            actual_homeless = d["housing"]["homeless"]
+            self.check(f"district '{dname}' homeless ({actual_homeless}) = pop-beds ({expected_homeless})",
+                       actual_homeless == expected_homeless)
+
+        # verify unemployed = adults - assigned (per district)
+        for d in districts:
+            dname = d["name"]
+            expected_unemployed = max(0, d["population"]["adults"] - d["employment"]["assigned"])
+            actual_unemployed = d["employment"]["unemployed"]
+            self.check(f"district '{dname}' unemployed ({actual_unemployed}) = adults-assigned ({expected_unemployed})",
+                       actual_unemployed == expected_unemployed)
+
+        # --- verify species breakdowns match aggregate totals ---
+        trees_obj = summary.get("trees", {})
+        species = trees_obj.get("species", [])
+        if species:
+            sp_marked = sum(s.get("markedGrown", 0) for s in species)
+            sp_unmarked = sum(s.get("unmarkedGrown", 0) for s in species)
+            sp_seedling = sum(s.get("seedling", 0) for s in species)
+            self.check(f"tree species markedGrown sum ({sp_marked}) matches aggregate ({trees_obj.get('markedGrown')})",
+                       sp_marked == trees_obj.get("markedGrown", -1))
+            self.check(f"tree species unmarkedGrown sum ({sp_unmarked}) matches aggregate ({trees_obj.get('unmarkedGrown')})",
+                       sp_unmarked == trees_obj.get("unmarkedGrown", -1))
+
+        crops_obj = summary.get("crops", {})
+        cspecies = crops_obj.get("species", [])
+        if cspecies:
+            cs_ready = sum(s.get("ready", 0) for s in cspecies)
+            cs_growing = sum(s.get("growing", 0) for s in cspecies)
+            self.check(f"crop species ready sum ({cs_ready}) matches aggregate ({crops_obj.get('ready')})",
+                       cs_ready == crops_obj.get("ready", -1))
+            self.check(f"crop species growing sum ({cs_growing}) matches aggregate ({crops_obj.get('growing')})",
+                       cs_growing == crops_obj.get("growing", -1))
+
+        # --- verify toon format population is aggregated correctly ---
+        tbot = Timberbot(json_mode=False)
+        toon_summary = tbot.summary()
+        toon_adults = toon_summary.get("adults", -1) if isinstance(toon_summary, dict) else -1
+        self.check(f"toon adults ({toon_adults}) matches json total ({sum_adults})",
+                   toon_adults == sum_adults,
+                   f"toon={toon_adults}, json districts sum={sum_adults}")
 
     def _subprocess_time(self, cmd_args):
         """Run timberbot.py as subprocess, return wall-clock ms and success."""
