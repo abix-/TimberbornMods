@@ -4,7 +4,6 @@
 - [breaking] tiles toon occupants: z-range format (DistrictCenter:z2-6 instead of repeating name 5 times)
 - [breaking] buildings full: uniform schema (all fields always present in both toon and json)
 - [breaking] beavers full: uniform schema (all fields always present)
-- [breaking] save_brain/load_brain removed -- use brain
 - [feature] brain: one command for full colony awareness. Always fresh from game, persists to memory/brain.toon. Includes: faction detection, DC coords + entrance, structured summary, building counts by role, treeClusters (top wood sources on DC z-level within 40 tiles), foodClusters (berries/bushes same filter), region-indexed maps, persistent task queue (add_task/update_task/list_tasks/clear_tasks). Auto-creates on first run with DC map. 43% smaller than JSON via toon persistence. Replaces summary/save_brain/load_brain
 - [feature] food_clusters server-side endpoint (/api/food_clusters): grid-clustered gatherable food excluding trees
 - [feature] map name param: map ... name:label saves ANSI map to memory/ and indexes in brain
