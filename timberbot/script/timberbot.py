@@ -666,7 +666,7 @@ class Timberbot:
         summary = self._get_json("/api/summary")
 
         # set per-settlement memory dir
-        settlement = _sanitize_name(summary.get("settlementName", "unknown") if isinstance(summary, dict) else "unknown")
+        settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
 
         # slim buildings index (separate call -- summary doesn't include per-building data)

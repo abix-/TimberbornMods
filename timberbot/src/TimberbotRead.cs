@@ -332,7 +332,8 @@ namespace Timberbot
                 var treeClustersJson = CollectTreeClusters("json") as string;
                 var foodClustersJson = CollectFoodClusters("json") as string;
                 var jj = _cache.Jw.BeginObj();
-                jj.Prop("settlementName", GetSettlementName());
+                jj.Prop("settlement", GetSettlementName());
+                jj.Prop("faction", faction);
                 jj.Obj("time")
                     .Prop("dayNumber", _dayNightCycle.DayNumber)
                     .Prop("dayProgress", (float)_dayNightCycle.DayProgress)
@@ -418,7 +419,6 @@ namespace Timberbot
                     .Prop("unpowered", alertUnpowered)
                     .Prop("unreachable", alertUnreachable)
                     .CloseObj();
-                jj.Prop("faction", faction);
                 jj.Obj("buildings");
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
@@ -447,7 +447,8 @@ namespace Timberbot
 
             // build flat summary matching TOON output format
             var jw = _cache.Jw.BeginObj();
-            jw.Prop("settlementName", GetSettlementName());
+            jw.Prop("settlement", GetSettlementName());
+            jw.Prop("faction", faction);
 
             // time
             jw.Prop("day", _dayNightCycle.DayNumber);
@@ -539,7 +540,6 @@ namespace Timberbot
             jw.Prop("alerts", alertStr);
 
             // brain fields
-            jw.Prop("faction", faction);
             jw.Obj("buildings");
             foreach (var kv in roleCounts) jw.Prop(kv.Key, kv.Value);
             jw.CloseObj();
