@@ -157,14 +157,24 @@ Everything persists to `~/Documents/Timberborn/Mods/Timberbot/memory/` in toon f
 
 ### What brain gives you
 
+Brain calls one API (`/api/summary`) which returns everything server-side, then adds client-side persistence (maps, tasks).
+
+**From summary (one API call):**
+
 | Field | What | Why |
 |---|---|---|
+| `settlementName` | Current save name | Per-settlement memory folders |
 | `faction` | Folktails or IronTeeth | Determines prefab names for every building |
 | `dc` | DC coords, z-level, orientation, entrance | Root of everything -- road network, placement searches |
-| `summary` | Full colony snapshot (structured JSON) | Population, resources, weather, drought, alerts, wellbeing, food/water days |
 | `buildings` | Count by role (water, food, housing, wood, storage, power, science, production, leisure, paths) | Instant gap analysis -- see what's missing |
 | `treeClusters` | Top tree clusters on DC z-level within 40 tiles | WHERE to send lumberjacks. Sorted by grown count (densest first). Each has x,y,z,grown,total |
 | `foodClusters` | Top gatherable food clusters (berries, bushes) on DC z-level within 40 tiles | WHERE to place gatherer flags. Same format as treeClusters |
+| time/weather/districts/resources/housing/employment/wellbeing/science/alerts | Full colony snapshot | Population, resources, weather, drought, alerts, wellbeing, food/water days |
+
+**From disk (persisted across sessions):**
+
+| Field | What | Why |
+|---|---|---|
 | `maps` | Region index with file paths | Spatial memory -- read map files to see terrain, water, buildings without re-querying |
 | `tasks` | Ordered work queue with status | Resume interrupted work, track multi-step plans |
 
@@ -324,6 +334,8 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `trees` | Trees only (Pine, Birch, Oak, etc) with growth, marking, alive status |
 | `crops` | Crops only (Kohlrabi, Soybean, Corn, etc) with growth and alive status |
 | `tree_clusters` | Densest grown tree clusters |
+| `food_clusters` | Densest gatherable food clusters (berries, bushes) |
+| `settlement` | Current settlement name (lightweight, no computation) |
 | `gatherables` | Berry bushes and other gatherable resources |
 | `science` | Science points and unlock costs |
 | `weather` | Drought countdown, hazardous status |
