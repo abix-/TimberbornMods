@@ -21,7 +21,7 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
-[b]Brain:[/b] One command gives the AI everything: DC location, faction, resource summary, building counts by role, nearby tree and food clusters, named maps, and a task queue. Persists to disk in compact toon format. No re-discovery between sessions.
+[b]Brain:[/b] One command gives the AI everything: live colony summary (faction, DC per district, resources, building counts by role, nearby tree and food clusters) plus persistent state (goal, tasks, named maps). Summary is always fresh; goal, tasks, and maps survive between sessions in compact toon format.
 
 [b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
 

@@ -136,19 +136,21 @@ Full game state snapshot: settlement, time, weather, population, resources, tree
 
 | Field | Type | Description |
 |-------|------|-------------|
-| settlementName | string | Save game / settlement name |
+| settlement | string | Save game / settlement name |
+| faction | string | `"Folktails"` or `"IronTeeth"` |
 | time | object | See [GET /api/time](#get-apitime). Includes `speed` (0-3) |
 | weather | object | See [GET /api/weather](#get-apiweather) |
-| districts | array | Per-district: population, resources, housing, employment |
+| districts | array | Per-district: population, resources, housing, employment, wellbeing, DC |
+| districts[].resources | object | Flat totals per good: `{"Water": 150, "Log": 80}` |
 | districts[].housing | object | `{occupiedBeds, totalBeds, homeless}` per district |
 | districts[].employment | object | `{assigned, vacancies, unemployed}` per district |
+| districts[].wellbeing | object | `{average, miserable, critical}` per district |
+| districts[].dc | object | `{x, y, z, orientation, entranceX, entranceY}` district center location |
 | trees | object | `{markedGrown, markedSeedling, unmarkedGrown, species:[{name, markedGrown, unmarkedGrown, seedling}]}` |
 | crops | object | `{ready, growing, species:[{name, ready, growing}]}` |
-| wellbeing | object | `{average, miserable, critical, categories:[{group, current, max}]}` |
+| wellbeing | object | `{average, miserable, critical, categories:[{group, current, max}]}` (global) |
 | science | int | Current science points |
 | alerts | object | `{unstaffed, unpowered, unreachable}` counts |
-| faction | string | `"Folktails"` or `"IronTeeth"` |
-| dc | object | `{x, y, z, orientation, entranceX, entranceY}` district center location |
 | buildings | object | Building counts by role: `{housing, wood, storage, power, food, water, ...}` |
 | treeClusters | array | Nearby tree clusters (within 40 tiles of DC, same z). Same format as [tree_clusters](#get-apitree_clusters) |
 | foodClusters | array | Nearby food clusters (within 40 tiles of DC, same z). Same format as [food_clusters](#get-apifood_clusters) |
@@ -157,26 +159,25 @@ Full game state snapshot: settlement, time, weather, population, resources, tree
 
     ```json
     {
-      "settlementName": "My Colony",
+      "settlement": "My Colony",
+      "faction": "IronTeeth",
       "time": {"dayNumber": 42, "dayProgress": 0.65, "partialDayNumber": 42.65, "speed": 2},
       "weather": {"cycle": 3, "cycleDay": 5, "isHazardous": false, "temperateWeatherDuration": 12, "hazardousWeatherDuration": 6, "cycleLengthInDays": 18},
-      "districts": [{"name": "District 1", "population": {"adults": 20, "children": 5, "bots": 2}, "resources": {"Water": {"available": 150, "all": 200}, "Log": {"available": 80, "all": 80}}, "housing": {"occupiedBeds": 25, "totalBeds": 30, "homeless": 0}, "employment": {"assigned": 18, "vacancies": 22, "unemployed": 2}}],
+      "districts": [{"name": "District 1", "population": {"adults": 20, "children": 5, "bots": 2}, "resources": {"Water": 150, "Log": 80}, "housing": {"occupiedBeds": 25, "totalBeds": 30, "homeless": 0}, "employment": {"assigned": 18, "vacancies": 22, "unemployed": 2}, "wellbeing": {"average": 12.3, "miserable": 0, "critical": 1}, "dc": {"x": 120, "y": 140, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 139}}],
       "trees": {"markedGrown": 5, "markedSeedling": 2, "unmarkedGrown": 120, "species": [{"name": "Pine", "markedGrown": 3, "unmarkedGrown": 80, "seedling": 12}]},
       "crops": {"ready": 15, "growing": 30, "species": [{"name": "Kohlrabi", "ready": 10, "growing": 20}]},
       "wellbeing": {"average": 12.3, "miserable": 0, "critical": 1, "categories": [{"group": "SocialLife", "current": 0.5, "max": 2.0}, {"group": "Fun", "current": 1.2, "max": 3.0}]},
       "science": 450,
       "alerts": {"unstaffed": 3, "unpowered": 1, "unreachable": 0},
-      "faction": "IronTeeth",
-      "dc": {"x": 120, "y": 140, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 139},
       "buildings": {"housing": 5, "wood": 3, "storage": 2, "power": 1, "food": 2, "water": 1},
-      "treeClusters": [{"x": 125, "y": 145, "z": 2, "grown": 15, "total": 22}],
-      "foodClusters": [{"x": 115, "y": 135, "z": 2, "grown": 8, "total": 12}]
+      "treeClusters": [{"x": 125, "y": 145, "z": 2, "grown": 15, "total": 22, "species": {"Pine": 12, "Birch": 5}}],
+      "foodClusters": [{"x": 115, "y": 135, "z": 2, "grown": 8, "total": 12, "species": {"BlueberryBush": 8, "Dandelion": 4}}]
     }
     ```
 
 #### Response (format=toon)
 
-Flat key-value pairs including `settlementName`, `day`, `dayProgress`, `speed`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `cropReady`, `cropGrowing`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`, `faction`, `dc`, building role counts, `treeClusters`, `foodClusters`.
+Flat key-value pairs including `settlement`, `faction`, `day`, `dayProgress`, `speed`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `cropReady`, `cropGrowing`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`, building role counts, `treeClusters`, `foodClusters`.
 
 ---
 
@@ -856,10 +857,11 @@ Top 5 clusters of grown trees by density.
 | z | int | Cluster Z level |
 | grown | int | Fully grown trees in cluster |
 | total | int | Total trees in cluster |
+| species | object | Count per species: `{"Pine": 12, "Birch": 5}` |
 
 ```json
 [
-  {"x": 125, "y": 145, "z": 2, "grown": 15, "total": 22}
+  {"x": 125, "y": 145, "z": 2, "grown": 15, "total": 22, "species": {"Pine": 12, "Birch": 5}}
 ]
 ```
 
@@ -880,10 +882,11 @@ Top 5 clusters of gatherable food (berries, bushes) by density. Excludes tree sp
 | z | int | Cluster Z level |
 | grown | int | Fully grown gatherables in cluster |
 | total | int | Total gatherables in cluster |
+| species | object | Count per species: `{"BlueberryBush": 8, "Dandelion": 4}` |
 
 ```json
 [
-  {"x": 115, "y": 135, "z": 2, "grown": 8, "total": 12}
+  {"x": 115, "y": 135, "z": 2, "grown": 8, "total": 12, "species": {"BlueberryBush": 8, "Dandelion": 4}}
 ]
 ```
 
@@ -1896,7 +1899,8 @@ timberbot.py top
 Persistent colony knowledge in `Documents/Timberborn/Mods/Timberbot/memory/`.
 
 ```bash
-timberbot.py brain            # full colony picture, always fresh, persists to brain.toon
+timberbot.py brain            # live summary + persistent goal/tasks/maps
+timberbot.py brain goal:"get to 77 wellbeing"  # set persistent goal
 timberbot.py list_maps        # list saved map files
 timberbot.py add_task action:"build roads"   # add task to work queue
 timberbot.py update_task id:1 status:done    # update task status
@@ -1904,7 +1908,7 @@ timberbot.py list_tasks       # show all tasks
 timberbot.py clear_tasks      # remove done tasks
 ```
 
-`brain` returns faction, DC (with entrance coords), structured summary, building counts by role, nearby tree clusters, food clusters, map index, and task queue. Always fresh from game. Persists to `memory/brain.toon`. Auto-creates brain and DC map on first run. Replaces `summary` for all state queries.
+`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, maps). Summary is never persisted -- only goal, tasks, and maps survive between sessions. Auto-creates brain and DC map on first run. Set a persistent goal with `brain goal:"text"`.
 
 ---
 
