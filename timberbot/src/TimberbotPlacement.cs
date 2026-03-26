@@ -257,14 +257,11 @@ namespace Timberbot
             return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
-        // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
-        // Two-pass: first plan what goes on each tile, then place everything.
-        // No demolishing needed -- each tile gets the right thing the first time.
-        public object RoutePath(int x1, int y1, int x2, int y2)
+        // Route a path from (x1,y1) to (x2,y2) using A* to avoid obstacles.
+        // Falls back to straight-line when A* finds no route (fully blocked).
+        // Three-pass: 1) A* finds 2D waypoints, 2) plan elevation (stairs/platforms), 3) place.
+        public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct")
         {
-            if (x1 != x2 && y1 != y2)
-                return Jw.Error("invalid_param: path must be a straight line (x1==x2 or y1==y2)");
-
             string stairsPrefab = "Stairs" + _factionSuffix;
             string platformPrefab = "Platform" + _factionSuffix;
             var stairsSpec = _buildingService.GetBuildingTemplate(stairsPrefab);
@@ -274,27 +271,69 @@ namespace Timberbot
             bool stairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
             bool platformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
 
-            int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
-            int dy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
-            // stairs face the direction of uphill travel
-            int stairsOrient = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
+            // --- PASS 0: A* PATHFINDING ---
+            // Build cost grid with padding for detours, then run A*.
+            const int PADDING = 10;
+            int minX = System.Math.Min(x1, x2) - PADDING;
+            int minY = System.Math.Min(y1, y2) - PADDING;
+            int maxX = System.Math.Max(x1, x2) + PADDING;
+            int maxY = System.Math.Max(y1, y2) + PADDING;
+            var mapSize = _terrainService.Size;
+            if (minX < 0) minX = 0;
+            if (minY < 0) minY = 0;
+            if (maxX >= mapSize.x) maxX = mapSize.x - 1;
+            if (maxY >= mapSize.y) maxY = mapSize.y - 1;
+            int gw = maxX - minX + 1;
+            int gh = maxY - minY + 1;
 
-            // --- PASS 1: PLAN ---
-            // Each entry: (x, y, z, prefab, orientation)
-            // prefab is "Path", "Stairs.Faction", "Platform.Faction", or null (skip)
+            var costGrid = BuildCostGrid(minX, minY, gw, gh);
+            if (style != "direct" && style != "straight") style = "direct";
+            var waypoints = AStarPath(costGrid, gw, gh, x1 - minX, y1 - minY, x2 - minX, y2 - minY, gw * gh, style);
+            bool usedAStar = waypoints != null;
+
+            // fallback: straight line (original behavior) if A* fails
+            if (waypoints == null)
+            {
+                if (x1 != x2 && y1 != y2)
+                    return Jw.Error("no_path: A* found no route and diagonal straight-line is not supported");
+                waypoints = new List<(int, int)>();
+                int sdx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
+                int sdy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
+                int sx = x1, sy = y1;
+                while (true)
+                {
+                    waypoints.Add((sx - minX, sy - minY));
+                    if (sx == x2 && sy == y2) break;
+                    sx += sdx; sy += sdy;
+                }
+            }
+
+            // --- PASS 1: PLAN ELEVATION ---
+            // build set of tiles that already have paths/stairs -- skip placing on these
+            var existingPathTiles = new HashSet<long>();
+            foreach (var cb in _cache.Buildings.Read)
+            {
+                if (cb.OccupiedTiles == null) continue;
+                if (!cb.Name.Contains("Path") && !cb.Name.Contains("Stairs") && !cb.Name.Contains("Platform")) continue;
+                foreach (var t in cb.OccupiedTiles)
+                    existingPathTiles.Add((long)t.x * 100000 + t.y);
+            }
+
             var plan = new List<(int x, int y, int z, string prefab, string orient)>();
             var errors = new List<string>();
-            int cx = x1, cy = y1;
-            int prevZ = GetTerrainHeight(cx, cy);
+            int prevZ = 0;
 
-            while (true)
+            for (int wi = 0; wi < waypoints.Count; wi++)
             {
+                int cx = waypoints[wi].Item1 + minX;
+                int cy = waypoints[wi].Item2 + minY;
                 int tz = GetTerrainHeight(cx, cy);
+
+                if (wi == 0) { prevZ = tz; }
+
                 if (tz <= 0)
                 {
                     errors.Add($"no terrain at ({cx},{cy})");
-                    if (cx == x2 && cy == y2) break;
-                    cx += dx; cy += dy;
                     continue;
                 }
 
@@ -306,67 +345,108 @@ namespace Timberbot
                     {
                         errors.Add($"z-change at ({cx},{cy}): stairs not unlocked (need {stairsPrefab})");
                         prevZ = tz;
-                        if (cx == x2 && cy == y2) break;
-                        cx += dx; cy += dy;
                         continue;
                     }
                     if (levels > 1 && !platformUnlocked)
                     {
                         errors.Add($"z-change at ({cx},{cy}): {levels}-level jump requires platforms (need {platformPrefab})");
                         prevZ = tz;
-                        if (cx == x2 && cy == y2) break;
-                        cx += dx; cy += dy;
+                        continue;
+                    }
+                    if (wi < levels)
+                    {
+                        errors.Add($"z-change at ({cx},{cy}): not enough waypoints behind for {levels}-level ramp");
+                        prevZ = tz;
                         continue;
                     }
 
                     int baseZ = System.Math.Min(prevZ, tz);
                     bool goingUp = zDiff > 0;
-                    int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
 
-                    for (int step = 0; step < levels; step++)
+                    // Determine stair orientation from the z-change direction.
+                    // The stair faces from the lower tile toward the higher tile.
+                    // For going up: previous tile (wi-1) is lower, current (wi) is higher.
+                    //   Stair placed on wi-1, facing toward wi.
+                    // For going down: current (wi) is lower, previous (wi-1) is higher.
+                    //   Stair placed on wi, facing toward wi-1.
+                    int lowerWi = goingUp ? wi - 1 : wi;
+                    int higherWi = goingUp ? wi : wi - 1;
+                    int lowerX = waypoints[lowerWi].Item1 + minX;
+                    int lowerY = waypoints[lowerWi].Item2 + minY;
+                    int higherX = waypoints[higherWi].Item1 + minX;
+                    int higherY = waypoints[higherWi].Item2 + minY;
+
+                    // stair faces from lower toward higher
+                    int sdx = higherX - lowerX;
+                    int sdy = higherY - lowerY;
+                    int orientIdx = sdx > 0 ? 3 : sdx < 0 ? 1 : sdy > 0 ? 2 : 0;
+
+                    // entrance is on the lower side (opposite of facing direction)
+                    int entranceX = lowerX - sdx;
+                    int entranceY = lowerY - sdy;
+                    // exit is on the higher side (same as facing direction from stair)
+                    int exitX = higherX; // the higher tile IS the exit
+
+                    // For multi-level: stack platforms + stairs on the lower tile.
+                    // TODO: multi-level needs multiple tiles; for now handle 1-level cleanly.
+                    if (levels == 1)
                     {
-                        int rampTileX, rampTileY;
-                        if (goingUp)
+                        plan.RemoveAll(p => p.x == lowerX && p.y == lowerY);
+                        plan.Add((lowerX, lowerY, baseZ, stairsPrefab, OrientNames[orientIdx]));
+
+                        // bridge tile at entrance if the previous path tile isn't there
+                        int beforeWi = goingUp ? wi - 2 : wi + 1;
+                        if (beforeWi >= 0 && beforeWi < waypoints.Count)
                         {
-                            rampTileX = cx - dx * (levels - step);
-                            rampTileY = cy - dy * (levels - step);
+                            int bx = waypoints[beforeWi].Item1 + minX;
+                            int by = waypoints[beforeWi].Item2 + minY;
+                            if (bx != entranceX || by != entranceY)
+                            {
+                                // insert a bridge path tile at the entrance
+                                int ez = GetTerrainHeight(entranceX, entranceY);
+                                if (ez > 0 && !plan.Exists(p => p.x == entranceX && p.y == entranceY)
+                                    && !existingPathTiles.Contains((long)entranceX * 100000 + entranceY))
+                                    plan.Add((entranceX, entranceY, ez, "Path", "south"));
+                            }
                         }
-                        else
-                        {
-                            // going down: ramp on lower z side, forward from cx
-                            rampTileX = cx + dx * step;
-                            rampTileY = cy + dy * step;
-                        }
-
-                        // remove any path we planned for this tile (going up replaces previous tile)
-                        plan.RemoveAll(p => p.x == rampTileX && p.y == rampTileY);
-
-                        // stack platforms under the stair
-                        // going up: step 0 = no platforms (furthest from cliff), step N = tallest (at cliff)
-                        // going down: reversed -- step 0 = tallest (at cliff), step N = no platforms
-                        int platCount = goingUp ? step : (levels - 1 - step);
-                        for (int p = 0; p < platCount; p++)
-                            plan.Add((rampTileX, rampTileY, baseZ + p, platformPrefab, "south"));
-
-                        // place stair on top of platforms
-                        plan.Add((rampTileX, rampTileY, baseZ + platCount, stairsPrefab, OrientNames[rampOrient]));
                     }
-
-                    if (!goingUp)
+                    else
                     {
-                        for (int skip = 0; skip < levels - 1; skip++)
-                        { cx += dx; cy += dy; }
+                        // multi-level: use previous waypoints, same as before but with orientation fix
+                        for (int step = 0; step < levels; step++)
+                        {
+                            int rampWi;
+                            if (goingUp)
+                            {
+                                rampWi = wi - levels + step;
+                                if (rampWi < 0) { errors.Add($"z-change at ({cx},{cy}): not enough waypoints for {levels}-level ramp"); break; }
+                            }
+                            else
+                            {
+                                rampWi = wi + step;
+                                if (rampWi >= waypoints.Count) { errors.Add($"z-change at ({cx},{cy}): not enough waypoints for {levels}-level ramp"); break; }
+                            }
+                            int rampTileX = waypoints[rampWi].Item1 + minX;
+                            int rampTileY = waypoints[rampWi].Item2 + minY;
+
+                            plan.RemoveAll(p => p.x == rampTileX && p.y == rampTileY);
+
+                            int platCount = goingUp ? step : (levels - 1 - step);
+                            for (int p = 0; p < platCount; p++)
+                                plan.Add((rampTileX, rampTileY, baseZ + p, platformPrefab, "south"));
+
+                            // all stairs in the stack face the same direction (toward higher z)
+                            plan.Add((rampTileX, rampTileY, baseZ + platCount, stairsPrefab, OrientNames[orientIdx]));
+                        }
                     }
 
                     prevZ = tz;
-                    // fall through to place path at current tile
                 }
 
-                if (!plan.Exists(p => p.x == cx && p.y == cy))
+                if (!plan.Exists(p => p.x == cx && p.y == cy)
+                    && !existingPathTiles.Contains((long)cx * 100000 + cy))
                     plan.Add((cx, cy, tz, "Path", "south"));
                 prevZ = tz;
-                if (cx == x2 && cy == y2) break;
-                cx += dx; cy += dy;
             }
 
             // --- PASS 2: EXECUTE ---
@@ -388,8 +468,10 @@ namespace Timberbot
                 }
             }
 
-            // serialize -- itemized placed counts, only non-zero types
-            var jw = _cache.Jw.BeginObj().Obj("placed").Prop("paths", pathCount);
+            // serialize
+            var jw = _cache.Jw.BeginObj();
+            if (!usedAStar) jw.Prop("fallback", true);
+            jw.Obj("placed").Prop("paths", pathCount);
             if (stairCount > 0) jw.Prop("stairs", stairCount);
             if (platformCount > 0) jw.Prop("platforms", platformCount);
             jw.CloseObj().Prop("skipped", skipped);
@@ -404,6 +486,159 @@ namespace Timberbot
             }
             jw.CloseObj();
             return jw.ToString();
+        }
+
+        // Build a flat cost grid for A* over the region (minX,minY) with dimensions (w,h).
+        // Pure cost math -- A* sums tile costs and picks the cheapest total route.
+        //   open terrain = 1, existing paths = 1, buildings/trees = 255, no terrain = 255.
+        //   Any detour under 255 tiles is cheaper than crossing one building.
+        private ushort[] BuildCostGrid(int minX, int minY, int w, int h)
+        {
+            var grid = new ushort[w * h];
+
+            // terrain: open ground = 1, no terrain = 255
+            for (int ly = 0; ly < h; ly++)
+            {
+                for (int lx = 0; lx < w; lx++)
+                {
+                    int tz = GetTerrainHeight(minX + lx, minY + ly);
+                    grid[ly * w + lx] = tz > 0 ? (ushort)1 : (ushort)255;
+                }
+            }
+
+            // buildings: paths/stairs/platforms stay at 1, everything else = 255
+            foreach (var cb in _cache.Buildings.Read)
+            {
+                if (cb.OccupiedTiles == null) continue;
+                bool isPath = cb.Name.Contains("Path") || cb.Name.Contains("Stairs") || cb.Name.Contains("Platform");
+                foreach (var t in cb.OccupiedTiles)
+                {
+                    int lx = t.x - minX, ly = t.y - minY;
+                    if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+                    if (!isPath) grid[ly * w + lx] = 255;
+                }
+            }
+
+            // natural resources (trees, bushes) = 255
+            foreach (var nr in _cache.NaturalResources.Read)
+            {
+                int lx = nr.X - minX, ly = nr.Y - minY;
+                if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+                grid[ly * w + lx] = 255;
+            }
+
+            return grid;
+        }
+
+        // A* pathfinding on a flat cost grid. 4-directional, Manhattan heuristic.
+        // Every tile has a cost (1=open, 255=obstacle). No impassable -- cost alone steers routing.
+        // style: "direct" = staircase (alternate axes), "straight" = minimize turns (long runs).
+        // Returns list of (localX, localY) from start to goal, or null if maxNodes exceeded.
+        private static List<(int, int)> AStarPath(ushort[] grid, int w, int h, int sx, int sy, int gx, int gy, int maxNodes, string style)
+        {
+            if (sx < 0 || sx >= w || sy < 0 || sy >= h) return null;
+            if (gx < 0 || gx >= w || gy < 0 || gy >= h) return null;
+
+            bool straight = style == "straight";
+
+            // Scale fScore by 4 to leave room for tie-breaking bias (0-3).
+            // This preserves A* optimality -- ties between equal-cost paths are broken by style.
+            var gScore = new Dictionary<int, int>();
+            var fScore = new Dictionary<int, int>();
+            var cameFrom = new Dictionary<int, int>();
+            var open = new SortedSet<(int f, int idx)>();
+
+            int startIdx = sy * w + sx;
+            int goalIdx = gy * w + gx;
+            gScore[startIdx] = 0;
+            int h0 = (System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy)) * 4;
+            fScore[startIdx] = h0;
+            open.Add((h0, startIdx));
+
+            int[] ddx = { 1, -1, 0, 0 };
+            int[] ddy = { 0, 0, 1, -1 };
+            int nodesExpanded = 0;
+
+            while (open.Count > 0)
+            {
+                var (cf, cidx) = open.Min;
+                open.Remove(open.Min);
+
+                if (cidx == goalIdx)
+                {
+                    var path = new List<(int, int)>();
+                    int cur = goalIdx;
+                    while (cur != startIdx)
+                    {
+                        path.Add((cur % w, cur / w));
+                        cur = cameFrom[cur];
+                    }
+                    path.Add((sx, sy));
+                    path.Reverse();
+                    return path;
+                }
+
+                if (++nodesExpanded > maxNodes) return null;
+
+                int cx2 = cidx % w;
+                int cy2 = cidx / w;
+                int cg = gScore.ContainsKey(cidx) ? gScore[cidx] : int.MaxValue;
+
+                // direction we arrived from (for "straight" style turn penalty)
+                int prevDx = 0, prevDy = 0;
+                if (straight && cameFrom.ContainsKey(cidx))
+                {
+                    int prev = cameFrom[cidx];
+                    prevDx = cx2 - (prev % w);
+                    prevDy = cy2 - (prev / w);
+                }
+
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = cx2 + ddx[d];
+                    int ny = cy2 + ddy[d];
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    int nidx = ny * w + nx;
+                    int tentG = cg + grid[nidx];
+                    int prevG = gScore.ContainsKey(nidx) ? gScore[nidx] : int.MaxValue;
+                    if (tentG < prevG)
+                    {
+                        cameFrom[nidx] = cidx;
+                        gScore[nidx] = tentG;
+                        int baseH = System.Math.Abs(gx - nx) + System.Math.Abs(gy - ny);
+                        // tie-breaking bias (0-3): doesn't affect optimality, just path shape
+                        int bias;
+                        if (straight)
+                        {
+                            // penalize direction changes: 0 = same dir, 2 = turn
+                            bool samedir = (ddx[d] == prevDx && ddy[d] == prevDy) || (prevDx == 0 && prevDy == 0);
+                            bias = samedir ? 0 : 2;
+                        }
+                        else
+                        {
+                            // "direct": prefer reducing the larger remaining axis first
+                            // bias=0 when stepping toward the axis with more distance, bias=2 otherwise
+                            int remX = System.Math.Abs(gx - nx);
+                            int remY = System.Math.Abs(gy - ny);
+                            int remXbefore = System.Math.Abs(gx - cx2);
+                            int remYbefore = System.Math.Abs(gy - cy2);
+                            bool reducedX = remX < remXbefore;
+                            bool reducedY = remY < remYbefore;
+                            if (reducedX && remXbefore >= remYbefore) bias = 0;      // reduced the larger axis
+                            else if (reducedY && remYbefore >= remXbefore) bias = 0;  // reduced the larger axis
+                            else if (reducedX || reducedY) bias = 1;                  // reduced an axis, not the larger
+                            else bias = 3;                                            // moved away from goal
+                        }
+                        int nf = baseH * 4 + bias;
+                        if (fScore.ContainsKey(nidx))
+                            open.Remove((fScore[nidx], nidx));
+                        fScore[nidx] = nf;
+                        open.Add((nf, nidx));
+                    }
+                }
+            }
+
+            return null; // no path
         }
 
         // general purpose debug endpoint -- navigate, inspect, and call methods on any game object

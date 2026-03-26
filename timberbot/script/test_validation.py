@@ -915,8 +915,7 @@ class TestRunner:
                 self.bot.demolish_building(b["id"])
 
     def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
-        """cleanup test area, place a path, verify results"""
-        self._path_demolish_range(x1, y1, x2, y2)
+        """place a path and verify results -- no cleanup, paths stay for visual inspection"""
         result = self.bot.place_path(x1, y1, x2, y2)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
         errs = str(result.get("errors", ""))
@@ -960,10 +959,78 @@ class TestRunner:
 
     def test_path_errors(self):
         print("\n=== path routing: errors ===\n")
-        result = self.bot.place_path(100, 100, 105, 105)
-        self.check("diagonal path rejected",
-                   self.err(result) and "invalid_param" in str(result.get("error", "")),
+        # out-of-bounds coordinates should fail (beyond map edge)
+        result = self.bot.place_path(self.map_x + 10, self.map_y + 10, self.map_x + 15, self.map_y + 10)
+        self.check("out-of-bounds path fails",
+                   self.err(result) or result.get("placed", {}).get("paths", 0) == 0,
                    json.dumps(result)[:100])
+
+    def test_path_astar_diagonal(self):
+        """A* can route between diagonal endpoints (was rejected by old straight-line logic)."""
+        print("\n=== path routing: A* diagonal ===\n")
+        # isolated area -- z=3 area
+        x1, y1, x2, y2 = 110, 95, 160, 145
+        self._path_demolish_range(x1 - 12, y1 - 12, x2 + 12, y2 + 12)
+        result = self.bot.place_path(x1, y1, x2, y2)
+        placed = result.get("placed", {}) if isinstance(result, dict) else {}
+        self.check("diagonal: paths placed via A*",
+                   placed.get("paths", 0) > 0,
+                   json.dumps(result)[:120])
+        self.check("diagonal: no fallback",
+                   not result.get("fallback", False),
+                   json.dumps(result)[:120])
+        manhattan = abs(x2 - x1) + abs(y2 - y1)
+        self.check("diagonal: reasonable path count",
+                   placed.get("paths", 0) > manhattan // 2,
+                   f"paths={placed.get('paths', 0)}, manhattan={manhattan}")
+
+    def test_path_astar_obstacle(self):
+        """A* routes around a building placed in the middle of a straight path."""
+        print("\n=== path routing: A* obstacle avoidance ===\n")
+        # isolated y=147 row, away from flat tests (y=142-143) and 1z tests
+        x1, y1, x2, y2 = 160, 147, 168, 147
+
+        # place a blocker building in the middle of the straight line
+        mid_x = (x1 + x2) // 2  # 164
+        blocker_prefab = self.prefab("Inventor")
+        spot = self.bot.find_placement(blocker_prefab, mid_x - 1, y1 - 1, mid_x + 1, y1 + 1)
+        placements = spot.get("placements", []) if isinstance(spot, dict) else []
+        if not placements:
+            self.skip("astar obstacle", f"no valid spot for {blocker_prefab} near ({mid_x},{y1})")
+            return
+        p = placements[0]
+        placed_blocker = self.bot.place_building(blocker_prefab, p["x"], p["y"], p.get("z", 0), p.get("orientation", "south"))
+        blocker_id = placed_blocker.get("id") if isinstance(placed_blocker, dict) else None
+        if not blocker_id:
+            self.skip("astar obstacle", f"could not place {blocker_prefab}")
+            return
+        self.wait_for_refresh()
+
+        result = self.bot.place_path(x1, y1, x2, y2)
+        placed = result.get("placed", {}) if isinstance(result, dict) else {}
+        straight_dist = abs(x2 - x1)  # 8 tiles
+        self.check("obstacle: paths placed",
+                   placed.get("paths", 0) > 0,
+                   json.dumps(result)[:120])
+        self.check("obstacle: detour taken (paths > straight distance)",
+                   placed.get("paths", 0) > straight_dist,
+                   f"paths={placed.get('paths', 0)}, straight={straight_dist}")
+        self.check("obstacle: no fallback",
+                   not result.get("fallback", False),
+                   json.dumps(result)[:120])
+
+    def test_path_astar_no_route(self):
+        """A* returns error or no paths when coords are out of bounds."""
+        print("\n=== path routing: A* no route ===\n")
+        # coords well beyond map bounds -- A* grid won't contain valid tiles
+        mx, my = self.map_x + 50, self.map_y + 50
+        result = self.bot.place_path(mx, my, mx + 5, my)
+        no_route = (self.err(result)
+                    or result.get("placed", {}).get("paths", 0) == 0
+                    or result.get("fallback", False))
+        self.check("out-of-bounds: no route",
+                   no_route,
+                   json.dumps(result)[:120])
 
     def test_overridable_placement(self):
         print("\n=== overridable placement ===\n")
