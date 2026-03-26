@@ -310,9 +310,9 @@ namespace Timberbot
             }
 
             // --- DERIVED STATS ---
-            int totalAdults = 0;
+            int totalAdults = 0, totalChildren = 0, totalBots = 0;
             foreach (var dc in _cache.Districts)
-                totalAdults += dc.Adults;
+            { totalAdults += dc.Adults; totalChildren += dc.Children; totalBots += dc.Bots; }
             // homeless = beavers with no bed (children count, adults count)
             int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
             // unemployed = adults not assigned to any workplace (available for hauling)
@@ -450,30 +450,33 @@ namespace Timberbot
             jw.Prop("cropReady", cropReady);
             jw.Prop("cropGrowing", cropGrowing);
 
-            // population + resources (from cached district snapshot)
+            // population + resources -- aggregate across all districts before emitting
             int totalFood = 0, totalWater = 0, logStock = 0, plankStock = 0, gearStock = 0;
+            var resourceTotals = new Dictionary<string, int>();
             foreach (var dc in _cache.Districts)
             {
-                jw.Prop("adults", dc.Adults);
-                jw.Prop("children", dc.Children);
-                jw.Prop("bots", dc.Bots);
                 if (dc.Resources != null)
                 {
                     foreach (var kvp in dc.Resources)
                     {
                         int avail = kvp.Value.available;
-                        jw.Key(kvp.Key).Int(avail);
+                        resourceTotals[kvp.Key] = resourceTotals.GetValueOrDefault(kvp.Key) + avail;
                         if (kvp.Key == "Water") totalWater += avail;
                         else if (kvp.Key == "Berries" || kvp.Key == "Kohlrabi" || kvp.Key == "Carrot" || kvp.Key == "Potato"
                               || kvp.Key == "Wheat" || kvp.Key == "Bread" || kvp.Key == "Cassava" || kvp.Key == "Corn"
                               || kvp.Key == "Eggplant" || kvp.Key == "Soybean" || kvp.Key == "MapleSyrup")
                             totalFood += avail;
-                        else if (kvp.Key == "Log") logStock = avail;
-                        else if (kvp.Key == "Plank") plankStock = avail;
-                        else if (kvp.Key == "Gear") gearStock = avail;
+                        else if (kvp.Key == "Log") logStock += avail;
+                        else if (kvp.Key == "Plank") plankStock += avail;
+                        else if (kvp.Key == "Gear") gearStock += avail;
                     }
                 }
             }
+            jw.Prop("adults", totalAdults);
+            jw.Prop("children", totalChildren);
+            jw.Prop("bots", totalBots);
+            foreach (var kvp in resourceTotals)
+                jw.Key(kvp.Key).Int(kvp.Value);
 
             // Resource projection: how many days of each resource at current consumption.
             // Beavers eat ~1 food/day and drink ~2 water/day. These projections help
