@@ -596,60 +596,61 @@ namespace Timberbot
                     continue;
                 }
 
-                // full detail: conditional fields (only present if building has that component)
-                if (c.Pausable != null) jw.Prop("pausable", true);
-                if (c.HasFloodgate) jw.Prop("floodgate", true).Prop("height", c.FloodgateHeight, "F1").Prop("maxHeight", c.FloodgateMaxHeight, "F1");
-                if (c.ConstructionPriority != null) jw.Prop("constructionPriority", c.ConstructionPriority);
-                if (c.WorkplacePriorityStr != null) jw.Prop("workplacePriority", c.WorkplacePriorityStr);
-                if (c.Workplace != null) jw.Prop("maxWorkers", c.MaxWorkers).Prop("desiredWorkers", c.DesiredWorkers).Prop("assignedWorkers", c.AssignedWorkers);
-                if (c.Reachability != null) jw.Prop("reachable", !c.Unreachable);
-                if (c.Mechanical != null) jw.Prop("powered", c.Powered);
-                if (c.PowerNode != null)
+                // full detail: uniform schema -- always emit all fields with defaults
+                jw.Prop("constructionPriority", c.ConstructionPriority ?? "")
+                    .Prop("workplacePriority", c.WorkplacePriorityStr ?? "")
+                    .Prop("maxWorkers", c.Workplace != null ? c.MaxWorkers : 0)
+                    .Prop("desiredWorkers", c.Workplace != null ? c.DesiredWorkers : 0)
+                    .Prop("assignedWorkers", c.Workplace != null ? c.AssignedWorkers : 0)
+                    .Prop("reachable", c.Reachability != null && !c.Unreachable)
+                    .Prop("powered", c.Mechanical != null && c.Powered)
+                    .Prop("isGenerator", c.PowerNode != null && c.IsGenerator)
+                    .Prop("isConsumer", c.PowerNode != null && c.IsConsumer)
+                    .Prop("nominalPowerInput", c.PowerNode != null ? c.NominalPowerInput : 0)
+                    .Prop("nominalPowerOutput", c.PowerNode != null ? c.NominalPowerOutput : 0)
+                    .Prop("powerDemand", c.PowerNode != null ? c.PowerDemand : 0)
+                    .Prop("powerSupply", c.PowerNode != null ? c.PowerSupply : 0)
+                    .Prop("buildProgress", c.Site != null ? c.BuildProgress : 0f)
+                    .Prop("materialProgress", c.Site != null ? c.MaterialProgress : 0f)
+                    .Prop("hasMaterials", c.Site != null && c.HasMaterials)
+                    .Prop("stock", c.Capacity > 0 ? c.Stock : 0)
+                    .Prop("capacity", c.Capacity)
+                    .Prop("dwellers", c.Dwelling != null ? c.Dwellers : 0)
+                    .Prop("maxDwellers", c.Dwelling != null ? c.MaxDwellers : 0)
+                    .Prop("floodgate", c.HasFloodgate)
+                    .Prop("height", c.HasFloodgate ? c.FloodgateHeight : 0f, "F1")
+                    .Prop("maxHeight", c.HasFloodgate ? c.FloodgateMaxHeight : 0f, "F1")
+                    .Prop("isClutch", c.HasClutch)
+                    .Prop("clutchEngaged", c.HasClutch && c.ClutchEngaged)
+                    .Prop("currentRecipe", c.Manufactory != null ? (c.CurrentRecipe ?? "") : "")
+                    .Prop("productionProgress", c.Manufactory != null ? c.ProductionProgress : 0f)
+                    .Prop("readyToProduce", c.Manufactory != null && c.ReadyToProduce)
+                    .Prop("effectRadius", c.EffectRadius)
+                    .Prop("isWonder", c.HasWonder)
+                    .Prop("wonderActive", c.HasWonder && c.WonderActive);
+
+                // inventory: flat string for toon, object for json
+                if (format == "toon")
                 {
-                    jw.Prop("isGenerator", c.IsGenerator).Prop("isConsumer", c.IsConsumer)
-                        .Prop("nominalPowerInput", c.NominalPowerInput).Prop("nominalPowerOutput", c.NominalPowerOutput);
-                    if (c.PowerDemand > 0 || c.PowerSupply > 0) jw.Prop("powerDemand", c.PowerDemand).Prop("powerSupply", c.PowerSupply);
+                    var invSb = new System.Text.StringBuilder();
+                    if (c.Inventory != null)
+                        foreach (var kvp in c.Inventory) { if (invSb.Length > 0) invSb.Append('/'); invSb.Append(kvp.Key).Append(':').Append(kvp.Value); }
+                    jw.Prop("inventory", invSb.ToString());
+
+                    var recSb = new System.Text.StringBuilder();
+                    if (c.Recipes != null)
+                        for (int ri = 0; ri < c.Recipes.Count; ri++) { if (recSb.Length > 0) recSb.Append('/'); recSb.Append(c.Recipes[ri]); }
+                    jw.Prop("recipes", recSb.ToString());
                 }
-                if (c.Site != null) jw.Prop("buildProgress", c.BuildProgress).Prop("materialProgress", c.MaterialProgress).Prop("hasMaterials", c.HasMaterials);
-                if (c.Capacity > 0)
+                else
                 {
-                    jw.Prop("stock", c.Stock).Prop("capacity", c.Capacity);
-                    if (c.Inventory != null && c.Inventory.Count > 0)
-                    {
-                        jw.Obj("inventory");
-                        foreach (var kvp in c.Inventory)
-                            jw.Key(kvp.Key).Int(kvp.Value);
-                        jw.CloseObj();
-                    }
+                    jw.Obj("inventory");
+                    if (c.Inventory != null) foreach (var kvp in c.Inventory) jw.Key(kvp.Key).Int(kvp.Value);
+                    jw.CloseObj();
+                    jw.Arr("recipes");
+                    if (c.Recipes != null) for (int ri = 0; ri < c.Recipes.Count; ri++) jw.Str(c.Recipes[ri]);
+                    jw.CloseArr();
                 }
-                if (c.HasWonder) jw.Prop("isWonder", true).Prop("wonderActive", c.WonderActive);
-                if (c.Dwelling != null) jw.Prop("dwellers", c.Dwellers).Prop("maxDwellers", c.MaxDwellers);
-                if (c.HasClutch) jw.Prop("isClutch", true).Prop("clutchEngaged", c.ClutchEngaged);
-                if (c.Manufactory != null)
-                {
-                    if (c.Recipes != null && c.Recipes.Count > 0)
-                    {
-                        jw.Arr("recipes");
-                        for (int ri = 0; ri < c.Recipes.Count; ri++)
-                            jw.Str(c.Recipes[ri]);
-                        jw.CloseArr();
-                    }
-                    jw.Prop("currentRecipe", c.CurrentRecipe ?? "")
-                        .Prop("productionProgress", c.ProductionProgress)
-                        .Prop("readyToProduce", c.ReadyToProduce);
-                }
-                if (c.BreedingPod != null)
-                {
-                    jw.Prop("needsNutrients", c.NeedsNutrients);
-                    if (c.NutrientStock != null && c.NutrientStock.Count > 0)
-                    {
-                        jw.Obj("nutrients");
-                        foreach (var kvp in c.NutrientStock)
-                            jw.Key(kvp.Key).Int(kvp.Value);
-                        jw.CloseObj();
-                    }
-                }
-                if (c.EffectRadius > 0) jw.Prop("effectRadius", c.EffectRadius);
                 jw.CloseObj();
             }
             jw.CloseArr();
@@ -801,15 +802,18 @@ namespace Timberbot
                     continue;
                 }
 
-                // full detail
-                jw.Prop("anyCritical", c.AnyCritical);
-                if (c.Workplace != null) jw.Prop("workplace", c.Workplace);
-                if (c.District != null) jw.Prop("district", c.District);
-                jw.Prop("hasHome", c.HasHome).Prop("contaminated", c.Contaminated);
-                if (c.Life != null) jw.Prop("lifeProgress", c.LifeProgress);
-                if (c.Deteriorable != null) jw.Prop("deterioration", c.DeteriorationProgress, "F3");
-                if (c.Carrier != null) { jw.Prop("liftingCapacity", c.LiftingCapacity); if (c.Overburdened) jw.Prop("overburdened", true); }
-                if (c.IsCarrying) jw.Prop("carrying", c.CarryingGood).Prop("carryAmount", c.CarryAmount);
+                // full detail: uniform schema -- always emit all fields with defaults
+                jw.Prop("anyCritical", c.AnyCritical)
+                    .Prop("workplace", c.Workplace ?? "")
+                    .Prop("district", c.District ?? "")
+                    .Prop("hasHome", c.HasHome)
+                    .Prop("contaminated", c.Contaminated)
+                    .Prop("lifeProgress", c.Life != null ? c.LifeProgress : 0f)
+                    .Prop("deterioration", c.Deteriorable != null ? c.DeteriorationProgress : 0f, "F3")
+                    .Prop("liftingCapacity", c.Carrier != null ? c.LiftingCapacity : 0)
+                    .Prop("overburdened", c.Carrier != null && c.Overburdened)
+                    .Prop("carrying", c.IsCarrying ? c.CarryingGood : "")
+                    .Prop("carryAmount", c.IsCarrying ? c.CarryAmount : 0);
 
                 // needs array
                 jw.Arr("needs");
@@ -1113,25 +1117,12 @@ namespace Timberbot
                     jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight);
                     jw.Prop("water", waterDepth, "F1");
 
-                    if (format == "json")
+                    // uniform schema -- always emit all fields
+                    jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
+
+                    // occupants: z-range string for toon, array for json
+                    if (format == "toon")
                     {
-                        // JSON: sparse -- only include fields when present
-                        if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
-                        if (occList != null)
-                        {
-                            jw.Arr("occupants");
-                            foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
-                            jw.CloseArr();
-                        }
-                        if (entrances.Contains(key)) jw.Prop("entrance", true);
-                        if (seedlings.Contains(key)) jw.Prop("seedling", true);
-                        if (deadTiles.Contains(key)) jw.Prop("dead", true);
-                        try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Prop("contaminated", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
-                        try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Prop("moist", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
-                    }
-                    else
-                    {
-                        // TOON: uniform schema -- always emit all fields for CSV table
                         string occStr = "";
                         if (occList != null)
                         {
@@ -1154,11 +1145,23 @@ namespace Timberbot
                             occStr = sb.ToString();
                         }
                         jw.Prop("occupants", occStr);
-                        jw.Prop("entrance", entrances.Contains(key));
-                        bool moist = false;
-                        try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
-                        jw.Prop("moist", moist);
                     }
+                    else
+                    {
+                        jw.Arr("occupants");
+                        if (occList != null) foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
+                        jw.CloseArr();
+                    }
+
+                    jw.Prop("entrance", entrances.Contains(key));
+                    jw.Prop("seedling", seedlings.Contains(key));
+                    jw.Prop("dead", deadTiles.Contains(key));
+                    bool contaminated = false;
+                    try { contaminated = _soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                    jw.Prop("contaminated", contaminated);
+                    bool moist = false;
+                    try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    jw.Prop("moist", moist);
                     jw.CloseObj();
                 }
             }
