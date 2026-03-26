@@ -1,15 +1,59 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, needs met.
-version: "5.5"
+version: "5.7"
 ---
 # Timberbot - Game Reference
+
+## FIRST RUN: Boot Sequence
+
+On the FIRST invocation of /timberbot per session, you MUST:
+
+1. Read this ENTIRE skill file top to bottom (not just the first 30 lines -- ALL of it)
+2. Then print a boot report confirming what you loaded. Use this exact format with unicode box drawing:
+
+```
++-------------------------------------------------------+
+|             TIMBERBOT v5.7 - SYSTEMS ONLINE            |
++-------------------------------------------------------+
+| [ok] find_placement for ALL building placement         |
+|      NEVER search tiles/map manually                   |
+| [ok] find_planting for crop placement                  |
+| [ok] Building-first, then path to it                   |
+| [ok] Entrance must face path (use find_placement       |
+|      orientation)                                      |
+| [ok] Faction identified: <faction>                     |
+| [ok] Summary loaded: <pop> beavers, day <N>,           |
+|      <food>d food, <water>d water                      |
+| [ok] Weather: <temperate/drought>, <N> days remain     |
+| [ok] Alerts: <alert summary or "none">                 |
+| [ok] Priorities: water > food > housing > wood >       |
+|      science                                           |
++-------------------------------------------------------+
+| HARD RULES LOADED:                                     |
+|  - find_placement for EVERYTHING. No exceptions.       |
+|  - Beavers die if food or water hits 0.                |
+|  - Paths are free. Buildings first at edges.            |
+|  - Never guess coordinates or orientation.              |
+|  - Co-op: human is also playing. Re-read state often.  |
++-------------------------------------------------------+
+```
+
+Substitute real values from `summary` (one call gives you everything -- population, resources, weather, alerts, wellbeing). The [ok] markers confirm you actually read and internalized each rule. Only AFTER printing this boot report should you begin working on the user's request.
+
+On subsequent invocations in the same session, skip the boot sequence and go straight to work.
+
+---
 
 This is a human-AI co-op game. The human player is also building, demolishing, and changing settings in real time. Game state can change between API calls.
 
 `timberbot.py` is on PATH. Call it directly (e.g. `timberbot.py summary`). See [getting-started](https://abix-.github.io/TimberbornMods/getting-started/) for setup details.
 
 Beavers die if food or water hits 0.
+
+## HARD RULE: use find_placement for EVERYTHING
+
+**NEVER manually search tiles, grep for water, or scan the map to figure out where to place buildings.** `find_placement` exists for exactly this purpose. It finds valid spots, checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Manually searching tiles for water or valid ground is ALWAYS wrong. Call `find_placement prefab:<Name> x1:X y1:Y x2:X2 y2:Y2` and use the coordinates it returns. This applies to water pumps, housing, farms, everything. No exceptions.
 
 ## References
 
@@ -108,6 +152,32 @@ Parse the prefix before `:` to switch on the code. Everything after `:` is human
 
 Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `currentPoints`) vary by endpoint.
 
+## Game Speed Levels
+
+Timberborn has 4 speed levels:
+
+| Level | Name | Use Case |
+|-------|------|----------|
+| 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
+| 1 | **Speed 1 (Normal)** | Early game or uncertain situations. Time progresses slowly, giving you time to react to problems before they escalate. |
+| 2 | **Speed 2 (Fast)** | Middle speed. Balanced progress when you're confident in your setup but don't want to rush. |
+| 3 | **Speed 3 (Fastest)** | Pass time quickly. Use when all objectives are queued and stable, and you just need to let beavers work. |
+
+## HARD RULE: Strategic Game Speed Management
+
+**NEVER unpause the game without a plan.** Game speed must be used strategically, not reactively.
+
+**Workflow:**
+1. **Assess state** (PAUSED) — read summary, buildings, beavers, alerts
+2. **Place buildings & queue actions** (PAUSED) — `place_building`, `place_path`, `set_priority`, `set_workers`, pause/unpause buildings
+3. **Unpause** (SPEED 3 or 1) — only after physical work is queued and ready for beavers to execute
+4. **Monitor** (SPEED 3 when stable, SPEED 1 when uncertain) — let beavers work on queued tasks
+5. **Reassess** (PAUSE again) — when you need to intervene or redirect
+
+**Why:** Paused time is FREE time to make changes. Building placement, path routing, and priority changes happen while paused. Unpaused beavers without queued objectives simply wander and consume resources (food/water) without producing. They starve needlessly. Only unpause after construction/work is actively queued and waiting. During your response time (analyzing), the game stays paused.
+
+**Emergency mode:** When water or food hits 0 (death spiral imminent): PAUSE → take corrective actions (unpause only critical production, pause leisure/manufacturing, queue water pump/farm) → UNPAUSE to execute (SPEED 1 if urgent) → monitor until stable → PAUSE to reassess.
+
 ## API quick reference
 
 | Method | What it does |
@@ -169,7 +239,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `set_floodgate building_id:X height:N` | Set floodgate water height |
 | `set_clutch building_id:X engaged:true` | Engage/disengage power clutch |
 | **Colony config** | |
-| `set_speed speed:3` | Game speed: 0=pause, 1/2/3 |
+| `set_speed speed:3` | Game speed: 0=pause (plan), 1=normal (safe), 2=fast, 3=fastest (when stable). See Game Speed Levels |
 | `set_workhours end_hours:20` | When work ends (1-24) |
 | `set_distribution district:X good:Water import_option:Forced` | Import/export per good per district |
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
