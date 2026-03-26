@@ -1,7 +1,7 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, needs met.
-version: "5.8"
+version: "0.6.6"
 ---
 # Timberbot - Game Reference
 
@@ -17,7 +17,7 @@ On the FIRST invocation of /timberbot per session, you MUST complete TWO phases 
 Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI escapes). Use lowercase throughout for robotic terminal feel. Format:
 
 ```
-## TIMBERBOT v5.8
+## TIMBERBOT v0.6.6
 
 `[___]` DC-first placement
 `[___]` road network before buildings (tree from DC entrance)
@@ -31,7 +31,7 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 `[___]` priority: water > food > housing > wood > science
 `[___]` pause to plan, unpause with objectives
 `[___]` sequential mutating calls only
-`[___]` brain at session start and after changes
+`[___]` brain with goal at session start, refresh after changes
 `[___]` add_task before multi-step work, update on completion/failure
 `[___]` prefabs FT:___ IT:___
 `[___]` endpoints ___
@@ -49,7 +49,7 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 
 ### Phase 2: Link (one command)
 
-3. Run `timberbot.py brain`. This is the ONLY boot API call. Always fresh from game. Memory is per-settlement (stored in `memory/{settlement}/`).
+3. Run `timberbot.py brain goal:"<player's request>"`. This is the ONLY boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement (stored in `memory/<settlement>/`).
 
 **If existing memory found for this settlement:** Ask the human: "found existing brain for `<settlement>` with `<N>` tasks and `<M>` maps. load it or start fresh?" If they say fresh, run `timberbot.py clear_brain` to wipe the settlement folder, then `brain` again.
 
@@ -58,16 +58,20 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 ```
 **link established** -- reading brain
 
-> **settlement** `<name>` | <"new" or "loaded, N tasks">
-> **colony** <faction> | day `<N>` | pop `<P>` | speed `<S>`
+> **settlement** `<name>` | `<faction>` | <"new" or "loaded">
+> **goal** `<goal text or "none -- awaiting orders">`
+>
+> **day** `<N>` | **speed** `<S>` | **weather** <temperate/drought> `<N>d` remain
+> **pop** `<adults>` adults, `<children>` children | **beds** `<occ>`/`<total>` | **workers** `<assigned>`/`<vacancies>`
 > **supply** food `<F>d` | water `<W>d` | logs `<L>` | planks `<P>`
-> **weather** <state> | `<N>d` remain
-> **resources** `<berries>` berries | `<trees>` trees nearby
-> **wellbeing** `<W>`/77
-> **tasks** <pending/failed task summary or "none">
+> **wellbeing** `<avg>`/77 | `<miserable>` miserable | `<critical>` critical needs
+> **nearby** `<N>` trees (`<species>`) | `<N>` food (`<species>`)
+> **alerts** `<unstaffed>` unstaffed | `<unpowered>` unpowered | `<unreachable>` unreachable
+>
+> **tasks** <count pending/active/failed or "none">
 ```
 
-If food or water <= 1d, append ` CRITICAL` after the value (e.g. food `0.3d CRITICAL`).
+If food or water <= 1d, append ` CRITICAL` after the value. If alerts are all 0, show `all clear`.
 
 4. If there are failed/active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
 
@@ -149,88 +153,81 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 - **Game wiki:** `https://timberborn.wiki.gg/wiki/<topic>` -- building stats, ranges, mechanics not covered here
 - **Prefab lookup:** `timberbot.py prefabs | grep -i <keyword>` -- valid building names for current faction
 
-## Brain (persistent memory)
+## Brain
 
-`brain` is the ONE command for AI colony awareness. Returns live summary (always fresh from `/api/summary`) plus persistent state (goal, tasks, maps) from disk. Summary is never persisted -- only goal, tasks, and maps survive between sessions. Superior to raw `summary` because it adds persistence, task tracking, and spatial memory.
+`brain` = live colony state + persistent memory. One command, always fresh.
 
-Persistent data lives in `~/Documents/Timberborn/Mods/Timberbot/memory/{settlement}/brain.toon`. Set a persistent goal with `brain goal:"get to 77 wellbeing"`.
+`timberbot.py brain` -- returns live summary from game + goal/tasks/maps from disk.
+`timberbot.py brain goal:"<text>"` -- sets/overwrites the persistent goal.
 
-### What brain gives you
+### What brain returns
 
-Brain calls one API (`/api/summary`) which returns everything server-side, then adds client-side persistence (maps, tasks).
+**Live (from `/api/summary`, never persisted):**
 
-**From summary (one API call):**
+| Field | Content |
+|---|---|
+| `settlement` | Save name |
+| `faction` | Folktails or IronTeeth |
+| `time` | dayNumber, dayProgress, speed |
+| `weather` | cycle, cycleDay, isHazardous, durations |
+| `districts[]` | Per district: `population` (adults/children/bots), `resources` (flat totals, e.g. `Water: 170`), `housing` (occupiedBeds/totalBeds/homeless), `employment` (assigned/vacancies/unemployed), `wellbeing` (average/miserable/critical), `dc` (x/y/z/orientation/entranceX/entranceY) |
+| `trees` | markedGrown, markedSeedling, unmarkedGrown + `species[]` per-species breakdown |
+| `crops` | ready, growing + `species[]` per-species breakdown |
+| `wellbeing` | Global average/miserable/critical + `categories[]` (group/current/max per need group) |
+| `science` | Current science points |
+| `alerts` | unstaffed, unpowered, unreachable counts |
+| `buildings` | Count by role: water, food, housing, wood, storage, power, science, production, leisure, paths |
+| `treeClusters` | Top 5 densest tree clusters on DC z-level within 40 tiles. x/y/z/grown/total + `species` (e.g. `{Pine: 45}`) |
+| `foodClusters` | Top 5 gatherable food clusters. Same format + `species` (e.g. `{BlueberryBush: 55}`) |
 
-| Field | What | Why |
-|---|---|---|
-| `settlement` | Current save name | Per-settlement memory folders |
-| `faction` | Folktails or IronTeeth | Determines prefab names for every building |
-| `districts[].dc` | Per-district DC coords, z-level, orientation, entrance | Root of everything -- road network, placement searches |
-| `districts[].wellbeing` | Per-district average, miserable, critical | See which district needs attention |
-| `districts[].resources` | Flat totals per good (e.g. `{"Water": 150, "Log": 80}`) | Quick stock check per district |
-| `buildings` | Count by role (water, food, housing, wood, storage, power, science, production, leisure, paths) | Instant gap analysis -- see what's missing |
-| `treeClusters` | Top tree clusters on DC z-level within 40 tiles | WHERE to send lumberjacks. Sorted by grown count (densest first). Each has x,y,z,grown,total,species |
-| `foodClusters` | Top gatherable food clusters (berries, bushes) on DC z-level within 40 tiles | WHERE to place gatherer flags. Same format as treeClusters |
-| time/weather/districts/housing/employment/wellbeing/science/alerts | Full colony snapshot | Population, weather, drought, alerts, wellbeing categories, food/water days |
+**Persisted (in `memory/<settlement>/brain.toon`):**
 
-**From disk (persisted across sessions in brain.toon):**
+| Field | Content |
+|---|---|
+| `timestamp` | When brain.toon was last written |
+| `goal` | Player's intent. Set via `brain goal:"..."`. Persists across sessions. New goal overwrites. Empty string if unset. |
+| `tasks` | Ordered work queue. Each: id, status (pending/active/done/failed), action. Failed tasks include error field. |
+| `maps` | Region index. Each region: bounding box coords + array of saved map files. |
 
-| Field | What | Why |
-|---|---|---|
-| `goal` | Persistent objective string | Set via `brain goal:"text"`. Survives between sessions. Cleared with empty string |
-| `maps` | Region index with file paths | Spatial memory -- read map files to see terrain, water, buildings without re-querying |
-| `tasks` | Ordered work queue with status | Resume interrupted work, track multi-step plans |
+### Districts
 
-### treeClusters and foodClusters
+Each district is self-contained: population, resources, housing, employment, wellbeing, and DC coords. Multi-district colonies show all districts. Single-district shows one.
 
-These are your resource radar. Filtered to same z-level as DC and within 40 Manhattan distance -- only resources beavers can actually reach.
+### Clusters
 
-**treeClusters** -- densest wood sources nearby. Use these to decide WHERE to place lumberjacks and foresters. The cluster center (x,y) is where trees are concentrated. `grown` = ready to chop now, `total` = including seedlings.
-
-**foodClusters** -- gatherable food (berry bushes, dandelion bushes, etc). Use these to decide WHERE to place gatherer flags. Early game survival depends on knowing where berries are BEFORE you have farms.
+treeClusters and foodClusters are filtered to same z-level as first DC and within 40 Manhattan distance -- only resources beavers can reach without stairs. `species` shows what's growing in each cluster. `grown` = harvestable now, `total` = including seedlings.
 
 ### DC map
 
-`brain` auto-saves a 41x41 ANSI map centered on DC on first run. Read the map file from `maps.districtcenter.files[0]` to see the full terrain layout: water locations, tree positions, z-levels, existing buildings and roads. This is your spatial awareness -- use it to guide placement decisions instead of blindly searching.
-
-### Maps
-
-Indexed by region name. Each region has bounding box coords and an array of map files (newest appended to bottom). The map files are ANSI-encoded with full z-level, moisture, and building data. Save new maps with `map ... name:region` as you explore.
-
-### Tasks
-
-Ordered work queue. When executing a multi-step plan, add each step as a task. Update status as you go. When something fails, the error is preserved so the next session knows exactly what went wrong and where to resume.
+`brain` auto-saves a 41x41 ANSI map centered on DC on first run. Read from `maps.districtcenter.files[0]`. Shows terrain height (digits + background shading), water, trees, buildings, paths.
 
 ### Task statuses
 
 | Status | Meaning |
 |---|---|
-| `pending` | Not started yet |
-| `active` | Currently being worked on |
-| `done` | Completed successfully |
+| `pending` | Not started |
+| `active` | In progress |
+| `done` | Completed |
 | `failed` | Failed -- `error` field explains why |
 
-### Workflows
+### Task methods
 
-**Session start:** `brain` -- gives you everything. Check tasks, resume failed/active before new work.
+| Method | What |
+|---|---|
+| `add_task action:"description"` | Add pending task |
+| `update_task id:N status:active` | Mark in progress |
+| `update_task id:N status:done` | Mark complete |
+| `update_task id:N status:failed error:"reason"` | Mark failed with reason |
+| `list_tasks` | Show all tasks |
+| `clear_tasks [status:done]` | Remove tasks by status |
 
-**During work:**
-1. `add_task action:"description"` before starting each step
-2. `update_task id:N status:active` when starting a step
-3. `update_task id:N status:done` on success
-4. `update_task id:N status:failed error:"reason"` on failure -- then STOP and reassess
+### Map methods
 
-**Need a refresh:** `brain` again. Always fresh from game. Run it after placing buildings, after major changes, or whenever you need current state.
-
-**After mapping a new area:** `map ... name:region` auto-updates brain.toon maps index.
-
-**Cleanup:** `clear_tasks` removes done tasks. Keep failed tasks until resolved.
-
-### HARD RULE: Use the brain
-
-- **ALWAYS `brain` at session start and after placing buildings.** One command, always fresh, replaces summary.
-- **ALWAYS add_task before multi-step work.** If you place 5 buildings without tracking tasks, a failure at step 3 means steps 4-5 are lost context.
-- **NEVER ignore failed tasks.** They exist because something went wrong. Read the error, fix the root cause, then retry or mark done.
+| Method | What |
+|---|---|
+| `map x1:X y1:Y x2:X2 y2:Y2 name:label` | Save ANSI map, auto-updates brain.toon maps index |
+| `list_maps` | List saved map files |
+| `clear_brain` | Wipe all memory for current settlement |
 
 ## Factions -- building names differ
 
@@ -328,7 +325,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | Method | What it does |
 |---|---|
 | **Brain** | |
-| `brain` | **USE THIS.** Live summary + persistent goal/tasks/maps. Run at boot and whenever you need current state. `brain goal:"text"` sets persistent goal |
+| `brain [goal:"text"]` | Live summary + persistent goal/tasks/maps. Sets goal if provided. Run at boot with player prompt and after changes |
 | **Read state** | |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
