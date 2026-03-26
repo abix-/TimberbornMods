@@ -311,7 +311,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | Method | What it does |
 |---|---|
 | **Brain** | |
-| `brain` | **USE THIS.** Full colony picture, always fresh. Faction, DC, summary, buildings by role, treeClusters, foodClusters, maps, tasks. Run at boot and whenever you need current state |
+| `brain` | **USE THIS.** Full colony picture, always fresh. Faction, DC, summary, buildings by role, treeClusters, foodClusters, maps, tasks. Persists to `memory/brain.toon`. Run at boot and whenever you need current state |
 | **Read state** | |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
