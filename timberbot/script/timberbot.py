@@ -638,6 +638,41 @@ class Timberbot:
         # slim buildings index
         slim = [{"id": b["id"], "name": b.get("name", ""), "x": b["x"], "y": b["y"], "z": b["z"]} for b in items]
 
+        # building breakdown by role
+        _roles = {
+            "water": {"Pump", "Tank", "FluidDump", "AquiferDrill"},
+            "food": {"FarmHouse", "AquaticFarmhouse", "EfficientFarmHouse", "Gatherer", "Grill",
+                     "Gristmill", "Bakery", "FoodFactory", "Fermenter", "HydroponicGarden"},
+            "housing": {"Lodge", "MiniLodge", "DoubleLodge", "TripleLodge", "Rowhouse", "Barrack"},
+            "wood": {"Lumberjack", "LumberMill", "IndustrialLumberMill", "Forester"},
+            "storage": {"Warehouse", "Pile", "ReservePile", "ReserveWarehouse", "ReserveTank"},
+            "power": {"PowerWheel", "LargePowerWheel", "WaterWheel", "WindTurbine",
+                      "LargeWindTurbine", "SteamEngine", "PowerShaft", "Clutch", "GravityBattery"},
+            "science": {"Inventor", "Numbercruncher", "Observatory"},
+            "production": {"GearWorkshop", "Smelter", "Metalsmith", "Scavenger", "Mine",
+                           "BotAssembler", "BotPartFactory", "PaperMill", "PrintingPress",
+                           "WoodWorkshop", "Centrifuge", "ExplosivesFactory", "Refinery"},
+            "leisure": {"Campfire", "Scratcher", "Shower", "DoubleShower", "SwimmingPool",
+                        "Carousel", "MudPit", "MudBath", "ExercisePlaza", "WindTunnel",
+                        "Motivatorium", "Lido", "Detailer", "ContemplationSpot", "Agora",
+                        "DanceHall", "RooftopTerrace", "MedicalBed", "TeethGrindstone",
+                        "Herbalist", "DecontaminationPod", "ChargingStation"},
+        }
+        building_counts = {}
+        for b in items:
+            n = b.get("name", "")
+            if n == "Path":
+                building_counts["paths"] = building_counts.get("paths", 0) + 1
+                continue
+            matched = False
+            for role, keywords in _roles.items():
+                if any(k in n for k in keywords):
+                    building_counts[role] = building_counts.get(role, 0) + 1
+                    matched = True
+                    break
+            if not matched:
+                building_counts["other"] = building_counts.get("other", 0) + 1
+
         # find DC and compute entrance
         dc = None
         for b in items:
@@ -703,7 +738,7 @@ class Timberbot:
             "faction": faction,
             "dc": dc,
             "summary": summary,
-            "buildingCount": len(slim),
+            "buildings": building_counts,
             "treeClusters": tree_clusters,
             "foodClusters": food_clusters,
             "maps": existing_maps,
