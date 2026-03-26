@@ -49,7 +49,7 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 
 ### Phase 2: Link (one command)
 
-3. Run `timberbot.py brain`. This is the ONLY boot API call. It auto-creates brain if none exists, which runs summary, detects faction, maps DC area, finds tree clusters and gatherables. Returns everything needed. Print readout from brain data:
+3. Run `timberbot.py brain`. This is the ONLY boot API call. Always fresh from game: faction, DC, resources, weather, buildings, tree clusters, food clusters, maps, tasks. Print readout from brain data:
 
 ```
 **link established** -- reading brain
@@ -75,7 +75,7 @@ On subsequent invocations in the same session, skip the boot sequence and go str
 
 This is a human-AI co-op game. The human player is also building, demolishing, and changing settings in real time. Game state can change between API calls.
 
-`timberbot.py` is on PATH. Call it directly (e.g. `timberbot.py summary`). See [getting-started](https://abix-.github.io/TimberbornMods/getting-started/) for setup details.
+`timberbot.py` is on PATH. Call it directly (e.g. `timberbot.py brain`). See [getting-started](https://abix-.github.io/TimberbornMods/getting-started/) for setup details.
 
 Beavers die if food or water hits 0.
 
@@ -302,7 +302,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | Method | What it does |
 |---|---|
 | **Read state** | |
-| `summary` | Colony snapshot: population, resources, weather, speed, alerts, wellbeing |
+| `summary` | Lightweight colony snapshot (use `brain` instead -- summary is included in brain) |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
@@ -495,7 +495,7 @@ Berries are finite (gathered from wild bushes) -- bridge to farming, don't rely 
 Birch is best for early planting (fastest). Oak has best yield/time ratio long-term. Faction-specific trees only obtainable via Forester.
 
 - `tree_clusters` finds densest grown clusters
-- `markedGrown` in summary = choppable supply
+- `markedGrown` in brain summary = choppable supply
 
 **Forester** (2x2, 30 science): Plants trees and bushes on moist soil. Work radius: 21 tiles ahead of entrance, 20 in other directions. One forester keeps up with ~4 lumberjacks. Use `set_plantable_priority` to choose which tree type to plant. Trees don't spread naturally -- forester must replant. Can also plant: Dandelion Bush (FT), Coffee Bush (IT).
 
