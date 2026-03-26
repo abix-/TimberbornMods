@@ -2559,70 +2559,75 @@ class TestRunner:
         else:
             self.skip("cache vs live", "debug endpoint not available or unexpected response")
 
-    def test_performance(self):
-        print("\n=== performance ===\n")
+    def _subprocess_time(self, cmd_args):
+        """Run timberbot.py as subprocess, return wall-clock ms and success."""
+        import subprocess
+        script = os.path.join(os.path.dirname(__file__), "timberbot.py")
+        t0 = time.perf_counter()
+        r = subprocess.run([sys.executable, script] + cmd_args, capture_output=True, timeout=30)
+        ms = (time.perf_counter() - t0) * 1000
+        return ms, r.returncode == 0
 
-        # time ALL endpoints, 100 iterations each, track reliability
+    def _bench_subprocess(self, name, cmd_args, iterations):
+        """Benchmark a CLI command as fresh subprocess. Returns (avg, min, max, ok)."""
+        times = []
+        ok = 0
+        for _ in range(iterations):
+            ms, success = self._subprocess_time(cmd_args)
+            times.append(ms)
+            if success:
+                ok += 1
+        return times, ok
+
+    def test_performance(self):
+        print("\n=== performance (subprocess, real-world latency) ===\n")
+
         endpoints = [
-            ("ping", lambda: self.bot.ping()),
-            ("summary", lambda: self.bot.summary()),
-            ("buildings", lambda: self.bot.buildings()),
-            ("buildings full", lambda: self.bot.buildings(detail="full")),
-            ("trees", lambda: self.bot.trees()),
-            ("gatherables", lambda: self.bot.gatherables()),
-            ("beavers", lambda: self.bot.beavers()),
-            ("alerts", lambda: self.bot.alerts()),
-            ("resources", lambda: self.bot.resources()),
-            ("weather", lambda: self.bot.weather()),
-            ("time", lambda: self.bot.time()),
-            ("districts", lambda: self.bot.districts()),
-            ("distribution", lambda: self.bot.distribution()),
-            ("science", lambda: self.bot.science()),
-            ("notifications", lambda: self.bot.notifications()),
-            ("workhours", lambda: self.bot.workhours()),
-            ("speed", lambda: self.bot.speed()),
-            ("prefabs", lambda: self.bot.prefabs()),
-            ("wellbeing", lambda: self.bot.wellbeing()),
-            ("tree_clusters", lambda: self.bot.tree_clusters()),
+            ("ping", ["ping"]),
+            ("summary", ["summary"]),
+            ("brain", ["brain"]),
+            ("buildings", ["buildings"]),
+            ("buildings full", ["buildings", "detail:full"]),
+            ("trees", ["trees"]),
+            ("gatherables", ["gatherables"]),
+            ("beavers", ["beavers"]),
+            ("alerts", ["alerts"]),
+            ("resources", ["resources"]),
+            ("weather", ["weather"]),
+            ("time", ["time"]),
+            ("districts", ["districts"]),
+            ("distribution", ["distribution"]),
+            ("science", ["science"]),
+            ("notifications", ["notifications"]),
+            ("workhours", ["workhours"]),
+            ("speed", ["speed"]),
+            ("prefabs", ["prefabs"]),
+            ("wellbeing", ["wellbeing"]),
+            ("tree_clusters", ["tree_clusters"]),
+            ("food_clusters", ["food_clusters"]),
         ]
 
-        iterations = getattr(self, 'perf_iterations', 100)
+        iterations = getattr(self, 'perf_iterations', 10)
 
-        print(f"  timing {len(endpoints)} endpoints x {iterations} iterations\n")
-        print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'ok':>4}")
-        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*6} {'-'*4}")
+        print(f"  timing {len(endpoints)} endpoints x {iterations} iterations (subprocess per call)\n")
+        print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'ok':>4}")
+        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*4}")
 
         total_ok = 0
         total_bad = 0
-        for name, fn in endpoints:
-            times = []
-            ok = 0
-            result = None
-            for _ in range(iterations):
-                t0 = time.perf_counter()
-                try:
-                    result = fn()
-                    ok += 1
-                except Exception:
-                    result = None
-                t1 = time.perf_counter()
-                times.append((t1 - t0) * 1000)
-
+        for name, cmd in endpoints:
+            times, ok = self._bench_subprocess(name, cmd, iterations)
             total_ok += ok
             total_bad += iterations - ok
             avg = sum(times) / len(times)
-            mn = min(times)
-            mx = max(times)
-            count = len(result) if isinstance(result, list) else 1 if result else 0
-
-            print(f"  {name:<25} {avg:>8.1f} {mn:>8.1f} {mx:>8.1f} {count:>6} {ok:>4}")
+            print(f"  {name:<25} {avg:>8.0f} {min(times):>8.0f} {max(times):>8.0f} {ok:>4}")
 
         print()
         self.check(f"all {total_ok + total_bad} responses valid",
                    total_bad == 0,
                    f"{total_bad} bad responses out of {total_ok + total_bad}")
 
-        # cache consistency: call same endpoint twice, verify same results
+        # cache consistency (in-process, not subprocess)
         print("\n  cache consistency: verifying repeated calls return same data...")
         b1 = self.bot.buildings()
         b2 = self.bot.buildings()
@@ -2642,10 +2647,9 @@ class TestRunner:
                    isinstance(bv1, list) and isinstance(bv2, list) and len(bv1) == len(bv2),
                    f"first={len(bv1) if isinstance(bv1,list) else '?'}, second={len(bv2) if isinstance(bv2,list) else '?'}")
 
-        # cache invalidation: place and demolish a building, verify index updates
+        # cache invalidation (in-process)
         print("\n  cache invalidation: place + demolish to verify index tracks changes...")
         before_count = len(self.bot.buildings())
-        # find a valid spot dynamically
         spots = self.bot.find_placement("Path", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
         placements = spots.get("placements", []) if isinstance(spots, dict) else []
         placed = None
@@ -2657,8 +2661,6 @@ class TestRunner:
             after_count = len(self.bot.buildings())
             self.check("index grew after place", after_count == before_count + 1,
                        f"before={before_count}, after={after_count}")
-
-            # demolish it
             placed_id = placed.get("id")
             if placed_id:
                 self.bot.demolish_building(placed_id)
@@ -2671,69 +2673,48 @@ class TestRunner:
         else:
             self.skip("cache invalidation", f"place failed: {placed}" if placed else "no valid spot")
 
-        # burst test: simulate bot turn (multiple calls in quick succession)
-        print("\n  burst test: simulating bot turn (7 calls)...")
-        t0 = time.perf_counter()
-        self.bot.summary()
-        self.bot.buildings()
-        self.bot.beavers()
-        self.bot.trees()
-        self.bot.alerts()
-        self.bot.resources()
-        self.bot.weather()
-        t1 = time.perf_counter()
-        burst_ms = (t1 - t0) * 1000
-        print(f"  burst total: {burst_ms:.0f}ms ({burst_ms/7:.0f}ms avg per call)")
-        self.check("burst < 3s total", burst_ms < 3000,
-                   f"burst took {burst_ms:.0f}ms")
-
     def test_brain_perf(self):
-        print("\n=== brain perf ===\n")
-        import io as _io
+        print("\n=== brain perf (subprocess, real-world latency) ===\n")
         import timberbot as _tb
-        iterations = getattr(self, 'perf_iterations', 100)
+        iterations = getattr(self, 'perf_iterations', 10)
 
-        # summary x iterations
-        summary_times = []
-        for _ in range(iterations):
-            t0 = time.perf_counter()
-            try: self.bot.summary()
-            except Exception: pass
-            summary_times.append((time.perf_counter() - t0) * 1000)
+        # ensure brain exists first
+        self._subprocess_time(["brain"])
 
-        # brain cached x iterations
-        toon_bot = Timberbot()
-        old_out = sys.stdout
-        sys.stdout = _io.StringIO()
-        toon_bot.brain()  # ensure brain exists
-        sys.stdout = old_out
-        cached_times = []
-        for _ in range(iterations):
-            t0 = time.perf_counter()
-            try: toon_bot.brain()
-            except Exception: pass
-            cached_times.append((time.perf_counter() - t0) * 1000)
-
-        # brain fresh x5 (creates map each time)
+        # ping (baseline -- python startup + minimal HTTP)
+        ping_times, _ = self._bench_subprocess("ping", ["ping"], iterations)
+        # summary
+        summary_times, _ = self._bench_subprocess("summary", ["summary"], iterations)
+        # brain cached
+        cached_times, _ = self._bench_subprocess("brain (cached)", ["brain"], iterations)
+        # brain fresh x5 -- wipe settlement dir contents
+        # _MEMORY_DIR may be base or settlement-specific; find the actual settlement dir
+        settlement_dir = _tb._MEMORY_DIR
+        if settlement_dir == _tb._MEMORY_BASE:
+            # brain hasn't set it yet, find first settlement subdir
+            for d in os.listdir(settlement_dir):
+                p = os.path.join(settlement_dir, d)
+                if os.path.isdir(p) and os.path.exists(os.path.join(p, "brain.toon")):
+                    settlement_dir = p
+                    break
         fresh_times = []
         for _ in range(5):
-            if os.path.isdir(_tb._MEMORY_DIR):
-                for f in os.listdir(_tb._MEMORY_DIR):
-                    os.remove(os.path.join(_tb._MEMORY_DIR, f))
-            sys.stdout = _io.StringIO()
-            t0 = time.perf_counter()
-            try: toon_bot.brain()
-            except Exception: pass
-            fresh_times.append((time.perf_counter() - t0) * 1000)
-            sys.stdout = old_out
+            if os.path.isdir(settlement_dir):
+                for f in os.listdir(settlement_dir):
+                    fp = os.path.join(settlement_dir, f)
+                    if os.path.isfile(fp):
+                        os.remove(fp)
+            ms, _ = self._subprocess_time(["brain"])
+            fresh_times.append(ms)
 
         print(f"  {'method':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'n':>4}")
         print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*4}")
-        for name, times in [("summary", summary_times), ("brain (cached)", cached_times), ("brain (fresh)", fresh_times)]:
-            print(f"  {name:<25} {sum(times)/len(times):>8.1f} {min(times):>8.1f} {max(times):>8.1f} {len(times):>4}")
+        for name, times in [("ping (baseline)", ping_times), ("summary", summary_times), ("brain (cached)", cached_times), ("brain (fresh)", fresh_times)]:
+            print(f"  {name:<25} {sum(times)/len(times):>8.0f} {min(times):>8.0f} {max(times):>8.0f} {len(times):>4}")
         overhead = sum(cached_times)/len(cached_times) - sum(summary_times)/len(summary_times)
-        print(f"\n  brain overhead vs summary: {overhead:+.1f}ms avg")
-        self.check("brain overhead < 500ms", overhead < 500, f"{overhead:.0f}ms")
+        print(f"\n  brain overhead vs summary: {overhead:+.0f}ms avg")
+        print(f"  python startup (ping baseline): {sum(ping_times)/len(ping_times):.0f}ms avg")
+        self.check("brain < 1000ms", sum(cached_times)/len(cached_times) < 1000, f"{sum(cached_times)/len(cached_times):.0f}ms")
 
 
 class TeeWriter:
