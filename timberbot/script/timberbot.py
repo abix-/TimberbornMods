@@ -659,53 +659,42 @@ class Timberbot:
     # ------------------------------------------------------------------
 
     def brain(self):
-        """Full colony picture. One API call + disk persistence for maps/tasks."""
+        """Live summary + persistent maps/tasks. Summary is never persisted (always stale)."""
         global _MEMORY_DIR
 
-        # one call gets everything: summary + faction + DC + building roles + clusters
         summary = self._get_json("/api/summary")
 
         # set per-settlement memory dir
         settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
 
-        # preserve maps and tasks from existing brain
-        existing_maps = {}
-        existing_tasks = []
+        # load persistent data (maps + tasks only)
+        maps = {}
+        tasks = []
         bpath = os.path.join(_MEMORY_DIR, "brain.toon")
         if os.path.exists(bpath):
             try:
                 import toons as _t
                 with open(bpath) as f:
                     old = _t.load(f)
-                    existing_maps = old.get("maps", {})
-                    existing_tasks = old.get("tasks", [])
+                    maps = old.get("maps", {})
+                    tasks = old.get("tasks", [])
             except Exception:
                 pass
 
-        from datetime import datetime
-        result = {
-            "timestamp": datetime.now().isoformat(),
-            "tasks": existing_tasks,
-            "summary": summary,
-            "maps": existing_maps,
-        }
-
-        # persist
-        os.makedirs(_MEMORY_DIR, exist_ok=True)
-        import toons as _t
-        with open(bpath, "w") as f:
-            _t.dump(result, f)
         # auto-map DC area on first run
-        # DC is now per-district; use first district's DC for auto-map
         districts = summary.get("districts", []) if isinstance(summary, dict) else []
-        dc = next((d.get("dc") for d in districts if d.get("dc")), summary.get("dc"))
-        if dc and not existing_maps:
+        dc = next((d.get("dc") for d in districts if d.get("dc")), None)
+        if dc and not maps:
+            os.makedirs(_MEMORY_DIR, exist_ok=True)
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
-            with open(bpath) as f:
-                result = _t.load(f)
+            # reload maps after auto-map wrote to brain.toon
+            if os.path.exists(bpath):
+                import toons as _t
+                with open(bpath) as f:
+                    maps = _t.load(f).get("maps", {})
 
-        return result
+        return {"summary": summary, "maps": maps, "tasks": tasks}
 
     def list_maps(self):
         """List saved map files in memory/."""
