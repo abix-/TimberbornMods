@@ -1,21 +1,20 @@
 ---
-title: Timberbot AI Core
-description: Core operating guide for Claude and other LLMs playing Timberborn via timberbot.py.
-version: "0.7.0"
+title: Timberbot AI
+description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
+version: "0.8.0"
 ---
-# Timberbot AI Core
+# Timberbot AI
 
-This is the always-read operating guide for playing Timberborn through `timberbot.py`.
+This is the single authoritative AI guide for playing Timberborn through `timberbot.py`.
 
 Read this first. Use the other docs only when needed:
 
-- [API Reference](api-reference.md) for exact endpoints, parameters, pagination, response shapes, and error fields
-- [Timberbot AI Reference](timberbot-reference.md) for faction building names, gameplay lookup tables, wellbeing details, scaling ratios, and other broad reference material
+- [API Reference](api-reference.md) for exact commands, endpoint shapes, helper behavior, pagination, and error payloads
 - [Getting Started](getting-started.md) for install, PATH, remote host, and troubleshooting
 
 ## FIRST RUN: Boot Sequence
 
-On the first invocation of `/timberbot` per session, complete two phases in order. The boot report is not a game action. It proves that you loaded the core guide before making changes.
+On the first invocation of `/timberbot` per session, complete two phases in order. The boot report is not a game action. It proves that you loaded the guide before making changes.
 
 ### Phase 1: Boot (rules confirmation -- NO API calls)
 
@@ -23,9 +22,9 @@ On the first invocation of `/timberbot` per session, complete two phases in orde
 2. Immediately print this boot report in markdown. Use lowercase throughout:
 
 ```md
-## TIMBERBOT CORE
+## TIMBERBOT
 
-`[OK]` read the core guide before acting
+`[OK]` read the ai guide before acting
 `[OK]` sequential mutating calls only
 `[OK]` dc entrance is the root of path distance
 `[OK]` unpathed buildings cannot be staffed or supplied
@@ -39,7 +38,7 @@ On the first invocation of `/timberbot` per session, complete two phases in orde
 `[OK]` placement and pathing work at speed 0
 `[OK]` brain = live state + persistent goal/tasks/maps
 `[OK]` api details live in docs/api-reference.md
-`[OK]` extended mechanics live in docs/timberbot-reference.md
+`[OK]` gameplay and strategy rules live in docs/timberbot.md
 
 **ready for link**
 ```
@@ -120,15 +119,15 @@ Entrance directions:
 
 Example: building at `(10,10)` with orientation `south` means the entrance faces `-y`, so tile `(10,9)` must be a path.
 
-Important `find_placement` fields:
+Important planning fields:
 
 - `entranceX` / `entranceY`: tile where a path must go
-- `flooded`: `0/1`
-- `waterDepth`: useful for water buildings
-- `reachable`: connected to DC
-- `pathAccess`: path adjacency
-- `nearPower`: power adjacency
-- `distance`: path cost from DC entrance via flow field (`-1` if unreachable)
+- `flooded`: whether the footprint floods
+- `waterDepth`: useful for pumps and water structures
+- `reachable`: whether the site connects back to the DC
+- `pathAccess`: whether the site already has a path-adjacent entrance
+- `nearPower`: whether the site already touches the power network
+- `distance`: path cost from the DC entrance via flow field
 
 Sort preference: non-flooded > reachable > lower distance > pathAccess > nearPower.
 
@@ -183,38 +182,332 @@ Each district is self-contained: population, resources, housing, employment, wel
 
 `brain` auto-saves a 41x41 ANSI map centered on the DC on first run. Read from `maps.districtcenter.files[0]`. It shows terrain height, water, trees, buildings, and paths.
 
-### Task statuses
+### Task workflow
 
-| Status | Meaning |
-|---|---|
-| `pending` | Not started |
-| `active` | In progress |
-| `done` | Completed |
-| `failed` | Failed; `error` explains why |
+- Use persistent tasks for multi-step work that will span turns or sessions.
+- Mark failed tasks with the real reason so the next session can re-plan instead of repeating the same mistake.
+- Keep maps named and reusable so the AI can reason from saved spatial context instead of rescanning constantly.
 
-### Task methods
+## Factions and prefab names
 
-| Method | What |
-|---|---|
-| `add_task action:"description"` | Add pending task |
-| `update_task id:N status:active` | Mark in progress |
-| `update_task id:N status:done` | Mark complete |
-| `update_task id:N status:failed error:"reason"` | Mark failed with a reason |
-| `list_tasks` | Show all tasks |
-| `clear_tasks [status:done]` | Remove tasks by status |
+Timberborn has two factions: **Folktails** and **Iron Teeth**. Every prefab except `Path` and the reserve storage buildings requires a faction suffix (`.Folktails` or `.IronTeeth`). Never use a bare name like `GathererFlag`; it must be `GathererFlag.Folktails` or `GathererFlag.IronTeeth`.
 
-### Map methods
+Use `brain` or summary output to confirm the current faction before planning buildings. If you need exact prefab spellings, use `prefabs` and the [API Reference](api-reference.md).
 
-| Method | What |
-|---|---|
-| `map x1:X y1:Y x2:X2 y2:Y2 name:label` | Save ANSI map and update `brain.toon` |
-| `list_maps` | List saved map files |
-| `clear_brain` | Wipe memory for the current settlement |
+### Folktails key buildings
+
+| Role | Prefab name | Notes |
+|---|---|---|
+| Housing | Lodge.Folktails | 2x2 starter housing |
+| Housing | MiniLodge.Folktails | 1x1, science unlock |
+| Housing | DoubleLodge.Folktails | science unlock |
+| Housing | TripleLodge.Folktails | science unlock |
+| Farming | EfficientFarmHouse.Folktails | land crops; there is no `FarmHouse.Folktails` |
+| Farming | AquaticFarmhouse.Folktails | aquatic crops |
+| Water | WaterPump.Folktails | must straddle land/water edge |
+| Water | LargeWaterPump.Folktails | science unlock |
+| Power | WaterWheel.Folktails | needs flowing water |
+| Power | WindTurbine.Folktails | science unlock |
+| Power | LargeWindTurbine.Folktails | science unlock |
+| Wood | LumberjackFlag.Folktails | chops trees |
+| Wood | LumberMill.Folktails | logs to planks |
+| Wood | Forester.Folktails | plants trees, science unlock |
+| Food processing | Grill.Folktails | grilled foods |
+| Food processing | Gristmill.Folktails | flour |
+| Food processing | Bakery.Folktails | bread |
+| Storage | SmallWarehouse.Folktails | starter warehouse |
+| Storage | SmallTank.Folktails | starter water storage |
+| Storage | SmallPile.Folktails | starter log pile |
+| Science | Inventor.Folktails | science generation |
+| Leisure | Campfire.Folktails | SocialLife +1 |
+| Infrastructure | DistrictCenter.Folktails | colony hub |
+| Infrastructure | HaulingPost.Folktails | hauler workplace |
+| Infrastructure | Dam.Folktails | starter water retention |
+| Infrastructure | Levee.Folktails | full water block |
+| Infrastructure | Stairs.Folktails | z-level transition |
+| Infrastructure | Platform.Folktails | multi-level jump |
+| Infrastructure | PowerShaft.Folktails | power transmission |
+| Infrastructure | GathererFlag.Folktails | gathers berries |
+| Infrastructure | ScavengerFlag.Folktails | collects scrap metal |
+| Wellbeing | RooftopTerrace.Folktails | SocialLife +1 |
+| Utility | TeethGrindstone.Folktails | fixes chipped teeth |
+| Utility | MedicalBed.Folktails | heals injuries |
+
+### Iron Teeth key buildings
+
+| Role | Prefab name | Notes |
+|---|---|---|
+| Housing | Rowhouse.IronTeeth | starter housing |
+| Housing | Barrack.IronTeeth | science unlock |
+| Farming | FarmHouse.IronTeeth | land crops |
+| Farming | HydroponicGarden.IronTeeth | indoor, needs power and science |
+| Water | DeepWaterPump.IronTeeth | 3x2, must straddle land/water edge |
+| Power | LargePowerWheel.IronTeeth | 300hp hamster wheel |
+| Power | SteamEngine.IronTeeth | science unlock |
+| Wood | IndustrialLumberMill.IronTeeth | logs to planks |
+
+### Shared buildings
+
+`Path`, `AncientAquiferDrill`, `ReservePile`, `ReserveTank`, and `ReserveWarehouse` do not use faction suffixes.
+
+## Path routing and placement hazards
+
+### Path routing
+
+`place_path` works best for simple axis-aligned routes. It plans the full route first, then places it. Stairs go on the lower `z` tile. For 2-level jumps, it uses a platform plus stairs stacked at the cliff edge.
+
+Paths cost nothing; use them freely. Stairs and platforms require science unlocks. Without those unlocks, vertical routing stops at z-changes.
+
+### Flooding
+
+Buildings placed in water become flooded and completely non-functional. Beavers and bots cannot access them.
+
+- Most buildings flood when any water touches their footprint tile.
+- Paths, power shafts, landscaping, stream gauges, Zipline/Tubeway Stations, Gravity Battery, Numbercruncher, and Control Tower are immune.
+- Flooded tiles with badwater contamination also poison beavers who walk through them.
+- Flooded buildings resume when water recedes; there is no permanent damage.
+- `find_placement.flooded` is the signal to trust. Terrain height alone is not reliable.
+
+### Priorities and footprints
+
+Buildings have separate construction and workplace priority concepts. Reserve high priority for true bottlenecks rather than marking everything urgent.
+
+Common footprints:
+
+- Common: DistrictCenter 3x3, HaulingPost 3x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1
+- Folktails: Lodge 2x2, EfficientFarmHouse 2x2, WaterPump 2x3, LumberMill 2x3, Shower 1x2
+- Iron Teeth: Rowhouse 1x2, Barrack 3x2, FarmHouse 2x2, DeepWaterPump 3x2, LargePowerWheel 3x3, IndustrialLumberMill 2x3, DoubleShower 1x2
+
+## Game mechanics
+
+### Food
+
+- Beavers eat about 1 food per day.
+- Wild berries are finite; gatherers deplete them.
+- Rough rule: 1 farmhouse per 8 beavers with full fields.
+- Crops need irrigated soil. Crops continue growing during drought if the soil stays moist.
+- Use `find_planting`; do not guess irrigated zones.
+
+**Folktails crops:**
+
+| Crop | Growth | Processing | Nutrition |
+|---|---|---|---|
+| Carrot | 4 days (2.8 w/ beehive) | raw | +1 |
+| Sunflower | 5 days (3.5 w/ beehive) | raw (seeds) | +1 |
+| Potato | 6 days (4.2 w/ beehive) | Grill -> GrilledPotatoes | +2 |
+| Wheat | 10 days (7 w/ beehive) | Gristmill -> flour -> Bakery -> Bread | +2 |
+| Cattail | 8 days (5.6 w/ beehive) | aquatic -> CattailCracker | +2 |
+| Spadderdock | 12 days (8.4 w/ beehive) | aquatic, Grill -> GrilledSpadderdock | +2 |
+| Chestnut | tree, 24 days | Grill -> GrilledChestnuts | +2 |
+| Maple | tree, 28 days | tree tap -> MaplePastry | +3 |
+
+**Iron Teeth crops:**
+
+| Crop | Growth | Processing | Nutrition |
+|---|---|---|---|
+| Kohlrabi | 3 days | raw | +1 |
+| Mangrove Fruit | tree, 10 days | raw | +1 |
+| Cassava | 5 days | Fermenter -> FermentedCassava | +2 |
+| Soybean | 8 days | Fermenter -> FermentedSoybean | +2 |
+| Corn | 10 days | FoodFactory -> CornRation | +2 |
+| Eggplant | 12 days | FoodFactory -> EggplantRation | +2 |
+| Canola | 9 days | -> oil (processing) | +2 |
+| Coffee | bush (Forester) | roasted, doesn't satisfy hunger | +3 |
+
+Berries are a bridge to farming, not a long-term food plan.
+
+**Beehive** (Folktails only) boosts crop growth about 30% in a 3-tile radius. It does not boost trees or bushes.
+
+### Water
+
+- Pumps must straddle the land/water edge.
+- Folktails use `WaterPump.Folktails` or `LargeWaterPump.Folktails`.
+- Iron Teeth use `DeepWaterPump.IronTeeth`.
+- Rough rule: 2 pumps per 15 beavers, 3 pumps once you are above that and preparing for drought.
+- During drought, water is consumed but not produced; only stored water and aquifer drills help.
+
+### Irrigation and moisture
+
+- Water tiles irrigate nearby ground.
+- A 1x1 pond irrigates only a short radius; larger connected bodies irrigate farther.
+- Elevation changes reduce irrigation range significantly.
+- If soil dries out, plants wither and die.
+- `tiles` output includes `moist: true`.
+
+### Water management structures
+
+- **Dam**: cheap early retention, spills above 0.65 height
+- **Levee**: watertight wall, stackable, beavers can walk on it
+- **Floodgate**: adjustable water control, no walking on top
+
+### Aquifer drills
+
+- **Ancient Aquifer Drills** are map-placed and need 400hp.
+- **Aquifer Drill** is the player-built version and also needs 400hp.
+- Aquifer drills keep producing during drought.
+
+### Badwater and contamination
+
+- Badwater contaminates beavers and kills plants.
+- It is also a mid-game resource for extract and explosives chains.
+- Folktails clean contamination with Herbalists; Iron Teeth use Decontamination Pods.
+
+### Trees
+
+| Tree | Growth | Logs | Special | Faction |
+|---|---|---|---|---|
+| Birch | 7 days | 1 | - | both |
+| Pine | 12 days | 2 | Pine Resin | both |
+| Oak | 30 days | 8 | - | both |
+| Chestnut | 24 days | 4 | Chestnuts (food) | Folktails |
+| Maple | 28 days | 6 | Maple Syrup (food) | Folktails |
+| Mangrove | 10 days | 2 | Mangrove Fruits (food) | Iron Teeth |
+
+Birch is best early. Oak is strongest long-term.
+
+`tree_clusters` finds the densest grown tree clusters. `markedGrown` in `brain` is the immediately choppable supply.
+
+**Forester** plants trees and bushes on moist soil. One forester keeps up with about four lumberjacks.
+
+### Power
+
+- Power transfers through adjacent buildings only.
+- Paths do not conduct power.
+- Oasis maps have standing water, so manual power is often better than water wheels.
+- `find_placement.nearPower` helps with adjacency checks.
+
+### Manufacturing chains
+
+Construction supply chain:
+
+```text
+Trees -> Logs -> Planks -> most buildings
+Planks -> Gears -> advanced buildings and bot parts
+ScrapMetal -> MetalBlocks -> late-game buildings
+```
+
+Planks are usually the first bottleneck. Gears are the second.
+
+Folktails knowledge chain: Paper -> Books
+
+Extract chain: Badwater + Logs -> Extract
+
+Biofuel chain (Folktails): Crops + Water -> Biofuel. Timberbots consume about 2 biofuel per day.
+
+### Beaver lifecycle
+
+- Lifespan is about 50 days.
+- Kits mature in 6 days base, faster with high wellbeing.
+- Beavers sleep at home during non-work hours.
+- `TeethGrindstone` fixes chipped teeth.
+
+### Weather cycles
+
+- Every cycle has one temperate phase and one hazardous phase.
+- Hazardous weather is drought or badtide.
+- Durations escalate over time.
+- Games always start in temperate weather.
+
+### Population growth
+
+- Folktails reproduce naturally through housing.
+- Iron Teeth use Breeding Pods.
+
+### Bots
+
+- Bots work 24/7 and ignore food, water, sleep, and wellbeing.
+- Folktails bots need Biofuel.
+- Iron Teeth bots need Charging Stations.
+- Bots cannot work at Power Wheels or Inventors.
+
+### Scaling ratios (approximate)
+
+| Per-capita | Ratio | Notes |
+|---|---|---|
+| Farmhouse | 1 per 8 beavers | with full irrigated fields |
+| Water pump | 1 per 7 beavers | more during drought prep |
+| Housing | depends on building | Lodge (FT) holds ~4, Rowhouse (IT) holds 2 |
+| Lumberjack | 1 per 15 beavers | keep staffed always |
+| Water tanks | 30 water per drought-day per beaver | plan for longest expected drought |
+
+### Storage
+
+Three storage families exist:
+
+- Piles for logs, planks, metal blocks, and dirt
+- Warehouses for food, gears, and manufactured goods
+- Tanks for water, badwater, extract, syrup, and biofuel
+
+Each storage holds one good type at a time. Configure filters and capacities with the API when needed.
+
+### Districts
+
+Districts are separate colonies connected by District Crossings. Resources do not automatically flow between them.
+
+- Expand when work clusters are too far from the DC.
+- Use distribution controls for goods flow between districts.
+- Use migration controls for population transfers.
+- Every district needs its own basic survival chain.
+
+### Death spiral
+
+When food or water hits zero: beavers die -> fewer workers -> less production -> more die.
+
+### Workers
+
+- Hauling requires idle or unemployed beavers.
+- Too many staffed buildings with too few workers means nobody hauls.
+- Lumberjacks must stay staffed.
+- Default work hours end at 18.
+
+## Wellbeing
+
+Wellbeing categories and caps differ by faction. Use the API when you need the exact live breakdown, but use the tables below for planning and prioritization.
+
+### Folktails wellbeing (max 77)
+
+| Category | Max | Needs (building/food -> bonus) |
+|---|---|---|
+| BasicNeeds | 5 | Hunger (+1), Thirst (+1), Sleep (+1), Shelter (+1), WetFur (+1 via Shower.Folktails) |
+| SocialLife | 11 | Campfire (+1), ContemplationSpot (+1), RooftopTerrace (+1), Agora (+3), DanceHall (+5) |
+| Fun | 8 | Detailer (+1), Lido (+1), Carousel (+3), MudPit (+3) |
+| Nutrition | 15 | Carrots (+1), SunflowerSeeds (+1), GrilledPotatoes (+2), GrilledChestnuts (+2), GrilledSpadderdock (+2), Bread (+2), CattailCracker (+2), MaplePastry (+3) |
+| Aesthetics | 9 | Shrub (+1), Lantern (+1), Roof (+1), Scarecrow (+1), Weathervane (+1), BeaverStatue (+2), BulletinPole (+2) |
+| Knowledge | 3 | Books (+3 via PrintingPress) |
+| Awe | 26 | FarmerMonument (+3), BrazierOfBonding (+5), FountainOfJoy (+8), EarthRecultivator (+10) |
+
+### Iron Teeth wellbeing (max ~77)
+
+| Category | Max | Needs (building/food -> bonus) |
+|---|---|---|
+| BasicNeeds | 5 | Hunger (+1), Thirst (+1), Sleep (+1), Shelter (+1), WetFur (+1 via DoubleShower.IronTeeth) |
+| SocialLife | 2 | Campfire (+1), RooftopTerrace (+1) |
+| Fun | 17 | Scratcher (+1), SwimmingPool (+1), ExercisePlaza (+3), MudBath (+3), WindTunnel (+3), Motivatorium (+5) |
+| Nutrition | 17 | Kohlrabi (+1), MangroveFruits (+1), FermentedCassava (+2), FermentedSoybean (+2), FermentedMushroom (+2), CornRation (+2), EggplantRation (+2), AlgaeRation (+2), Coffee (+3, no hunger) |
+| Aesthetics | 10 | Lantern (+1), Brazier (+1), Shrub (+1), Roof (+1), BeaverBust (+1), BeaverStatue (+2), Bell (+1), DecorativeClock (+2) |
+| Awe | 26 | LaborerMonument (+3), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
+
+Nutrition requires food variety. Different food types matter; more of one food does not.
+
+### Wellbeing building placement
+
+- Each wellbeing building has an `effectRadius`.
+- Place wellbeing buildings near high-traffic areas.
+- Different wellbeing types can overlap productively.
+- Duplicating the same wellbeing building in the same area is usually wasted coverage.
+
+### Recipe switching
+
+Changing recipes destroys in-progress items and consumed materials. Re-setting the same recipe also resets progress. Treat recipe changes as expensive and avoid churning them.
+
+### Rooftop buildings
+
+- Decorative roofs provide aesthetics just by existing and do not need path access.
+- `RooftopTerrace` is an actual visited building and does need path or stair access.
 
 ## Conditional References
 
-Use these docs when you need more than the core workflow:
+Use these docs when you need more than the AI guide itself:
 
-- [API Reference](api-reference.md) for endpoint details, query parameters, pagination, and exact error payloads
-- [Timberbot AI Reference](timberbot-reference.md) for faction-specific buildings, lookup tables, gameplay mechanics, wellbeing data, and scaling heuristics
-- [Getting Started](getting-started.md) for install, PATH, remote host, and troubleshooting guidance
+- [API Reference](api-reference.md) for exact commands, query parameters, pagination, helper behavior, and error payloads
+- [Getting Started](getting-started.md) for install, PATH, remote host, Steam Workshop paths, and troubleshooting guidance

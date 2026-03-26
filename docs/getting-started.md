@@ -162,8 +162,7 @@ curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x"
 The mod ships a thin Claude skill plus docs for AI play:
 
 - `timberbot/skill/SKILL.md` is the distributable Claude Code entrypoint
-- [timberbot.md](timberbot.md) is the core operating guide
-- [timberbot-reference.md](timberbot-reference.md) is the long-form gameplay reference
+- [timberbot.md](timberbot.md) is the single authoritative AI guide
 - [api-reference.md](api-reference.md) is the endpoint and response source of truth
 
 ### Claude Code setup
@@ -180,7 +179,7 @@ cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
 
 ### Other LLMs
 
-Paste the contents of `docs/timberbot.md` as the core system prompt. Keep `docs/timberbot-reference.md` and `docs/api-reference.md` available as reference material for gameplay lookups and exact endpoint details. The Steam Workshop install ships the same docs under `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs`, and the GitHub repo mirrors the same content if users need another copy.
+Paste the contents of `docs/timberbot.md` as the system prompt. Keep `docs/api-reference.md` available for exact command and error details. The Steam Workshop install ships the same docs under `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs`, and the GitHub repo mirrors the same content if users need another copy.
 
 ## Remote connections
 
@@ -217,10 +216,10 @@ The client reads `httpHost` and `httpPort` from settings.json when no CLI flags 
 ---
 
 - [API Reference](api-reference.md) -- every endpoint with request/response examples
-- [AI Core](timberbot.md) -- core operating guide for AI play
-- [AI Reference](timberbot-reference.md) -- faction buildings, lookup tables, and gameplay reference
+- [Timberbot AI](timberbot.md) -- single authoritative AI guide for gameplay and operating rules
 - [Features](features.md) -- what's implemented vs gaps
 - [Developing](developing.md) -- build from source
+
 
 
 
