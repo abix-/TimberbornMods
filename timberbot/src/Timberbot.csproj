@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>Timberbot</AssemblyName>
-    <Version>0.6.4</Version>
+    <Version>0.6.6</Version>
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
@@ -387,6 +387,8 @@
     <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
     <Copy SourceFiles="settings.json" DestinationFolder="$(ModDir)" Condition="!Exists('$(ModDir)\settings.json')" />
     <Copy SourceFiles="..\script\timberbot.py" DestinationFolder="$(ModDir)" />
+    <MakeDir Directories="$(ModDir)\timberbot\skill" />
+    <Copy SourceFiles="..\skill\SKILL.md" DestinationFolder="$(ModDir)\timberbot\skill" />
     <MakeDir Directories="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\getting-started.md" DestinationFolder="$(ModDir)\docs" />

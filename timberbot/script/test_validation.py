@@ -1984,14 +1984,14 @@ class TestRunner:
             else:
                 self.skip("manufactory fields", "no active manufactory")
 
-            # find a monument to check effectRadius
-            monument = None
+            # find a building with effectRadius > 0
+            ranged = None
             for b in full:
-                if "effectRadius" in b:
-                    monument = b
+                if b.get("effectRadius", 0) > 0:
+                    ranged = b
                     break
-            if monument:
-                self.check("full has effectRadius", monument["effectRadius"] > 0)
+            if ranged:
+                self.check("full has effectRadius", ranged["effectRadius"] > 0)
             else:
                 self.skip("effectRadius", "no ranged effect building")
 
@@ -2075,6 +2075,7 @@ class TestRunner:
             return subprocess.run(
                 [py, script] + list(args),
                 capture_output=True, text=True, timeout=timeout,
+                encoding="utf-8", errors="replace",
             )
 
         # all read commands that take no args
@@ -2095,7 +2096,7 @@ class TestRunner:
             ("buildings detail:full", ["buildings", "detail:full", "--json"]),
             ("beavers detail:full", ["beavers", "detail:full", "--json"]),
             ("tiles", ["tiles", "--json"]),
-            ("map", ["map", f"x:{self.center_x}", f"y:{self.center_y}", "radius:5"]),
+            ("map", ["map", f"x1:{self.center_x - 5}", f"y1:{self.center_y - 5}", f"x2:{self.center_x + 5}", f"y2:{self.center_y + 5}"]),
             ("find buildings", ["find", "source:buildings", "limit:5", "--json"]),
         ]
         for name, argv in param_cmds:
