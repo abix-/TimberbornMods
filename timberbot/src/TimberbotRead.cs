@@ -451,6 +451,40 @@ namespace Timberbot
             return jw.End();
         }
 
+        public object CollectFoodClusters(string format = "toon", int cellSize = 10, int top = 5)
+        {
+            var cells = new Dictionary<long, int[]>();
+            foreach (var nr in _cache.NaturalResources.Read)
+            {
+                if (nr.Gatherable == null) continue;
+                if (TimberbotEntityCache.TreeSpecies.Contains(nr.Name)) continue;
+                if (nr.Living == null || nr.Living.IsDead) continue;
+                if (nr.BlockObject == null) continue;
+
+                var c = nr.BlockObject.Coordinates;
+                int cx = c.x / cellSize * cellSize + cellSize / 2;
+                int cy = c.y / cellSize * cellSize + cellSize / 2;
+                long key = (long)cx * 100000 + cy;
+
+                if (!cells.ContainsKey(key))
+                    cells[key] = new int[] { 0, 0, cx, cy, c.z };
+
+                cells[key][1]++;
+                if (nr.Growable != null && nr.Growable.IsGrown)
+                    cells[key][0]++;
+            }
+
+            var sorted = new List<int[]>(cells.Values);
+            sorted.Sort((a, b) => b[0].CompareTo(a[0]));
+            var jw = _cache.Jw.BeginArr();
+            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            {
+                var s = sorted[i];
+                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]).CloseObj();
+            }
+            return jw.End();
+        }
+
         public object CollectTime()
         {
             return _cache.Jw.Result(("dayNumber", _dayNightCycle.DayNumber), ("dayProgress", _dayNightCycle.DayProgress), ("partialDayNumber", _dayNightCycle.PartialDayNumber));

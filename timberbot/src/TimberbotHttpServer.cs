@@ -242,6 +242,8 @@ namespace Timberbot
                         return _service.Read.CollectAlerts(format, limit, offset);
                     case "/api/tree_clusters":
                         return _service.Read.CollectTreeClusters(format);
+                    case "/api/food_clusters":
+                        return _service.Read.CollectFoodClusters(format);
                     case "/api/resources":
                         return _service.Read.CollectResources(format);
                     case "/api/population":

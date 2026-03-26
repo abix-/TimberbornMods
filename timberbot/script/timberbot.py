@@ -381,6 +381,10 @@ class Timberbot:
         """Find clusters of grown trees. Returns top clusters by grown count."""
         return self._get("/api/tree_clusters")
 
+    def food_clusters(self):
+        """Find clusters of gatherable food (berries, bushes). Returns top clusters by grown count."""
+        return self._get("/api/food_clusters")
+
     @staticmethod
     def near(items, x, y, radius=20):
         """Filter items to those within radius of (x,y). Sorted by distance."""
@@ -675,21 +679,15 @@ class Timberbot:
         except Exception:
             tree_clusters = []
 
-        # nearby gatherables (berries, bushes): same z, within 40 tiles of DC
+        # food clusters (berries, bushes): same z, within 40 tiles of DC
         try:
-            all_gath = jbot.gatherables(limit=0)
-            gath_items = all_gath.get("items", all_gath) if isinstance(all_gath, dict) else all_gath
-            gath_items = gath_items if isinstance(gath_items, list) else []
-            nearby_gath = {}
-            for g in gath_items:
-                if g.get("z") != dc_z or g.get("alive") != 1:
-                    continue
-                if abs(g.get("x", 0) - dc_x) + abs(g.get("y", 0) - dc_y) > 40:
-                    continue
-                name = g.get("name", "")
-                nearby_gath[name] = nearby_gath.get(name, 0) + 1
+            all_food = jbot.food_clusters()
+            all_food = all_food if isinstance(all_food, list) else []
+            food_clusters = [c for c in all_food
+                             if c.get("z") == dc_z
+                             and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
         except Exception:
-            nearby_gath = {}
+            food_clusters = []
 
         # preserve existing maps and tasks sections
         existing_maps = {}
@@ -712,7 +710,7 @@ class Timberbot:
             "summary": summary,
             "buildingCount": len(slim),
             "treeClusters": tree_clusters,
-            "nearbyGatherables": nearby_gath,
+            "foodClusters": food_clusters,
             "maps": existing_maps,
             "tasks": existing_tasks,
         }
