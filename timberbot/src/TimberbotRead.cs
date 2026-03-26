@@ -167,6 +167,9 @@ namespace Timberbot
             // --- aggregate counters (built from cached data) ---
             int treeMarkedGrown = 0, treeMarkedSeedling = 0, treeUnmarkedGrown = 0;
             int cropReady = 0, cropGrowing = 0;
+            // per-species breakdowns (avoids client fetching all trees/crops just to count)
+            var treeSpecies = new Dictionary<string, int[]>(); // [markedGrown, unmarkedGrown, seedling]
+            var cropSpecies = new Dictionary<string, int[]>(); // [ready, growing]
             int occupiedBeds = 0, totalBeds = 0;
             int totalVacancies = 0, assignedWorkers = 0;
             float totalWellbeing = 0f;
@@ -188,6 +191,8 @@ namespace Timberbot
                 {
                     if (c.Grown != 0) cropReady++;      // harvestable now
                     else cropGrowing++;            // still growing
+                    if (!cropSpecies.TryGetValue(c.Name, out var cs)) { cs = new int[2]; cropSpecies[c.Name] = cs; }
+                    if (c.Grown != 0) cs[0]++; else cs[1]++;
                 }
                 else
                 {
@@ -195,15 +200,21 @@ namespace Timberbot
                     if (c.Marked != 0 && c.Grown != 0) treeMarkedGrown++;
                     else if (c.Marked != 0 && c.Grown == 0) treeMarkedSeedling++;
                     else if (c.Marked == 0 && c.Grown != 0) treeUnmarkedGrown++;
+                    if (!treeSpecies.TryGetValue(c.Name, out var ts)) { ts = new int[3]; treeSpecies[c.Name] = ts; }
+                    if (c.Marked != 0 && c.Grown != 0) ts[0]++;
+                    else if (c.Marked == 0 && c.Grown != 0) ts[1]++;
+                    else if (c.Marked != 0 && c.Grown == 0) ts[2]++;
                 }
             }
 
             // --- BUILDINGS ---
-            // Aggregate housing, employment, alerts, DC location, and role counts.
+            // Aggregate housing, employment, alerts, DC location, and role counts -- PER DISTRICT.
             int dcX = 0, dcY = 0, dcZ = 0, entranceX = 0, entranceY = 0;
             string dcOrientation = "south";
             bool foundDC = false;
             var roleCounts = new Dictionary<string, int>();
+            // per-district accumulators: [0]=occupiedBeds [1]=totalBeds [2]=assigned [3]=vacancies [4]=unstaffed [5]=unpowered [6]=unreachable
+            var districtStats = new Dictionary<string, int[]>();
             var roleMap = new Dictionary<string, string[]> {
                 {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
                 {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
@@ -218,22 +229,28 @@ namespace Timberbot
 
             foreach (var c in _cache.Buildings.Read)
             {
+                var dname = c.District ?? "_unknown";
+                if (!districtStats.TryGetValue(dname, out var ds)) { ds = new int[7]; districtStats[dname] = ds; }
                 if (c.Dwelling != null)
                 {
                     occupiedBeds += c.Dwellers;
                     totalBeds += c.MaxDwellers;
+                    ds[0] += c.Dwellers;
+                    ds[1] += c.MaxDwellers;
                 }
                 if (c.Workplace != null)
                 {
                     assignedWorkers += c.AssignedWorkers;
                     totalVacancies += c.DesiredWorkers;
+                    ds[2] += c.AssignedWorkers;
+                    ds[3] += c.DesiredWorkers;
                     if (c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
-                        alertUnstaffed++;
+                    { alertUnstaffed++; ds[4]++; }
                 }
                 if (c.IsConsumer != 0 && c.Powered == 0)
-                    alertUnpowered++;
+                { alertUnpowered++; ds[5]++; }
                 if (c.Unreachable != 0)
-                    alertUnreachable++;
+                { alertUnreachable++; ds[6]++; }
 
                 // DC detection
                 if (!foundDC && c.Name != null && c.Name.Contains("DistrictCenter"))
@@ -266,15 +283,30 @@ namespace Timberbot
             // faction
             string faction = TimberbotEntityCache.FactionSuffix == ".Folktails" ? "Folktails" : TimberbotEntityCache.FactionSuffix == ".IronTeeth" ? "IronTeeth" : "unknown";
 
-            // --- BEAVERS ---
+            // --- BEAVERS + WELLBEING CATEGORIES ---
             // miserable = wellbeing below 4 (struggling, may die soon)
             // critical = any need below warning threshold (immediate danger)
+            // Also accumulate per-category wellbeing (avoids client needing separate /api/wellbeing call)
+            var beaverNeeds = _factionNeedService.GetBeaverNeeds();
+            var needToGroup = new Dictionary<string, string>();
+            var groupMaxPerBeaver = new Dictionary<string, float>();
+            foreach (var ns in beaverNeeds)
+            {
+                if (string.IsNullOrEmpty(ns.NeedGroupId)) continue;
+                needToGroup[ns.Id] = ns.NeedGroupId;
+                groupMaxPerBeaver[ns.NeedGroupId] = groupMaxPerBeaver.GetValueOrDefault(ns.NeedGroupId) + ns.FavorableWellbeing;
+            }
+            var wbGroupTotals = new Dictionary<string, float>();
             foreach (var c in _cache.Beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
                 beaverCount++;
                 if (c.Wellbeing < 4) miserable++;
                 if (c.AnyCritical != 0) critical++;
+                if (c.Needs != null)
+                    foreach (var n in c.Needs)
+                        if (needToGroup.ContainsKey(n.Id))
+                            wbGroupTotals[needToGroup[n.Id]] = wbGroupTotals.GetValueOrDefault(needToGroup[n.Id]) + n.Wellbeing;
             }
 
             // --- DERIVED STATS ---
@@ -292,7 +324,6 @@ namespace Timberbot
             if (format == "json")
             {
                 // capture sub-collections BEFORE using _cache.Jw -- they share the same JwWriter
-                var districtsJson = CollectDistricts("json") as string;
                 var treeClustersJson = CollectTreeClusters("json") as string;
                 var foodClustersJson = CollectFoodClusters("json") as string;
                 var jj = _cache.Jw.BeginObj();
@@ -311,31 +342,61 @@ namespace Timberbot
                     .Prop("hazardousWeatherDuration", _weatherService.HazardousWeatherDuration)
                     .Prop("cycleLengthInDays", _weatherService.CycleLengthInDays)
                     .CloseObj();
-                jj.RawProp("districts", districtsJson);
+                // districts with population + resources + housing + employment inline
+                jj.Arr("districts");
+                foreach (var dc in _cache.Districts)
+                {
+                    jj.OpenObj().Prop("name", dc.Name);
+                    jj.Obj("population")
+                        .Prop("adults", dc.Adults).Prop("children", dc.Children).Prop("bots", dc.Bots)
+                        .CloseObj();
+                    jj.Obj("resources");
+                    if (dc.ResourcesJson != null) jj.Raw(dc.ResourcesJson);
+                    jj.CloseObj();
+                    var ds = districtStats.GetValueOrDefault(dc.Name);
+                    int dBeds = ds != null ? ds[1] : 0;
+                    int dOccBeds = ds != null ? ds[0] : 0;
+                    int dPop = dc.Adults + dc.Children + dc.Bots;
+                    jj.Obj("housing")
+                        .Prop("occupiedBeds", dOccBeds).Prop("totalBeds", dBeds)
+                        .Prop("homeless", System.Math.Max(0, dPop - dOccBeds))
+                        .CloseObj();
+                    int dAssigned = ds != null ? ds[2] : 0;
+                    int dVacancies = ds != null ? ds[3] : 0;
+                    jj.Obj("employment")
+                        .Prop("assigned", dAssigned).Prop("vacancies", dVacancies)
+                        .Prop("unemployed", System.Math.Max(0, dc.Adults - dAssigned))
+                        .CloseObj();
+                    jj.CloseObj();
+                }
+                jj.CloseArr();
                 jj.Obj("trees")
                     .Prop("markedGrown", treeMarkedGrown)
                     .Prop("markedSeedling", treeMarkedSeedling)
-                    .Prop("unmarkedGrown", treeUnmarkedGrown)
-                    .CloseObj();
+                    .Prop("unmarkedGrown", treeUnmarkedGrown);
+                jj.Arr("species");
+                foreach (var kv in treeSpecies)
+                    jj.OpenObj().Prop("name", kv.Key).Prop("markedGrown", kv.Value[0]).Prop("unmarkedGrown", kv.Value[1]).Prop("seedling", kv.Value[2]).CloseObj();
+                jj.CloseArr().CloseObj();
                 jj.Obj("crops")
                     .Prop("ready", cropReady)
-                    .Prop("growing", cropGrowing)
-                    .CloseObj();
-                jj.Obj("housing")
-                    .Prop("occupiedBeds", occupiedBeds)
-                    .Prop("totalBeds", totalBeds)
-                    .Prop("homeless", homeless)
-                    .CloseObj();
-                jj.Obj("employment")
-                    .Prop("assigned", assignedWorkers)
-                    .Prop("vacancies", totalVacancies)
-                    .Prop("unemployed", unemployed)
-                    .CloseObj();
+                    .Prop("growing", cropGrowing);
+                jj.Arr("species");
+                foreach (var kv in cropSpecies)
+                    jj.OpenObj().Prop("name", kv.Key).Prop("ready", kv.Value[0]).Prop("growing", kv.Value[1]).CloseObj();
+                jj.CloseArr().CloseObj();
                 jj.Obj("wellbeing")
                     .Prop("average", (float)avgWellbeing, "F1")
                     .Prop("miserable", miserable)
-                    .Prop("critical", critical)
-                    .CloseObj();
+                    .Prop("critical", critical);
+                jj.Arr("categories");
+                foreach (var kv in groupMaxPerBeaver)
+                {
+                    float avg = beaverCount > 0 ? wbGroupTotals.GetValueOrDefault(kv.Key) / beaverCount : 0;
+                    float max = kv.Value;
+                    jj.OpenObj().Prop("group", kv.Key).Prop("current", (float)System.Math.Round(avg, 1), "F1").Prop("max", (float)System.Math.Round(max, 1), "F1").CloseObj();
+                }
+                jj.CloseArr().CloseObj();
                 jj.Prop("science", _scienceService.SciencePoints);
                 jj.Obj("alerts")
                     .Prop("unstaffed", alertUnstaffed)

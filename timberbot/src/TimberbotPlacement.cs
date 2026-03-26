@@ -4,7 +4,7 @@
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
 // WaterDepth on ground-required tiles, path connectivity via reflection into NavMesh
 // internals, and power adjacency via cached power tile positions. Water buildings
-// sort by waterDepth first. Others: non-flooded > reachable > pathAccess > nearPower.
+// sort by waterDepth first. Others: non-flooded > reachable > distance (closer) > pathAccess > nearPower.
 //
 // PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
 // creates a preview, validates, then calls BlockObjectPlacerService.Place().
@@ -433,7 +433,7 @@ namespace Timberbot
         //    preview entity, Reposition it, and check IsValid(). This runs the same
         //    9 validators the player UI uses (terrain, occupancy, water buildings, etc).
         //
-        // Results sorted by: non-flooded > reachable > pathAccess > nearPower.
+        // Results sorted by: non-flooded > reachable > distance (closer) > pathAccess > nearPower.
         // Returns top 10 candidates.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {

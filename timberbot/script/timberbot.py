@@ -702,8 +702,8 @@ class Timberbot:
         import toons as _t
         with open(bpath, "w") as f:
             _t.dump(result, f)
-        with open(os.path.join(_MEMORY_DIR, "buildings.json"), "w") as f:
-            json.dump(slim, f, indent=2)
+        with open(os.path.join(_MEMORY_DIR, "buildings.toon"), "w") as f:
+            _t.dump(slim, f)
 
         # auto-map DC area on first run
         dc = summary.get("dc") if isinstance(summary, dict) else None
@@ -858,7 +858,7 @@ def _row(left, right=None, split=43):
         return f"  {left}{' ' * pad_l}  {right}"
 
 
-def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, interval=5):
+def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, interval=5):
     if not summary:
         print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
@@ -895,13 +895,12 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
             amt = val.get("available", val) if isinstance(val, dict) else val
             resources[good] = resources.get(good, 0) + amt
 
-    housing = summary.get("housing", {})
-    occ_beds = housing.get("occupiedBeds", 0)
-    tot_beds = housing.get("totalBeds", 0)
-    employment = summary.get("employment", {})
-    unemployed = employment.get("unemployed", 0)
-    assigned = employment.get("assigned", 0)
-    vacancies = employment.get("vacancies", 0)
+    # aggregate housing/employment from per-district data
+    occ_beds = sum(d.get("housing", {}).get("occupiedBeds", 0) for d in districts)
+    tot_beds = sum(d.get("housing", {}).get("totalBeds", 0) for d in districts)
+    assigned = sum(d.get("employment", {}).get("assigned", 0) for d in districts)
+    vacancies = sum(d.get("employment", {}).get("vacancies", 0) for d in districts)
+    unemployed = sum(d.get("employment", {}).get("unemployed", 0) for d in districts)
     wb_obj = summary.get("wellbeing", {})
     wb_avg = wb_obj.get("average", 0) if isinstance(wb_obj, dict) else 0
     critical = wb_obj.get("critical", 0) if isinstance(wb_obj, dict) else 0
@@ -910,7 +909,7 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
     if total_bots:
         pop_parts += f"  {_BOLD}{total_bots}{_RST} bots"
 
-    homeless = housing.get("homeless", 0)
+    homeless = sum(d.get("housing", {}).get("homeless", 0) for d in districts)
     miserable = wb_obj.get("miserable", 0) if isinstance(wb_obj, dict) else 0
     science = summary.get("science", 0)
     idle_c = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
@@ -937,9 +936,11 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
     raw_crops = [(g, resources.get(g, 0)) for g in _RAW_CROPS if resources.get(g, 0) > 0]
 
     wb_cats = []
-    if wellbeing_data and isinstance(wellbeing_data, dict):
-        for cat in wellbeing_data.get("categories", []):
-            wb_cats.append((cat.get("group", "?"), cat.get("current", 0), cat.get("max", 0)))
+    # prefer categories from summary (avoids extra API call), fall back to separate wellbeing_data
+    wb_source = wb_obj.get("categories", []) if isinstance(wb_obj, dict) and "categories" in wb_obj else (
+        wellbeing_data.get("categories", []) if wellbeing_data and isinstance(wellbeing_data, dict) else [])
+    for cat in wb_source:
+        wb_cats.append((cat.get("group", "?"), cat.get("current", 0), cat.get("max", 0)))
 
     # food header
     left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} total){_RST}"]
@@ -984,8 +985,15 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
         r = alert_lines[i] if i < len(alert_lines) else ""
         print(_row(l, r))
 
-    # trees section (server already filters to tree species only)
-    if trees_data and isinstance(trees_data, list):
+    # trees section -- prefer per-species from summary, fall back to full trees_data
+    trees_obj = summary.get("trees", {})
+    tree_species = trees_obj.get("species", []) if isinstance(trees_obj, dict) else []
+    if tree_species:
+        tree_counts = {}
+        for s in tree_species:
+            n = s.get("name", "")
+            tree_counts[n] = {"marked_grown": s.get("markedGrown", 0), "unmarked_grown": s.get("unmarkedGrown", 0), "seedling": s.get("seedling", 0)}
+    elif trees_data and isinstance(trees_data, list):
         tree_counts = {}
         for t in trees_data:
             n = t.get("name", "")
@@ -1000,25 +1008,34 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
                     tree_counts[n]["unmarked_grown"] += 1
             elif t.get("marked"):
                 tree_counts[n]["seedling"] += 1
-        if tree_counts:
-            print(_hline())
-            tree_left = [f"{_BCYN}{_BOLD}TREES{_RST}"]
-            tree_right = []
-            total_chop = sum(c["marked_grown"] for c in tree_counts.values())
-            total_unmarked = sum(c["unmarked_grown"] for c in tree_counts.values())
-            total_seed = sum(c["seedling"] for c in tree_counts.values())
-            tree_left.append(f"  {_BGRN}{_BOLD}{total_chop}{_RST} choppable  {_DIM}{total_unmarked} unmarked  {total_seed} seedlings{_RST}")
-            for name in sorted(tree_counts, key=lambda n: tree_counts[n]["marked_grown"], reverse=True):
-                c = tree_counts[name]
-                if c["marked_grown"] + c["unmarked_grown"] + c["seedling"] > 0:
-                    tree_left.append(f"  {_DIM}{name:10s}{_RST} {_BGRN}{_BOLD}{c['marked_grown']:>4}{_RST} marked  {_DIM}{c['unmarked_grown']} free  {c['seedling']} growing{_RST}")
-            for i in range(len(tree_left)):
-                l = tree_left[i] if i < len(tree_left) else ""
-                r = tree_right[i] if i < len(tree_right) else ""
-                print(_row(l, r))
+    else:
+        tree_counts = {}
+    if tree_counts:
+        print(_hline())
+        tree_left = [f"{_BCYN}{_BOLD}TREES{_RST}"]
+        tree_right = []
+        total_chop = sum(c["marked_grown"] for c in tree_counts.values())
+        total_unmarked = sum(c["unmarked_grown"] for c in tree_counts.values())
+        total_seed = sum(c["seedling"] for c in tree_counts.values())
+        tree_left.append(f"  {_BGRN}{_BOLD}{total_chop}{_RST} choppable  {_DIM}{total_unmarked} unmarked  {total_seed} seedlings{_RST}")
+        for name in sorted(tree_counts, key=lambda n: tree_counts[n]["marked_grown"], reverse=True):
+            c = tree_counts[name]
+            if c["marked_grown"] + c["unmarked_grown"] + c["seedling"] > 0:
+                tree_left.append(f"  {_DIM}{name:10s}{_RST} {_BGRN}{_BOLD}{c['marked_grown']:>4}{_RST} marked  {_DIM}{c['unmarked_grown']} free  {c['seedling']} growing{_RST}")
+        for i in range(len(tree_left)):
+            l = tree_left[i] if i < len(tree_left) else ""
+            r = tree_right[i] if i < len(tree_right) else ""
+            print(_row(l, r))
 
-    # crops section (server already filters to crop species only)
-    if crops_data and isinstance(crops_data, list):
+    # crops section -- prefer per-species from summary, fall back to full crops_data
+    crops_obj = summary.get("crops", {})
+    crop_species = crops_obj.get("species", []) if isinstance(crops_obj, dict) else []
+    if crop_species:
+        crop_counts = {}
+        for s in crop_species:
+            n = s.get("name", "")
+            crop_counts[n] = {"alive": s.get("ready", 0) + s.get("growing", 0), "grown": s.get("ready", 0)}
+    elif crops_data and isinstance(crops_data, list):
         crop_counts = {}
         for t in crops_data:
             name = t.get("name", "")
@@ -1028,18 +1045,20 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
                 crop_counts[name]["alive"] += 1
             if t.get("grown"):
                 crop_counts[name]["grown"] += 1
-        if crop_counts:
-            print(_hline())
-            crop_left = [f"{_BCYN}{_BOLD}CROPS{_RST}  {_DIM}(in ground){_RST}"]
-            crop_right = []
-            items = sorted(crop_counts.items(), key=lambda x: x[1]["alive"], reverse=True)
-            for name, c in items:
-                grown_c = _BGRN if c["grown"] > 0 else _DIM
-                crop_left.append(f"  {name:14s} {grown_c}{_BOLD}{c['grown']:>4}{_RST} ready  {_DIM}{c['alive'] - c['grown']} growing{_RST}")
-            for i in range(len(crop_left)):
-                l = crop_left[i] if i < len(crop_left) else ""
-                r = crop_right[i] if i < len(crop_right) else ""
-                print(_row(l, r))
+    else:
+        crop_counts = {}
+    if crop_counts:
+        print(_hline())
+        crop_left = [f"{_BCYN}{_BOLD}CROPS{_RST}  {_DIM}(in ground){_RST}"]
+        crop_right = []
+        items = sorted(crop_counts.items(), key=lambda x: x[1]["alive"], reverse=True)
+        for name, c in items:
+            grown_c = _BGRN if c["grown"] > 0 else _DIM
+            crop_left.append(f"  {name:14s} {grown_c}{_BOLD}{c['grown']:>4}{_RST} ready  {_DIM}{c['alive'] - c['grown']} growing{_RST}")
+        for i in range(len(crop_left)):
+            l = crop_left[i] if i < len(crop_left) else ""
+            r = crop_right[i] if i < len(crop_right) else ""
+            print(_row(l, r))
 
     # districts
     if len(districts) > 0:
@@ -1072,17 +1091,11 @@ def _top(interval=5):
         while True:
             try:
                 summary = bot.summary()
-                wb = bot.wellbeing()
-                trees = bot.trees()
-                crops = bot.crops()
             except Exception:
                 summary = None
-                wb = None
-                trees = None
-                crops = None
             print("\033[2J\033[H", end="")
             print()
-            _top_render(summary, wb, trees, crops, interval)
+            _top_render(summary, interval=interval)
             time.sleep(interval)
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
@@ -1118,7 +1131,7 @@ def _manage():
         while True:
             try:
                 summary = bot.summary()
-                idle = summary.get("employment", {}).get("unemployed", 0)
+                idle = sum(d.get("employment", {}).get("unemployed", 0) for d in summary.get("districts", []))
                 buildings = bot.buildings()
             except Exception:
                 print(f"  {_RED}-- connection lost --{_RST}")

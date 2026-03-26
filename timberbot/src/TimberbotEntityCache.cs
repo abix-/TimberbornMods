@@ -169,6 +169,12 @@ namespace Timberbot
                     c.Paused = c.Pausable != null && c.Pausable.Paused ? 1 : 0;
                     c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable() ? 1 : 0;
                     c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered ? 1 : 0;
+                    if (c.DistrictBuilding != null)
+                    {
+                        var dbc = c.DistrictBuilding.District;
+                        if (RefChanged(ref c.LastDistrictRef, dbc))
+                            c.District = dbc?.DistrictName;
+                    }
                     if (c.Workplace != null)
                     {
                         c.AssignedWorkers = c.Workplace.NumberOfAssignedWorkers;
@@ -475,6 +481,7 @@ namespace Timberbot
                     Manufactory = ec.GetComponent<Manufactory>(),
                     BreedingPod = ec.GetComponent<BreedingPod>(),
                     RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>(),
+                    DistrictBuilding = ec.GetComponent<DistrictBuilding>(),
                     HasFloodgate = ec.GetComponent<Floodgate>() != null ? 1 : 0,
                     FloodgateMaxHeight = ec.GetComponent<Floodgate>()?.MaxHeight ?? 0f,
                     HasClutch = ec.GetComponent<Clutch>() != null ? 1 : 0,
@@ -668,6 +675,9 @@ namespace Timberbot
             public Manufactory Manufactory;
             public BreedingPod BreedingPod;
             public RangedEffectBuildingSpec RangedEffect;
+            public DistrictBuilding DistrictBuilding;
+            public string District;
+            public object LastDistrictRef;
             public int Finished, Paused, Unreachable, Powered;
             public int X, Y, Z;
             public string Orientation;
