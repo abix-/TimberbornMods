@@ -98,7 +98,19 @@ class Timberbot:
     No client-side transformation of API data.
     """
 
-    def __init__(self, host="127.0.0.1", port=8085, json_mode=False):
+    def __init__(self, host=None, port=None, json_mode=False):
+        if host is None or port is None:
+            try:
+                spath = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "settings.json")
+                with open(spath) as f:
+                    settings = json.load(f)
+                if host is None:
+                    host = settings.get("httpHost", "127.0.0.1")
+                if port is None:
+                    port = settings.get("httpPort", 8085)
+            except Exception:
+                host = host or "127.0.0.1"
+                port = port or 8085
         self.url = f"http://{host}:{port}"
         self._format = "json" if json_mode else "toon"
         self.s = requests.Session()
