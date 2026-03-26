@@ -1,7 +1,7 @@
 ---
 title: Timberbot AI
 description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
-version: "0.8.1"
+version: "0.8.3"
 ---
 # Timberbot AI
 
@@ -14,9 +14,9 @@ Read this first. Use the other docs only when needed:
 
 ## FIRST RUN: Boot Sequence
 
-On the first invocation of `/timberbot` per session, complete two phases in order. The boot report is not a game action. It proves that you loaded the guide before making changes.
+On the first invocation of `/timberbot` per session, complete `Boot`, then `Brain`, in order. The boot report is not a game action. It proves that you loaded the guide before making changes.
 
-### Phase 1: Boot (rules confirmation -- NO API calls)
+### Boot (rules confirmation -- NO API calls)
 
 1. Read this entire guide top to bottom before calling any game APIs.
 2. Immediately print this boot report in markdown. Replace every placeholder yourself. Use lowercase throughout:
@@ -24,10 +24,10 @@ On the first invocation of `/timberbot` per session, complete two phases in orde
 ```md
 ## TIMBERBOT
 
-> **docs source** `<cwd docs | workshop docs | github docs with user approval>`
-> **ai doc** `<loaded path | MISSING>`
-> **api doc** `<loaded path | MISSING>`
-> **setup doc** `<loaded path | MISSING>`
+> **docs source** `<full docs directory path | github docs url with user approval>`
+> **ai doc** `<full path | MISSING>`
+> **api doc** `<full path | MISSING>`
+> **setup doc** `<full path | MISSING>`
 
 - **boot rule** `<once per session unless restart or clear>`
 - **first read** `<brain>`
@@ -43,9 +43,9 @@ On the first invocation of `/timberbot` per session, complete two phases in orde
 > **boot result** `<PASSED | FAILED>`
 ```
 
-If boot is `PASSED`, continue immediately to Phase 2 and run the `brain` link call.
+If boot is `PASSED`, continue immediately to `Brain` and run the `brain` call.
 If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be stated, boot is `FAILED`. Report the issue, ask the user for guidance, and do not make any game API calls.
-### Phase 2: Link (one command)
+### Brain (one command)
 
 3. Run `timberbot.py brain goal:"<player's request>"`. This is the only boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement and stored in `memory/<settlement>/`.
 4. If existing memory is found for this settlement, ask the human whether to load it or start fresh. If they choose fresh, run `timberbot.py clear_brain`, then `brain` again.
