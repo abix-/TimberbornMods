@@ -691,12 +691,22 @@ class Timberbot:
         return {"saved": bpath, "faction": faction, "buildings": len(slim)}
 
     def load_brain(self):
-        """Load brain.json. Creates a new brain if none exists."""
+        """Load brain.json. Creates new brain + DC map if none exists."""
         fpath = os.path.join(_MEMORY_DIR, "brain.json")
+        created = False
         if not os.path.exists(fpath):
             self.save_brain()
+            created = True
         with open(fpath) as f:
-            return json.load(f)
+            brain = json.load(f)
+        # auto-map DC area if no maps exist yet
+        dc = brain.get("dc")
+        if dc and not brain.get("maps"):
+            self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
+            # reload to pick up the maps index update
+            with open(fpath) as f:
+                brain = json.load(f)
+        return brain
 
     def list_maps(self):
         """List saved map files in memory/."""
