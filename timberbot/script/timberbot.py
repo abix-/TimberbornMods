@@ -1316,7 +1316,16 @@ def main():
         sys.exit(1)
 
     json_mode = "--json" in sys.argv
-    raw_args = [a for a in sys.argv[1:] if a not in ("--", "--json")]
+    host_override = None
+    port_override = None
+    for a in sys.argv[1:]:
+        if a.startswith("--host="):
+            host_override = a.split("=", 1)[1]
+        elif a.startswith("--port="):
+            try: port_override = int(a.split("=", 1)[1])
+            except ValueError: pass
+    skip = {"--", "--json"}
+    raw_args = [a for a in sys.argv[1:] if a not in skip and not a.startswith("--host=") and not a.startswith("--port=")]
     method_name = raw_args[0]
     args = raw_args[1:]
 
@@ -1334,7 +1343,7 @@ def main():
         _manage()
         return
 
-    bot = Timberbot(json_mode=json_mode)
+    bot = Timberbot(host=host_override, port=port_override, json_mode=json_mode)
 
     if not hasattr(bot, method_name):
         print(f"error: unknown method '{method_name}'", file=sys.stderr)
