@@ -18,6 +18,7 @@
 - [feature] map delta-encoded ANSI: 35KB -> 6KB output for same area
 - [feature] find_placement distance field: flow-field path cost from DC entrance (lower = closer = better hauling)
 - [feature] buildings.json: slim building index (id/name/x/y/z) persisted separately from brain
+- [feature] summary: speed field added to output
 - [internal] uniform schema rule: every object in an array has identical keys, both formats, all detail levels
 - [internal] 0/1 booleans at data layer: CachedBuilding/CachedBeaver/CachedNaturalResource/CachedNeed fields are int, converted from game bools with ? 1 : 0
 - [internal] architecture.md updated with uniform schema rule, 0/1 convention, spatial memory section
