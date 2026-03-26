@@ -147,33 +147,42 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 
 ## Brain (persistent memory)
 
-Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/Timberbot/memory/`. Survives between sessions. This is the AI's long-term memory -- without it, every session starts from zero.
+`brain` is the ONE command for colony awareness. Always fresh from game. Replaces `summary`. Run it at session start, after placing buildings, whenever you need the current picture. **NEVER use `summary` -- use `brain`.**
 
-### brain.toon structure
+Everything persists to `~/Documents/Timberborn/Mods/Timberbot/memory/` in toon format. Survives between sessions.
 
-```
-{
-  "dc": {"x", "y", "z", "orientation", "entrance": [ex, ey]},
-  "buildings": [{"id", "name", "x", "y", "z"}, ...],        // slim index
-  "maps": {
-    "region-name": {
-      "x1", "y1", "x2", "y2",                                // area coords
-      "files": ["map-name-x1xy1y-x2xy2y.txt", ...]           // newest last
-    }
-  },
-  "tasks": [
-    {"id": 1, "status": "done", "action": "build roads to water"},
-    {"id": 2, "status": "failed", "action": "path to pump", "error": "stairs not unlocked"},
-    {"id": 3, "status": "pending", "action": "place FarmHouse"}
-  ]
-}
-```
+### What brain gives you
 
-**Buildings** are a slim index -- just id/name/x/y/z. Enough to look up where things are and reference them by ID without re-querying the API.
+| Field | What | Why |
+|---|---|---|
+| `faction` | Folktails or IronTeeth | Determines prefab names for every building |
+| `dc` | DC coords, z-level, orientation, entrance | Root of everything -- road network, placement searches |
+| `summary` | Full colony snapshot (structured JSON) | Population, resources, weather, drought, alerts, wellbeing, food/water days |
+| `buildings` | Count by role (water, food, housing, wood, storage, power, science, production, leisure, paths) | Instant gap analysis -- see what's missing |
+| `treeClusters` | Top tree clusters on DC z-level within 40 tiles | WHERE to send lumberjacks. Sorted by grown count (densest first). Each has x,y,z,grown,total |
+| `foodClusters` | Top gatherable food clusters (berries, bushes) on DC z-level within 40 tiles | WHERE to place gatherer flags. Same format as treeClusters |
+| `maps` | Region index with file paths | Spatial memory -- read map files to see terrain, water, buildings without re-querying |
+| `tasks` | Ordered work queue with status | Resume interrupted work, track multi-step plans |
 
-**Maps** are indexed by region name. Each region has bounding box coords and an array of map files (newest appended to bottom). The map files themselves are ANSI-encoded with full z-level, moisture, and building data.
+### treeClusters and foodClusters
 
-**Tasks** are an ordered work queue. When executing a multi-step plan, add each step as a task. Update status as you go. When something fails, the error is preserved so the next session knows exactly what went wrong and where to resume.
+These are your resource radar. Filtered to same z-level as DC and within 40 Manhattan distance -- only resources beavers can actually reach.
+
+**treeClusters** -- densest wood sources nearby. Use these to decide WHERE to place lumberjacks and foresters. The cluster center (x,y) is where trees are concentrated. `grown` = ready to chop now, `total` = including seedlings.
+
+**foodClusters** -- gatherable food (berry bushes, dandelion bushes, etc). Use these to decide WHERE to place gatherer flags. Early game survival depends on knowing where berries are BEFORE you have farms.
+
+### DC map
+
+`brain` auto-saves a 41x41 ANSI map centered on DC on first run. Read the map file from `maps.districtcenter.files[0]` to see the full terrain layout: water locations, tree positions, z-levels, existing buildings and roads. This is your spatial awareness -- use it to guide placement decisions instead of blindly searching.
+
+### Maps
+
+Indexed by region name. Each region has bounding box coords and an array of map files (newest appended to bottom). The map files are ANSI-encoded with full z-level, moisture, and building data. Save new maps with `map ... name:region` as you explore.
+
+### Tasks
+
+Ordered work queue. When executing a multi-step plan, add each step as a task. Update status as you go. When something fails, the error is preserved so the next session knows exactly what went wrong and where to resume.
 
 ### Task statuses
 
@@ -302,7 +311,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | Method | What it does |
 |---|---|
 | **Read state** | |
-| `summary` | Lightweight colony snapshot (use `brain` instead -- summary is included in brain) |
+| `summary` | DO NOT USE. Use `brain` instead -- it includes summary plus DC, faction, clusters, maps, tasks |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
