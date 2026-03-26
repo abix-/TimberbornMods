@@ -685,9 +685,11 @@ class Timberbot:
         # ensure brain.toon exists with consistent schema
         import toons as _t
         os.makedirs(_MEMORY_DIR, exist_ok=True)
-        if not os.path.exists(bpath):
-            with open(bpath, "w") as f:
-                _t.dump({"maps": maps, "tasks": tasks}, f)
+        # always update timestamp
+        from datetime import datetime
+        brain_data = {"timestamp": datetime.now().isoformat(), "tasks": tasks, "maps": maps}
+        with open(bpath, "w") as f:
+            _t.dump(brain_data, f)
 
         # auto-map DC area on first run
         districts = summary.get("districts", []) if isinstance(summary, dict) else []
@@ -697,7 +699,7 @@ class Timberbot:
             with open(bpath) as f:
                 maps = _t.load(f).get("maps", {})
 
-        return {"summary": summary, "maps": maps, "tasks": tasks}
+        return {"summary": summary, "tasks": tasks, "maps": maps}
 
     def list_maps(self):
         """List saved map files in memory/."""
