@@ -2007,7 +2007,7 @@ class TestRunner:
     def test_map_render(self):
         """Test the ASCII map render (was visual)."""
         print("\n=== map render ===\n")
-        result = self.bot.map(self.center_x, self.center_y, 5)
+        result = self.bot.map(self.center_x, self.center_y, self.center_x + 5, self.center_y + 5)
         self.check("map returns rendered dict",
                    isinstance(result, dict) and result.get("rendered"),
                    f"got: {type(result).__name__}")
