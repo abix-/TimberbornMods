@@ -232,7 +232,7 @@ HTTP request -> ListenLoop -> parse body + query params -> enqueue PendingReques
 
 Persistent colony knowledge in `~/Documents/Timberborn/Mods/Timberbot/memory/`:
 
-- **`brain.json`** -- colony snapshot: DC location + entrance coords, all buildings with IDs/coords, summary stats. Updated via `save_brain`, read via `load_brain`.
+- **`brain.toon`** -- colony index in toon format: faction, DC, summary, building counts by role, treeClusters, foodClusters, maps index, task queue. Updated by `brain` command (always fresh from game).
 - **`map-{name}-{x1}x{y1}y-{x2}x{y2}y.txt`** -- named ANSI map files with full encoding (z-level bg shading, moisture color, building/water/tree characters). Saved via `map ... name:label`, listed via `list_maps`.
 
 Map rendering uses delta-encoded ANSI (only emits escape codes when bg/fg changes from previous tile) to keep output compact (~6KB for 41x41 area vs ~35KB with per-tile encoding).

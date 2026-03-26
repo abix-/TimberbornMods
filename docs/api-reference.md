@@ -1838,15 +1838,18 @@ timberbot.py top
 
 ### Spatial memory (CLI-only)
 
-Persistent colony knowledge saved to `Documents/Timberborn/Mods/Timberbot/memory/`.
+Persistent colony knowledge in `Documents/Timberborn/Mods/Timberbot/memory/`.
 
 ```bash
-timberbot.py save_brain       # save DC, buildings, summary to memory/brain.json
-timberbot.py load_brain       # load last saved state
+timberbot.py brain            # full colony picture, always fresh, persists to brain.toon
 timberbot.py list_maps        # list saved map files
+timberbot.py add_task action:"build roads"   # add task to work queue
+timberbot.py update_task id:1 status:done    # update task status
+timberbot.py list_tasks       # show all tasks
+timberbot.py clear_tasks      # remove done tasks
 ```
 
-`save_brain` snapshots the district center (with computed entrance coordinates), all buildings with IDs and coordinates, and the colony summary. `load_brain` reads it back. Map files are saved via the `name` parameter on the `map` command.
+`brain` returns faction, DC (with entrance coords), structured summary, building counts by role, nearby tree clusters, food clusters, map index, and task queue. Always fresh from game. Persists to `memory/brain.toon`. Auto-creates brain and DC map on first run. Replaces `summary` for all state queries.
 
 ---
 
