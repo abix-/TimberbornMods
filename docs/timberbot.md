@@ -19,20 +19,19 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 ```
 ## TIMBERBOT v0.6.6
 
-`[___]` DC-first placement
-`[___]` road network before buildings (tree from DC entrance)
+`[___]` DC entrance = root of all path distances
+`[___]` unpathed buildings cannot be staffed or built
 `[___]` find_placement for ALL placement
 `[___]` find_planting for crops
-`[___]` building-first at edges
+`[___]` paths occupy tiles and block building placement
 `[___]` entrance must face path
 `[___]` beavers die at 0 food/water
 `[___]` never guess coords
-`[___]` co-op: re-read state often
-`[___]` priority: water > food > housing > wood > science
-`[___]` pause to plan, unpause with objectives
+`[___]` co-op: human changes state between calls
+`[___]` placement and pathing work at speed 0
 `[___]` sequential mutating calls only
-`[___]` brain with goal at session start, refresh after changes
-`[___]` add_task before multi-step work, update on completion/failure
+`[___]` brain = live state + persistent goal/tasks/maps
+`[___]` tasks persist across sessions, failed tasks keep error context
 `[___]` prefabs FT:___ IT:___
 `[___]` endpoints ___
 `[___]` crops FT:___ IT:___
@@ -99,28 +98,18 @@ Roads (paths) are the circulatory system of the colony. They cost nothing (zero 
 
 **DC entrance (the root).** The entrance is on the side matching the DC's orientation. For a south-facing DC at (x, y), the entrance is at the middle tile of the south edge: `(x+1, y-1)` (DC is 3x3, entrance is center of the oriented side). The first path tiles radiate outward from this point.
 
-**Reachability.** The `reachable` field in `find_placement` means "path-connected to DC." The `distance` field is the path cost from the DC entrance via the game's flow field (-1 if unreachable). A building with `reachable:0` cannot be staffed or supplied. Lower distance = shorter hauler trips. Keep critical buildings (water pumps, food storage) close to the DC.
+**Reachability.** The `reachable` field in `find_placement` means "path-connected to DC." The `distance` field is the path cost from the DC entrance via the game's flow field (-1 if unreachable). A building with `reachable:0` cannot be staffed or supplied. Lower distance = shorter hauler trips.
 
-**Build order:**
-1. Find DC location and orientation (`buildings | grep -i district`)
-2. Build a perimeter ring of paths around the DC (beavers must be able to exit and reach all sides)
-3. Extend trunk roads outward from the perimeter toward resources (water, trees, berries)
-4. Place buildings along existing roads (entrance must face a connected path tile)
-5. For edge buildings (water pumps): place building FIRST, then extend a road branch to its entrance
-
-**Common mistake:** Placing buildings before roads exist. A water pump placed 15 tiles from the DC with no path connection will sit unbuilt forever. Build roads to the area first, then place buildings along them. The only exception is edge buildings (water pumps at water's edge) which are placed first to avoid paths blocking their footprint -- but you still must immediately path to their entrance afterward.
 
 ## Placement
 
 **Use `find_placement` for ALL building placement.** Never manually search tiles, grep for water, or scan the map. It checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Use the x, y, z, and orientation it returns. No exceptions.
 
-**DC and map are in your brain.** `brain` gives you DC coords, entrance, z-level, and a 41x41 ANSI map centered on DC. Read the saved map file (`memory/map-districtcenter-*.txt`) to see terrain, water, trees, and buildings. Do NOT re-scan or re-discover -- the data is already there. Search `find_placement` within the brain's DC area, not at arbitrary coordinates.
+**Brain has the map.** `brain` returns DC coords, entrance, z-level, and a 41x41 ANSI map centered on DC. The saved map file (`memory/map-districtcenter-*.txt`) shows terrain, water, trees, and buildings.
 
-**Use the map to guide placement searches.** The brain's DC map shows where water meets terrain, where trees are, where open ground is. For water buildings, read the map to identify WHERE water is, THEN narrow your `find_placement` search box to that area at the SAME z-level as DC. Do NOT blindly search a huge area and accept results on a different z-level -- if all results are on a lower z, beavers cannot reach them without stairs (which need science).
+**Paths block footprints.** Paths are 1x1 entities that occupy tiles. A path on a tile prevents any building from being placed there.
 
-**Building-first at edges.** Paths occupy tiles -- a path blocks building placement on that tile. Place edge buildings (water pumps, anything at terrain boundaries) FIRST with `find_placement`, then `place_path` to connect them. Workflow: find_placement -> place building (unreachable initially, that's OK) -> path to entrance. Critical for water pumps -- if you path to the water's edge first, the path tiles block pump placement.
-
-**Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path is useless -- beavers can't access it, builders can't deliver materials. #1 most common mistake. `find_placement` returns `orientation` pointing the entrance toward the nearest path -- always use it.
+**Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path cannot be accessed. `find_placement` returns `orientation` pointing the entrance toward the nearest path.
 
 Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Example: building at (10,10) with orientation south -> entrance faces -y -> tile (10,9) must be a path.
 
@@ -128,24 +117,16 @@ Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (
 
 **Z-level:** z must equal terrain height at the placement location. Wrong z = invisible/broken building. The brain's DC map shows terrain height via digit (z % 10) + background shading (dark=z0-9, medium=z10-19, bright=z20-22). Use `tiles` for raw data. Different map areas have different heights -- never assume z:2.
 
-**Early game bootstrap:** New game starts with only a district center and NO roads. Run `brain` first -- it gives you DC coords, the map, tree clusters, and food sources. Then build roads. Sequence: (1) read the brain's DC map to identify water and resource locations, (2) build perimeter paths around DC so beavers can exit, (3) extend trunk roads toward water and trees (use brain's treeClusters and foodClusters for direction), (4) place edge buildings (water pumps) at resource boundaries, (5) path to their entrances, (6) place remaining buildings along existing roads. Run `brain` again after placing to update the index. Paths are free. Stairs and platforms need science -- stay on same z-level until unlocked.
+**New game state:** A new game starts with only a district center and no roads. Paths cost nothing. Stairs and platforms require science unlocks.
 
 ## Game Speed
 
-Timberborn has 4 speed levels. Choose based on **your confidence in the current setup**:
-
-| Level | Name | Use Case |
-|-------|------|----------|
-| 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
-| 1 | **Speed 1 (Normal)** | Low confidence: early game, uncertain situations, risky builds. Time progresses slowly, giving you time to react if problems escalate. |
-| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. |
-| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly. |
-
-**NEVER unpause without a plan.** Paused time is FREE -- placement, pathing, and priority changes all work while paused. Unpaused beavers without queued objectives wander and consume resources without producing.
-
-**Workflow:** PAUSE to assess and queue work -> unpause at confidence-appropriate speed (see table) -> monitor -> PAUSE to reassess.
-
-**Emergency mode:** When water or food hits 0: PAUSE -> unpause only critical production, pause leisure/manufacturing, queue water pump/farm -> SPEED 1 to execute -> monitor until stable -> PAUSE to reassess.
+| Level | Name | Effect |
+|-------|------|--------|
+| 0 | **Paused** | No time passes. Placement, pathing, and priority changes all work. No resources consumed. |
+| 1 | **Normal** | 1x speed. |
+| 2 | **Fast** | 2x speed. |
+| 3 | **Fastest** | 4x speed. |
 
 ## References
 
@@ -612,7 +593,7 @@ Districts are separate colonies connected by District Crossings. Each district h
 
 ### Death spiral
 
-When food or water hits 0: beavers die -> fewer workers -> less production -> more die. Recovery: pause all non-essential buildings (leisure, manufacturing), set food/water production to VeryHigh priority, reduce worker counts everywhere else to free up haulers.
+When food or water hits 0: beavers die -> fewer workers -> less production -> more die.
 
 ### Workers
 - Hauling (construction delivery, breeding pod feeding) requires idle/unemployed beavers
