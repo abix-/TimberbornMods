@@ -25,7 +25,9 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]Server-side pagination & filtering:[/b] list endpoints default to 100 items per page. Filter by name or proximity without downloading everything. Works with any faction automatically.
 
-[b]Structured error codes:[/b] machine-readable "code: detail" format. Separate crops and trees endpoints for targeted queries.
+[b]Structured error codes:[/b] machine-readable "code: detail" format with context (which building is blocking placement, science costs). Separate crops and trees endpoints for targeted queries.
+
+[b]Output formats:[/b] all endpoints support toon (compact, AI-friendly) and json (full nested objects) via format parameter.
 
 [h1]Live dashboard[/h1]
 [code]
