@@ -692,9 +692,9 @@ class Timberbot:
         from datetime import datetime
         result = {
             "timestamp": datetime.now().isoformat(),
+            "tasks": existing_tasks,
             "summary": summary,
             "maps": existing_maps,
-            "tasks": existing_tasks,
         }
 
         # persist
