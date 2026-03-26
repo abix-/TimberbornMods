@@ -706,7 +706,9 @@ class Timberbot:
             _t.dump(slim, f)
 
         # auto-map DC area on first run
-        dc = summary.get("dc") if isinstance(summary, dict) else None
+        # DC is now per-district; use first district's DC for auto-map
+        districts = summary.get("districts", []) if isinstance(summary, dict) else []
+        dc = next((d.get("dc") for d in districts if d.get("dc")), summary.get("dc"))
         if dc and not existing_maps:
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
             with open(bpath) as f:

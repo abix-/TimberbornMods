@@ -215,6 +215,7 @@ namespace Timberbot
             var roleCounts = new Dictionary<string, int>();
             // per-district accumulators: [0]=occupiedBeds [1]=totalBeds [2]=assigned [3]=vacancies [4]=unstaffed [5]=unpowered [6]=unreachable
             var districtStats = new Dictionary<string, int[]>();
+            var districtDCs = new Dictionary<string, (int x, int y, int z, string orientation, int entranceX, int entranceY)>();
             var roleMap = new Dictionary<string, string[]> {
                 {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
                 {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
@@ -252,17 +253,17 @@ namespace Timberbot
                 if (c.Unreachable != 0)
                 { alertUnreachable++; ds[6]++; }
 
-                // DC detection
-                if (!foundDC && c.Name != null && c.Name.Contains("DistrictCenter"))
+                // DC detection -- per district
+                if (c.Name != null && c.Name.Contains("DistrictCenter"))
                 {
-                    foundDC = true;
-                    dcX = c.X; dcY = c.Y; dcZ = c.Z;
-                    dcOrientation = c.Orientation ?? "south";
-                    entranceX = c.X + 1; entranceY = c.Y + 1;
-                    if (dcOrientation == "south") { entranceX = c.X + 1; entranceY = c.Y - 1; }
-                    else if (dcOrientation == "north") { entranceX = c.X + 1; entranceY = c.Y + 3; }
-                    else if (dcOrientation == "east") { entranceX = c.X + 3; entranceY = c.Y + 1; }
-                    else if (dcOrientation == "west") { entranceX = c.X - 1; entranceY = c.Y + 1; }
+                    var dcOri = c.Orientation ?? "south";
+                    int eX = c.X + 1, eY = c.Y + 1;
+                    if (dcOri == "south") { eX = c.X + 1; eY = c.Y - 1; }
+                    else if (dcOri == "north") { eX = c.X + 1; eY = c.Y + 3; }
+                    else if (dcOri == "east") { eX = c.X + 3; eY = c.Y + 1; }
+                    else if (dcOri == "west") { eX = c.X - 1; eY = c.Y + 1; }
+                    districtDCs[dname] = (c.X, c.Y, c.Z, dcOri, eX, eY);
+                    if (!foundDC) { foundDC = true; dcX = c.X; dcY = c.Y; dcZ = c.Z; dcOrientation = dcOri; entranceX = eX; entranceY = eY; }
                 }
 
                 // role counting
@@ -368,6 +369,8 @@ namespace Timberbot
                         .Prop("assigned", dAssigned).Prop("vacancies", dVacancies)
                         .Prop("unemployed", System.Math.Max(0, dc.Adults - dAssigned))
                         .CloseObj();
+                    if (districtDCs.TryGetValue(dc.Name, out var ddc))
+                        jj.Obj("dc").Prop("x", ddc.x).Prop("y", ddc.y).Prop("z", ddc.z).Prop("orientation", ddc.orientation).Prop("entranceX", ddc.entranceX).Prop("entranceY", ddc.entranceY).CloseObj();
                     jj.CloseObj();
                 }
                 jj.CloseArr();
@@ -405,7 +408,6 @@ namespace Timberbot
                     .Prop("unreachable", alertUnreachable)
                     .CloseObj();
                 jj.Prop("faction", faction);
-                jj.Obj("dc").Prop("x", dcX).Prop("y", dcY).Prop("z", dcZ).Prop("orientation", dcOrientation).Prop("entranceX", entranceX).Prop("entranceY", entranceY).CloseObj();
                 jj.Obj("buildings");
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
