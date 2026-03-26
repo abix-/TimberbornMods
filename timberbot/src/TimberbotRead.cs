@@ -109,6 +109,28 @@ namespace Timberbot
             _notificationSaver = notificationSaver;
         }
 
+        private string GetSettlementName()
+        {
+            try
+            {
+                var obj = (object)_gameCycleService;
+                foreach (var field in new[] { "_singletonLoader", "_serializedWorldSupplier", "_sceneLoader", "_sceneParameters" })
+                {
+                    var fi = obj.GetType().GetField(field, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (fi == null) return "unknown";
+                    obj = fi.GetValue(obj);
+                    if (obj == null) return "unknown";
+                }
+                var saveRef = obj.GetType().GetProperty("SaveReference")?.GetValue(obj);
+                if (saveRef == null) return "unknown";
+                var settRef = saveRef.GetType().GetProperty("SettlementReference")?.GetValue(saveRef);
+                if (settRef == null) return "unknown";
+                var name = settRef.GetType().GetProperty("SettlementName")?.GetValue(settRef);
+                return name?.ToString() ?? "unknown";
+            }
+            catch { return "unknown"; }
+        }
+
         // ================================================================
         // READ ENDPOINTS
         // Each returns an object serialized to JSON. The "format" param controls shape:
@@ -229,6 +251,7 @@ namespace Timberbot
                 // capture districts BEFORE using _cache.Jw -- CollectDistricts uses the same JwWriter
                 var districtsJson = CollectDistricts("json") as string;
                 var jj = _cache.Jw.BeginObj();
+                jj.Prop("settlementName", GetSettlementName());
                 jj.Obj("time")
                     .Prop("dayNumber", _dayNightCycle.DayNumber)
                     .Prop("dayProgress", (float)_dayNightCycle.DayProgress)
@@ -279,6 +302,7 @@ namespace Timberbot
 
             // build flat summary matching TOON output format
             var jw = _cache.Jw.BeginObj();
+            jw.Prop("settlementName", GetSettlementName());
 
             // time
             jw.Prop("day", _dayNightCycle.DayNumber);

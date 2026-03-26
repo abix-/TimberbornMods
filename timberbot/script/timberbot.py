@@ -29,12 +29,19 @@ import sys
 import time
 import requests
 
-_MEMORY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
+_MEMORY_BASE = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
+_MEMORY_DIR = _MEMORY_BASE  # overridden per-settlement by brain()
 
 
-def _load_brain_file():
+def _sanitize_name(name):
+    """Sanitize settlement name for filesystem."""
+    return re.sub(r'[<>:"/\\|?*]', '_', name).strip() or "unknown"
+
+
+def _load_brain_file(mdir=None):
     """Load brain.toon or return empty dict."""
-    bpath = os.path.join(_MEMORY_DIR, "brain.toon")
+    d = mdir or _MEMORY_DIR
+    bpath = os.path.join(d, "brain.toon")
     if os.path.exists(bpath):
         try:
             import toons
@@ -45,17 +52,18 @@ def _load_brain_file():
     return {}
 
 
-def _save_brain_file(brain):
+def _save_brain_file(brain, mdir=None):
     """Write brain.toon."""
-    os.makedirs(_MEMORY_DIR, exist_ok=True)
+    d = mdir or _MEMORY_DIR
+    os.makedirs(d, exist_ok=True)
     import toons
-    with open(os.path.join(_MEMORY_DIR, "brain.toon"), "w") as f:
+    with open(os.path.join(d, "brain.toon"), "w") as f:
         toons.dump(brain, f)
 
 
-def _update_brain_maps(region, x1, y1, x2, y2, fname):
+def _update_brain_maps(region, x1, y1, x2, y2, fname, mdir=None):
     """Update the maps index in brain.toon when a map is saved."""
-    brain = _load_brain_file()
+    brain = _load_brain_file(mdir)
     maps = brain.get("maps", {})
     entry = maps.get(region, {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "files": []})
     entry["x1"] = x1
@@ -66,7 +74,7 @@ def _update_brain_maps(region, x1, y1, x2, y2, fname):
         entry["files"].append(fname)
     maps[region] = entry
     brain["maps"] = maps
-    _save_brain_file(brain)
+    _save_brain_file(brain, mdir)
 
 
 # ---------------------------------------------------------------------------
@@ -631,8 +639,13 @@ class Timberbot:
 
     def brain(self):
         """Full colony picture. Always fresh from game. Preserves maps + tasks. Replaces summary/save_brain/load_brain."""
+        global _MEMORY_DIR
         jbot = Timberbot(json_mode=True)
         summary = jbot.summary()
+
+        # set per-settlement memory dir
+        settlement = _sanitize_name(summary.get("settlementName", "unknown") if isinstance(summary, dict) else "unknown")
+        _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
         buildings_data = self.buildings(limit=0)
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
         items = items if isinstance(items, list) else []
@@ -738,6 +751,7 @@ class Timberbot:
         from datetime import datetime
         result = {
             "timestamp": datetime.now().isoformat(),
+            "settlement": settlement,
             "faction": faction,
             "dc": dc,
             "summary": summary,
@@ -770,6 +784,14 @@ class Timberbot:
         if not os.path.isdir(_MEMORY_DIR):
             return []
         return sorted(f for f in os.listdir(_MEMORY_DIR) if f.startswith("map-") and f.endswith(".txt"))
+
+    def clear_brain(self):
+        """Wipe memory for current settlement. Run brain again to start fresh."""
+        import shutil
+        if os.path.isdir(_MEMORY_DIR) and _MEMORY_DIR != _MEMORY_BASE:
+            shutil.rmtree(_MEMORY_DIR)
+            return {"cleared": _MEMORY_DIR}
+        return {"error": "no settlement memory to clear"}
 
     # ------------------------------------------------------------------
     # Tasks

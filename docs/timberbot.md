@@ -49,12 +49,16 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 
 ### Phase 2: Link (one command)
 
-3. Run `timberbot.py brain`. This is the ONLY boot API call. Always fresh from game: faction, DC, resources, weather, buildings, tree clusters, food clusters, maps, tasks. Print readout from brain data:
+3. Run `timberbot.py brain`. This is the ONLY boot API call. Always fresh from game. Memory is per-settlement (stored in `memory/{settlementName}/`).
+
+**If existing memory found for this settlement:** Ask the human: "found existing brain for `<settlement>` with `<N>` tasks and `<M>` maps. load it or start fresh?" If they say fresh, run `timberbot.py clear_brain` to wipe the settlement folder, then `brain` again.
+
+**If no existing memory:** Brain auto-creates it with DC map. Print readout:
 
 ```
 **link established** -- reading brain
 
-> **brain** <"new" or "loaded"> | `<N>` buildings | `<M>` maps | `<K>` tasks
+> **settlement** `<name>` | <"new" or "loaded, N tasks">
 > **colony** <faction> | day `<N>` | pop `<P>` | speed `<S>`
 > **supply** food `<F>d` | water `<W>d` | logs `<L>` | planks `<P>`
 > **weather** <state> | `<N>d` remain
@@ -355,6 +359,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `update_task id:N status:done\|failed [error:"reason"]` | Update task status |
 | `list_tasks` | Show all tasks |
 | `clear_tasks [status:done]` | Remove tasks by status |
+| `clear_brain` | Wipe memory for current settlement. Run brain again to start fresh |
 | **Crops and trees** | |
 | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` | Mark area for planting |
 | `clear_planting x1:X y1:Y x2:X2 y2:Y2 z:Z` | Clear planting marks |
