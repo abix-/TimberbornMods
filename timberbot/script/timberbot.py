@@ -678,10 +678,10 @@ class Timberbot:
         return {"saved": bpath, "buildings": len(slim)}
 
     def load_brain(self):
-        """Load last saved state from memory/brain.json."""
+        """Load brain.json. Creates a new brain if none exists."""
         fpath = os.path.join(_MEMORY_DIR, "brain.json")
         if not os.path.exists(fpath):
-            return {"error": "no brain.json found"}
+            self.save_brain()
         with open(fpath) as f:
             return json.load(f)
 

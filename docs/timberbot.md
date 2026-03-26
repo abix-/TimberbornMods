@@ -49,9 +49,7 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 
 ### Phase 2: Link (boot API calls)
 
-3. Run `timberbot.py load_brain`. Two paths:
-   - **Brain exists:** load it. You now have DC coords, building index, map regions, and task queue. Print summary of what's loaded.
-   - **No brain:** run `timberbot.py save_brain` to create one. Then `timberbot.py map x1:(dc_x-20) y1:(dc_y-20) x2:(dc_x+20) y2:(dc_y+20) name:districtcenter` to save the first map. This is your starting memory.
+3. Run `timberbot.py load_brain`. Auto-creates a new brain if none exists. Returns DC coords, building index, map regions, and task queue.
 4. Run `timberbot.py summary`. Print game state as a markdown readout, matching the lowercase robot style:
 
 ```
