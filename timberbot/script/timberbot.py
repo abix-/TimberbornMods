@@ -658,8 +658,8 @@ class Timberbot:
     # Spatial memory
     # ------------------------------------------------------------------
 
-    def brain(self):
-        """Live summary + persistent maps/tasks. Summary is never persisted (always stale)."""
+    def brain(self, goal=None):
+        """Live summary + persistent goal/tasks/maps. Summary is never persisted (always stale)."""
         global _MEMORY_DIR
 
         summary = self._get_json("/api/summary")
@@ -668,26 +668,30 @@ class Timberbot:
         settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
 
-        # load persistent data (maps + tasks only)
-        maps = {}
+        # load persistent data
+        existing_goal = ""
         tasks = []
+        maps = {}
         bpath = os.path.join(_MEMORY_DIR, "brain.toon")
         if os.path.exists(bpath):
             try:
                 import toons as _t
                 with open(bpath) as f:
                     old = _t.load(f)
-                    maps = old.get("maps", {})
+                    existing_goal = old.get("goal", "")
                     tasks = old.get("tasks", [])
+                    maps = old.get("maps", {})
             except Exception:
                 pass
 
-        # ensure brain.toon exists with consistent schema
+        # goal: new param overwrites, otherwise keep existing
+        current_goal = goal if goal else existing_goal
+
+        # persist brain.toon with consistent schema
         import toons as _t
         os.makedirs(_MEMORY_DIR, exist_ok=True)
-        # always update timestamp
         from datetime import datetime
-        brain_data = {"timestamp": datetime.now().isoformat(), "tasks": tasks, "maps": maps}
+        brain_data = {"timestamp": datetime.now().isoformat(), "goal": current_goal, "tasks": tasks, "maps": maps}
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
@@ -699,7 +703,7 @@ class Timberbot:
             with open(bpath) as f:
                 maps = _t.load(f).get("maps", {})
 
-        return {"summary": summary, "tasks": tasks, "maps": maps}
+        return {"summary": summary, "goal": current_goal, "tasks": tasks, "maps": maps}
 
     def list_maps(self):
         """List saved map files in memory/."""
