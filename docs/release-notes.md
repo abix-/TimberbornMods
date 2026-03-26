@@ -1,5 +1,6 @@
+Breaking changes below optimize token usage for AI consumers (~50% reduction on tiles, ~26% across all endpoints):
 - [breaking] map command: x/y/radius replaced with x1/y1/x2/y2 (consistent with tiles, find_placement, place_path)
-- [breaking] all boolean fields return 0/1 instead of true/false -- stored as int at data layer
+- [breaking] all boolean fields return 0/1 instead of true/false -- stored as int at data layer (saves 3-4 bytes per bool per row)
 - [breaking] tiles toon output: uniform schema (all fields always present), occupants moved to last column
 - [breaking] tiles toon occupants: z-range format (DistrictCenter:z2-6 instead of repeating name 5 times)
 - [breaking] buildings full: uniform schema (all fields always present in both toon and json)
