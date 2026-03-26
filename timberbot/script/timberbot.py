@@ -33,26 +33,28 @@ _MEMORY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "
 
 
 def _load_brain_file():
-    """Load brain.json or return empty dict."""
-    bpath = os.path.join(_MEMORY_DIR, "brain.json")
+    """Load brain.toon or return empty dict."""
+    bpath = os.path.join(_MEMORY_DIR, "brain.toon")
     if os.path.exists(bpath):
         try:
+            import toons
             with open(bpath) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, ValueError):
+                return toons.load(f)
+        except Exception:
             pass
     return {}
 
 
 def _save_brain_file(brain):
-    """Write brain.json."""
+    """Write brain.toon."""
     os.makedirs(_MEMORY_DIR, exist_ok=True)
-    with open(os.path.join(_MEMORY_DIR, "brain.json"), "w") as f:
-        json.dump(brain, f, indent=2)
+    import toons
+    with open(os.path.join(_MEMORY_DIR, "brain.toon"), "w") as f:
+        toons.dump(brain, f)
 
 
 def _update_brain_maps(region, x1, y1, x2, y2, fname):
-    """Update the maps index in brain.json when a map is saved."""
+    """Update the maps index in brain.toon when a map is saved."""
     brain = _load_brain_file()
     maps = brain.get("maps", {})
     entry = maps.get(region, {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "files": []})
@@ -617,7 +619,7 @@ class Timberbot:
             fpath = os.path.join(_MEMORY_DIR, fname)
             with open(fpath, "w") as f:
                 f.write("\n".join(lines) + "\n")
-            # update brain.json maps index
+            # update brain.toon maps index
             _update_brain_maps(name, x1, y1, x2, y2, fname)
             print(f"saved: {fpath}", file=sys.stderr)
             result["saved"] = fpath
@@ -722,14 +724,15 @@ class Timberbot:
         # preserve maps and tasks from existing brain
         existing_maps = {}
         existing_tasks = []
-        bpath = os.path.join(_MEMORY_DIR, "brain.json")
+        bpath = os.path.join(_MEMORY_DIR, "brain.toon")
         if os.path.exists(bpath):
             try:
+                import toons as _t
                 with open(bpath) as f:
-                    old = json.load(f)
+                    old = _t.load(f)
                     existing_maps = old.get("maps", {})
                     existing_tasks = old.get("tasks", [])
-            except (json.JSONDecodeError, KeyError):
+            except Exception:
                 pass
 
         from datetime import datetime
@@ -747,8 +750,9 @@ class Timberbot:
 
         # persist
         os.makedirs(_MEMORY_DIR, exist_ok=True)
+        import toons as _t
         with open(bpath, "w") as f:
-            json.dump(result, f, indent=2)
+            _t.dump(result, f)
         with open(os.path.join(_MEMORY_DIR, "buildings.json"), "w") as f:
             json.dump(slim, f, indent=2)
 
@@ -757,7 +761,7 @@ class Timberbot:
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
             # reload to pick up maps index
             with open(bpath) as f:
-                result = json.load(f)
+                result = _t.load(f)
 
         return result
 
@@ -772,7 +776,7 @@ class Timberbot:
     # ------------------------------------------------------------------
 
     def add_task(self, action):
-        """Add a pending task to brain.json. Returns the new task."""
+        """Add a pending task to brain.toon. Returns the new task."""
         brain = _load_brain_file()
         tasks = brain.get("tasks", [])
         next_id = max((t["id"] for t in tasks), default=0) + 1
@@ -799,7 +803,7 @@ class Timberbot:
         return {"error": f"task {id} not found"}
 
     def list_tasks(self):
-        """List all tasks from brain.json."""
+        """List all tasks from brain.toon."""
         brain = _load_brain_file()
         return brain.get("tasks", [])
 

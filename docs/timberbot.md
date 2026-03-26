@@ -149,7 +149,7 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 
 Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/Timberbot/memory/`. Survives between sessions. This is the AI's long-term memory -- without it, every session starts from zero.
 
-### brain.json structure
+### brain.toon structure
 
 ```
 {
@@ -196,7 +196,7 @@ Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/T
 
 **Need a refresh:** `brain` again. Always fresh from game. Run it after placing buildings, after major changes, or whenever you need current state.
 
-**After mapping a new area:** `map ... name:region` auto-updates brain.json maps index.
+**After mapping a new area:** `map ... name:region` auto-updates brain.toon maps index.
 
 **Cleanup:** `clear_tasks` removes done tasks. Keep failed tasks until resolved.
 
