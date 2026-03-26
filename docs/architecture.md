@@ -61,16 +61,18 @@ Entity destroyed (building demolished, beaver died, tree cut)
 
 Component references resolved once at entity-add time. Mutable state refreshed on main thread at 1Hz cadence. All classes (not structs) -- modified in-place, `Clone()` via `MemberwiseClone` for double-buffer independence.
 
+**Booleans are stored as `int` (0/1), not `bool`.** This is intentional -- the data layer stores 0/1 natively so both toon and JSON output emit integers without format translation. Game API bools are converted at assignment time with `? 1 : 0`. When reading these fields in C#, use `!= 0` / `== 0` instead of truthy/falsy.
+
 ```
 CachedBuilding {
   // immutable refs (set at add-time, never refreshed)
   Entity, Id, Name, BlockObject, Pausable, Floodgate, Workplace, ...
-  HasFloodgate, HasClutch, HasWonder, IsGenerator, IsConsumer, ...
+  HasFloodgate(int), HasClutch(int), HasWonder(int), IsGenerator(int), IsConsumer(int), ...
   EffectRadius, NominalPower, X, Y, Z, Orientation
   OccupiedTiles (immutable List, safe to share between buffers)
 
   // mutable primitives (refreshed by RefreshCachedState at 1Hz)
-  Finished, Paused, Unreachable, Powered,
+  Finished(int), Paused(int), Unreachable(int), Powered(int),
   AssignedWorkers, DesiredWorkers, FloodgateHeight, BuildProgress, ...
 
   // mutable reference types (SEPARATE instances per buffer!)
@@ -81,16 +83,16 @@ CachedNaturalResource {
   // immutable refs
   Id, Name, BlockObject, Living, Cuttable, Gatherable, Growable, X, Y, Z
   // mutable primitives (all value types -- safe to share)
-  Alive, Grown, Growth, Marked
+  Alive(int), Grown(int), Growth(float), Marked(int)
 }
 
 CachedBeaver {
   // immutable refs
-  Id, Name, IsBot, NeedMgr, WbTracker, Worker, Life, Carrier, ...
+  Id, Name, IsBot(int), NeedMgr, WbTracker, Worker, Life, Carrier, ...
   // mutable primitives
-  Wellbeing, X, Y, Z, Workplace, District, HasHome, ...
+  Wellbeing, X, Y, Z, Workplace, District, HasHome(int), ...
   // mutable reference type (SEPARATE instance per buffer!)
-  Needs (List<CachedNeed>)
+  Needs (List<CachedNeed>)  -- CachedNeed.Favorable/Critical/Active are int 0/1
 }
 
 CachedDistrict {
