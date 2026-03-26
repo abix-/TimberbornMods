@@ -662,6 +662,13 @@ class Timberbot:
         except Exception:
             faction = "unknown"
 
+        # best tree clusters
+        try:
+            tree_clusters = jbot.tree_clusters()
+            tree_clusters = tree_clusters if isinstance(tree_clusters, list) else []
+        except Exception:
+            tree_clusters = []
+
         # preserve existing maps and tasks sections
         existing_maps = {}
         existing_tasks = []
@@ -682,6 +689,7 @@ class Timberbot:
             "dc": dc,
             "summary": summary,
             "buildings": slim,
+            "treeClusters": tree_clusters,
             "maps": existing_maps,
             "tasks": existing_tasks,
         }
