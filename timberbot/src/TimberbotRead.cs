@@ -1119,8 +1119,17 @@ namespace Timberbot
 
                     // uniform schema -- always emit all fields
                     jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
+                    jw.Prop("entrance", entrances.Contains(key) ? 1 : 0);
+                    jw.Prop("seedling", seedlings.Contains(key) ? 1 : 0);
+                    jw.Prop("dead", deadTiles.Contains(key) ? 1 : 0);
+                    int contaminated = 0;
+                    try { contaminated = _soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                    jw.Prop("contaminated", contaminated);
+                    int moist = 0;
+                    try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    jw.Prop("moist", moist);
 
-                    // occupants: z-range string for toon, array for json
+                    // occupants last for readability (variable-length string)
                     if (format == "toon")
                     {
                         string occStr = "";
@@ -1152,16 +1161,6 @@ namespace Timberbot
                         if (occList != null) foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
                         jw.CloseArr();
                     }
-
-                    jw.Prop("entrance", entrances.Contains(key) ? 1 : 0);
-                    jw.Prop("seedling", seedlings.Contains(key) ? 1 : 0);
-                    jw.Prop("dead", deadTiles.Contains(key) ? 1 : 0);
-                    int contaminated = 0;
-                    try { contaminated = _soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
-                    jw.Prop("contaminated", contaminated);
-                    int moist = 0;
-                    try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
-                    jw.Prop("moist", moist);
                     jw.CloseObj();
                 }
             }
