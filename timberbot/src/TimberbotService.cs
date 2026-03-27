@@ -29,7 +29,7 @@ namespace Timberbot
     {
         private readonly EventBus _eventBus;
         public readonly TimberbotEntityCache Cache;
-        public readonly TimberbotBuildingsV2 BuildingsV2;
+        public readonly TimberbotReadV2 ReadV2;
         public readonly TimberbotWebhook WebhookMgr;
         public readonly TimberbotRead Read;
         public readonly TimberbotWrite Write;
@@ -49,7 +49,7 @@ namespace Timberbot
         public TimberbotService(
             EventBus eventBus,
             TimberbotEntityCache cache,
-            TimberbotBuildingsV2 buildingsV2,
+            TimberbotReadV2 readV2,
             TimberbotWebhook webhookMgr,
             TimberbotRead read,
             TimberbotWrite write,
@@ -58,7 +58,7 @@ namespace Timberbot
         {
             _eventBus = eventBus;
             Cache = cache;
-            BuildingsV2 = buildingsV2;
+            ReadV2 = readV2;
             WebhookMgr = webhookMgr;
             Read = read;
             Write = write;
@@ -91,11 +91,11 @@ namespace Timberbot
             DebugTool.Service = this;         // debug needs Service reference for endpoint benchmarks
             _eventBus.Register(this);
             WebhookMgr.Register();            // subscribe to 68 game events
-            BuildingsV2.Register();           // subscribe to entity lifecycle events for v2 snapshots
+            ReadV2.Register();           // subscribe to entity lifecycle events for v2 snapshots
             Cache.Register();                 // subscribe to entity lifecycle events
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
             Cache.BuildAllIndexes();           // populate indexes from existing entities (uses CleanName)
-            BuildingsV2.BuildAll();          // populate v2 building trackers from existing entities
+            ReadV2.BuildAll();          // populate v2 building trackers from existing entities
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -138,7 +138,7 @@ namespace Timberbot
 
         public void Unload()
         {
-            BuildingsV2.Unregister();
+            ReadV2.Unregister();
             Cache.Unregister();
             WebhookMgr.Unregister();
             _eventBus.Unregister(this);
@@ -161,7 +161,7 @@ namespace Timberbot
         {
             float now = Time.realtimeSinceStartup;
             _server?.DrainRequests();
-            BuildingsV2.ProcessPendingRefresh(now);
+            ReadV2.ProcessPendingRefresh(now);
             if (now - _lastRefreshTime >= _refreshInterval)
             {
                 _lastRefreshTime = now;

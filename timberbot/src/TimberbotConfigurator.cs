@@ -20,7 +20,7 @@ namespace Timberbot
         public override void Configure()
         {
             Bind<TimberbotEntityCache>().AsSingleton();
-            Bind<TimberbotBuildingsV2>().AsSingleton();
+            Bind<TimberbotReadV2>().AsSingleton();
             Bind<TimberbotWebhook>().AsSingleton();
             Bind<TimberbotRead>().AsSingleton();
             Bind<TimberbotWrite>().AsSingleton();

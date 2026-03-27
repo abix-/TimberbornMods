@@ -308,8 +308,18 @@ namespace Timberbot
 
             if (string.IsNullOrEmpty(recipeId) || recipeId == "none")
             {
-                manufactory.SetRecipe(null);
-                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("recipe", "none").CloseObj().ToString();
+                if (manufactory.ProductionRecipes == null || manufactory.ProductionRecipes.Length <= 1)
+                    return _jw.Error("invalid_type: recipe cannot be cleared", ("id", buildingId));
+                try
+                {
+                    manufactory.SetRecipe(null);
+                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("recipe", "none").CloseObj().ToString();
+                }
+                catch (System.Exception ex)
+                {
+                    TimberbotLog.Error("write.recipe.clear", ex);
+                    return _jw.Error("operation_failed: " + ex.Message, ("id", buildingId));
+                }
             }
 
             RecipeSpec recipe = null;
@@ -322,8 +332,16 @@ namespace Timberbot
                 return _jw.Error("not_found", ("recipeId", recipeId), ("available", available));
             }
 
-            manufactory.SetRecipe(recipe);
-            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("recipe", recipe.Id).CloseObj().ToString();
+            try
+            {
+                manufactory.SetRecipe(recipe);
+                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityCache.CleanName(ec.GameObject.name)).Prop("recipe", recipe.Id).CloseObj().ToString();
+            }
+            catch (System.Exception ex)
+            {
+                TimberbotLog.Error("write.recipe.set", ex);
+                return _jw.Error("operation_failed: " + ex.Message, ("id", buildingId), ("recipeId", recipeId));
+            }
         }
 
         // prioritize planting vs default (harvest when ready)

@@ -10,6 +10,73 @@ Related background:
 - [`thread-safe-surfaces.md`](thread-safe-surfaces.md) -- what Timberborn exposes as actually thread-safe
 - [`performance.md`](performance.md) -- current benchmark baseline
 
+## Current status
+
+The v2 read path is no longer just a design spike. It is now the native implementation behind the canonical `/api/v2/*` surface.
+
+Implemented:
+
+- canonical `/api/v2/*` GET routing
+- `TimberbotReadV2` as the single v2 read service
+- generic collection, value, paging, and snapshot helpers folded into [`TimberbotReadV2.cs`](../timberbot/src/TimberbotReadV2.cs)
+- removal of the temporary top-level helper files:
+  - `TimberbotCollectionEndpoint.cs`
+  - `TimberbotCollectionQuery.cs`
+  - `TimberbotSnapshot.cs`
+  - `TimberbotValueStore.cs`
+  - `TimberbotValueEndpoint.cs`
+  - `TimberbotPagedEndpoint.cs`
+- fresh-on-request projection-backed reads for buildings, beavers, and natural-resource entity collections
+- native v2 value and derived endpoints for summary, districts, resources, population, alerts, power, wellbeing, notifications, science, distribution, time, weather, speed, workhours, tree clusters, and food clusters
+- a dedicated v2 experiment harness at [`timberbot/script/test_v2.py`](../timberbot/script/test_v2.py)
+
+Important implementation note:
+
+- `TimberbotReadV2` no longer calls `_legacyRead.*`
+- `/api/*` still exists as the parity oracle
+- `/api/v2/*` no longer depends on `TimberbotRead` internally
+
+The new harness is intentionally separate from `test_validation.py` and covers:
+
+- `smoke`
+- `parity`
+- `freshness`
+- `performance`
+- `concurrency`
+- `all`
+
+It writes three artifacts per run under `timberbot/test-results/v2/`:
+
+- full transcript `.log`
+- human-readable summary `.md`
+- machine-readable `.json`
+
+Console behavior is quiet-by-default:
+
+- passing runs print nothing
+- failing runs print only the failures and artifact paths
+
+## Current validation
+
+Current live status after build, reload, and retest:
+
+- full `/api/v2/*` smoke: `24 passed, 0 failed`
+- full `/api/*` vs `/api/v2/*` parity: `442 passed, 0 failed`
+
+Important concrete progress:
+
+- the stale legacy building-row bug was fixed
+- `GET /api/buildings` and `GET /api/v2/buildings` now match across the full supported matrix
+- `TimberbotReadV2` no longer contains any `_legacyRead.*` calls
+- the generic v2 helpers are now internal to `TimberbotReadV2`, not separate top-level classes
+
+Latest verified artifact files:
+
+- [20260327-144244-smoke.md](/C:/code/timberborn/timberbot/test-results/v2/20260327-144244-smoke.md)
+- [20260327-144247-parity.md](/C:/code/timberborn/timberbot/test-results/v2/20260327-144247-parity.md)
+
+The stale-row bug mattered because the old cache was returning ghost `CachedBuilding` entries that no longer resolved through `Cache.FindEntity(id)`. The fix was to prune stale IDs from the legacy cache during refresh so parity is against live state instead of dead cached rows.
+
 ## Goal
 
 Preserve the important property of the current design:
@@ -381,6 +448,62 @@ Compared to current `buildings full`:
 - no material latency regression in the endpoint
 - code complexity is reduced by removing published live refs and clone-driven buffer semantics from the read path
 
+## V2 Validation Requirements
+
+For every `/api/v2/*` endpoint, validation should happen in three layers.
+
+### Parity
+
+- compare v1 vs v2 JSON output
+- compare v1 vs v2 TOON output
+- compare filtered and paginated responses
+- compare `detail=basic`, `detail=full`, and `detail=id:<id>` where supported
+
+For entity endpoints:
+
+- full-list equality
+- single-id sampled equality
+- stable fingerprint logging on mismatch instead of dumping large payloads
+
+### Freshness
+
+For projection-backed endpoints:
+
+- issue a write
+- request the corresponding `/api/v2/*` endpoint immediately
+- verify the response reflects the servicing frame
+
+Required building scenarios:
+
+- pause/unpause
+- worker count change
+- floodgate change
+- placement/demolition
+- recipe change
+- clutch change
+
+### Performance
+
+Keep two benchmark layers:
+
+- broad suite: `performance`
+- focused suites per migrated entity group:
+  - `building_endpoint_perf`
+  - later `beaver_endpoint_perf`
+  - later `natural_resource_endpoint_perf`
+
+Acceptance target for a migrated entity group:
+
+- 0 failed responses in a 200-iteration focused perf run
+- average latency within 10% of legacy
+- no persistent instability across repeated focused runs
+
+### Concurrency
+
+- burst concurrent requests to the same `/api/v2/*` endpoint should share publishes correctly
+- no `refresh_timeout` should occur under normal frame progression
+- detail and basic requests arriving in the same frame should share one publish, with detail included if any waiter requires it
+
 ## Current spike results
 
 The buildings spike has been implemented and measured against the live game.
@@ -460,17 +583,267 @@ Current conclusion:
 - the spike currently looks viable
 - there was at least one transient bad run, so burst/concurrency behavior still deserves investigation before declaring the architecture finished
 
-## Follow-on order if the spike succeeds
+## Generic V2 Architecture
 
-If `buildings_v2` proves the model:
+The current implementation keeps the v2 architecture centered in `TimberbotReadV2`. The goal is not to spread v2 behavior across a growing set of top-level helper services. The goal is:
 
-1. `beavers_v2`
-2. natural resources v2
-3. rebuild higher-level endpoints from the new projections:
-   - `summary`
-   - `alerts`
-   - `power`
-   - any other endpoints still leaning on the old mirrored cache
+- keep `TimberbotRead` untouched while v2 is being proved
+- move all new work to `/api/v2/*`
+- keep one generic typed v2 read stack inside `TimberbotReadV2`
+- migrate endpoint groups onto that stack without duplicating route mechanics
+- delete the old stack only after v2 reaches full coverage and proven parity
+
+Fixed migration rules:
+
+- canonical new routes live under `/api/v2/*`
+- ad-hoc routes like `/api/buildings_v2` are transitional only
+- `TimberbotReadV2` owns the v2 implementation directly
+- generic reuse happens through internal nested helpers and typed schemas, not extra public service classes
+- old `/api/*` routes stay in place until `/api/v2/*` is complete and proven
+
+## DRY Boundary
+
+The generic boundary for v2 should be:
+
+- snapshot lifecycle and waiter coordination
+- entity tracking and structural dirtiness
+- query parsing
+- filtering and pagination
+- list response assembly
+- typed row serialization hooks
+
+The generic boundary should not be:
+
+- reflection-based schema discovery
+- auto-generated serializers
+- a giant magic endpoint framework that hides field-level behavior
+
+V2 should stay typed and explicit, but the repeated mechanics should exist only once.
+
+## Core V2 Types
+
+### `ProjectionSnapshot<TDef, TState, TDetail>`
+
+This is the generic fresh-on-request snapshot primitive used inside `TimberbotReadV2` for projection-backed entity domains.
+
+Responsibilities:
+
+- expose fresh-read waiting and published snapshot access
+- expose publish metrics
+- keep published DTO arrays for definitions, state, and detail
+
+Required typed hooks:
+
+- `GetDefinition(int index)`
+- `RefreshState(TState state, int index)`
+- `RefreshDetail(TDetail detail, int index)`
+
+Rules:
+
+- published snapshots contain only DTO data
+- no reflection in hot paths
+- no live Timberborn refs in published state
+
+### `CollectionQuery`
+
+Shared query model for all collection-style endpoints.
+
+Fields:
+
+- `Format`
+- `Detail`
+- `SingleId`
+- `Limit`
+- `Offset`
+- `FilterName`
+- `FilterX`
+- `FilterY`
+- `FilterRadius`
+- `HasFilter`
+- `Paginated`
+- `NeedsFullDetail`
+
+Required parser behavior:
+
+- `detail=id:<id>` implies full detail and disables the pagination wrapper
+- `limit=0` means unlimited and returns a flat array
+- name/radius filters apply before pagination
+- paginated responses use `{total, offset, limit, items}`
+
+### `CollectionRoute<TDef, TState, TDetail>`
+
+Generic responder for entity-list endpoints.
+
+Responsibilities:
+
+- parse `CollectionQuery`
+- request fresh or current snapshot from the store
+- compute filtered totals
+- paginate
+- serialize rows
+- return the same response shape as the legacy endpoint
+
+This shared responder should own the list mechanics once so entity endpoints do not each re-implement:
+
+- `singleId`
+- `fullDetail`
+- `hasFilter`
+- `paginated`
+- `total`
+- `skipped`
+- `emitted`
+- wrapper handling
+
+### `ICollectionSchema<TDef, TState, TDetail>`
+
+Typed serialization contract for one endpoint.
+
+Required members:
+
+- `int GetId(TDef def)`
+- `string GetName(TDef def)`
+- `int GetX(TDef def, TState state)`
+- `int GetY(TDef def, TState state)`
+- `bool IncludeRow(TDef def, TState state)`
+- `void WriteRow(TimberbotJw jw, string format, bool fullDetail, TDef def, TState state, TDetail detail)`
+
+Rules:
+
+- row writing stays explicit and typed
+- the generic layer handles collection mechanics
+- schemas handle only row content
+- per-schema scratch buffers are allowed because serialization stays on the listener thread
+
+### `ValueStore<TSnapshot>` and `ValueRoute<TSnapshot>`
+
+These are the matching native-v2 primitives for singleton or aggregate snapshots that do not need collection filtering.
+
+They are used for endpoints such as:
+
+- `settlement`
+- `time`
+- `weather`
+- `speed`
+- `workhours`
+- `science`
+- `distribution`
+- `summary`
+
+### `FlatArrayRoute<TItem>`
+
+This is the matching route shape for endpoints that paginate a flat list without entity-style name/radius/detail handling.
+
+It is used for endpoints such as:
+
+- `alerts`
+- `notifications`
+- `districts`
+- `resources`
+- `population`
+- `tree_clusters`
+- `food_clusters`
+
+## `TimberbotReadV2` Composition
+
+`TimberbotReadV2` is now the only public v2 read service.
+
+It owns:
+
+- entity tracking and publish coordination
+- generic route helpers as nested/private types
+- typed schemas for each route shape
+- endpoint methods that stay thin and map onto those shared helpers
+
+It does not:
+
+- call `_legacyRead`
+- depend on extra top-level v2 helper services
+- duplicate list parsing, paging, or response-wrapper mechanics per endpoint
+
+Current native v2 endpoint ownership inside `TimberbotReadV2`:
+
+- collection routes:
+  - `buildings`
+  - `beavers`
+  - `trees`
+  - `crops`
+  - `gatherables`
+- value routes:
+  - `settlement`
+  - `time`
+  - `weather`
+  - `speed`
+  - `workhours`
+  - `science`
+  - `distribution`
+  - `summary`
+  - `wellbeing`
+  - `power`
+- flat-array routes:
+  - `alerts`
+  - `notifications`
+  - `districts`
+  - `resources`
+  - `population`
+  - `tree_clusters`
+  - `food_clusters`
+
+## `/api/v2/*` Coverage
+
+### Native `TimberbotReadV2` endpoints
+
+These are implemented natively inside `TimberbotReadV2` and validated through the v2 harness:
+
+- `/api/v2/buildings`
+- `/api/v2/beavers`
+- `/api/v2/trees`
+- `/api/v2/crops`
+- `/api/v2/gatherables`
+- `/api/v2/summary`
+- `/api/v2/alerts`
+- `/api/v2/power`
+- `/api/v2/population`
+- `/api/v2/wellbeing`
+- `/api/v2/time`
+- `/api/v2/weather`
+- `/api/v2/speed`
+- `/api/v2/workhours`
+- `/api/v2/settlement`
+- `/api/v2/science`
+- `/api/v2/distribution`
+- `/api/v2/notifications`
+- `/api/v2/resources`
+- `/api/v2/districts`
+- `/api/v2/tree_clusters`
+- `/api/v2/food_clusters`
+
+### Direct route exceptions
+
+These remain outside `TimberbotReadV2` for now:
+
+- `/api/v2/ping`
+- `/api/v2/prefabs`
+
+## Implementation Sequence
+
+Completed implementation sequence:
+
+1. Introduced canonical `/api/v2/*` routing.
+2. Kept legacy `/api/*` routes unchanged for parity.
+3. Proved the fresh-on-request model on buildings.
+4. Folded generic collection, value, paging, and snapshot helpers into `TimberbotReadV2`.
+5. Migrated beavers and natural resources onto the same internal route patterns.
+6. Rebuilt summary, alerts, power, wellbeing, districts, resources, population, and cluster endpoints as native v2 reads.
+7. Removed `_legacyRead.*` usage from `TimberbotReadV2`.
+8. Revalidated smoke and full parity after reload.
+
+## Remaining follow-on work
+
+The remaining migration work is mostly outside the core v2 GET stack:
+
+1. decide when `/api/*` should switch to the native v2 implementations
+2. retire obsolete legacy-only code once the team is comfortable removing the old parity oracle
+3. keep expanding freshness, performance, and concurrency coverage as write-path scenarios are hardened
 
 ## Explicit non-goals for the spike
 

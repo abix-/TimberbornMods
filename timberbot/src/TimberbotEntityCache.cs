@@ -158,6 +158,8 @@ namespace Timberbot
         // all 18 component references again. Components are resolved ONCE in AddToIndexes.
         public void RefreshCachedState()
         {
+            PruneStaleEntities();
+
             // --- BUILDINGS: read mutable state from each building's cached components ---
             for (int i = 0; i < Buildings.Write.Count; i++)
             {
@@ -436,6 +438,32 @@ namespace Timberbot
             Buildings.Swap();
             NaturalResources.Swap();
             Beavers.Swap();
+        }
+
+        private void PruneStaleEntities()
+        {
+            PruneStale(Buildings, b => b.Id);
+            PruneStale(NaturalResources, n => n.Id);
+            PruneStale(Beavers, b => b.Id);
+        }
+
+        private void PruneStale<T>(TimberbotDoubleBuffer<T> buffer, Func<T, int> getId)
+        {
+            bool staleFound = false;
+            for (int i = buffer.Write.Count - 1; i >= 0; i--)
+            {
+                int id = getId(buffer.Write[i]);
+                if (_entityCache.ContainsKey(id)) continue;
+                buffer.Write.RemoveAt(i);
+                staleFound = true;
+            }
+            if (!staleFound) return;
+            for (int i = buffer.Read.Count - 1; i >= 0; i--)
+            {
+                int id = getId(buffer.Read[i]);
+                if (!_entityCache.ContainsKey(id))
+                    buffer.Read.RemoveAt(i);
+            }
         }
 
         // Called once at game load to populate all indexes from the entity registry.
