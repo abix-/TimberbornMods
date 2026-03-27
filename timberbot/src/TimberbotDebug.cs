@@ -256,6 +256,60 @@ namespace Timberbot
                 });
             }
 
+            // --- Test: Math.Round vs manual rounding allocation ---
+            // Math.Round(double, int) on Mono may box the return value. Compare GC0
+            // between Math.Round and manual integer rounding to see if it matters.
+            if (beaversWithNeeds.Count > 0)
+            {
+                // collect live need points for realistic test data
+                var needPoints = new List<float>();
+                for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                    foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds())
+                        needPoints.Add(beaversWithNeeds[bi].NeedMgr.GetNeed(ns.Id).Points);
+
+                if (needPoints.Count > 0)
+                {
+                    // warmup
+                    for (int w = 0; w < 3; w++)
+                        for (int pi = 0; pi < needPoints.Count; pi++)
+                            { var _ = (float)Math.Round(needPoints[pi], 2); }
+
+                    // Math.Round path
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    long gcBefore = GC.CollectionCount(0);
+                    for (int iter = 0; iter < n; iter++)
+                        for (int pi = 0; pi < needPoints.Count; pi++)
+                            { var _ = (float)Math.Round(needPoints[pi], 2); }
+                    sw.Stop();
+                    long gcRound = GC.CollectionCount(0) - gcBefore;
+                    double roundMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                    // manual rounding: multiply, truncate, divide (same as JW Float approach)
+                    sw.Restart();
+                    gcBefore = GC.CollectionCount(0);
+                    for (int iter = 0; iter < n; iter++)
+                        for (int pi = 0; pi < needPoints.Count; pi++)
+                            { var _ = (int)(needPoints[pi] * 100 + 0.5f) * 0.01f; }
+                    sw.Stop();
+                    long gcManual = GC.CollectionCount(0) - gcBefore;
+                    double manualMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                    results.Add(new
+                    {
+                        test = "MathRound.vs.Manual",
+                        count = needPoints.Count,
+                        iterations = n,
+                        roundMs,
+                        roundPerCallMs = roundMs / n,
+                        roundGc0 = gcRound,
+                        manualMs,
+                        manualPerCallMs = manualMs / n,
+                        manualGc0 = gcManual,
+                        speedup = roundMs > 0 ? roundMs / manualMs : 0
+                    });
+                }
+            }
+
             // --- Endpoint benchmarks: functional + performance ---
             // BenchCall is a generic benchmark wrapper for any endpoint function.
             // It warmups (3 calls), then times N iterations with GC tracking.

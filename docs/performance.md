@@ -6,14 +6,14 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 | # | Issue | Severity | Cost | Location |
 |---|---|---|---|---|
-| 1 | `Math.Round(need.Points, 2)` boxes on Mono | Medium | 2400 calls/sec, ~96KB/sec | `TimberbotEntityCache.cs:358` |
+| ~~1~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | -- | -- | **DISPROVED** -- 0 GC0 across 11.4M calls (10K iter benchmark). 1.8x slower than manual but no alloc |
 | 2 | Unity GC spikes freeze all threads | Low (unavoidable) | random 0.5-2s | Unity runtime |
 | 3 | `sb.ToString()` alloc per HTTP response | Low (unavoidable) | 1 string per request, 100-500KB | `TimberbotJw.ToString()` |
 | 4 | District refresh allocates every cycle | Low | new CachedDistrict + Dict per district per 1s | `TimberbotEntityCache.cs:377-421` |
 | 5 | Bots inflate beaver index without needing needs | Info | linear with bot count | late-game risk |
 | 6 | Power endpoint iterates all buildings per call | Info | linear with building count | late-game risk |
 
-Only #1 is actionable -- replace with TimberbotJw.Float() manual rounding. The rest are accepted or unavoidable.
+No actionable issues. All remaining items are accepted or unavoidable.
 
 ## Entity tracking
 
@@ -135,7 +135,7 @@ Every HTTP request (background thread)
 
 | What | Count/sec | Bytes/sec | Severity | Status |
 |---|---|---|---|---|
-| `Math.Round(need.Points, 2)` | 2400 | ~96KB | Medium | TODO -- replace with manual rounding |
+| `Math.Round(need.Points, 2)` | 2400 | 0 | None | **Benchmarked: 0 GC0 across 11.4M calls.** 1.8x slower than manual but no alloc on this Mono version |
 | `foreach GetNeeds()` enumerator | 80 | 0 | None | Confirmed zero-alloc (10K benchmark, 0 GC0) |
 | `GetNeed(id)` return value | 2400 | 0 | None | Confirmed zero-alloc (returns cached) |
 | `GetNeedWellbeing(id)` | 2400 | 0 | None | Confirmed zero-alloc (returns int) |
