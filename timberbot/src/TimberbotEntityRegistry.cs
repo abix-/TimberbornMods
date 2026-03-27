@@ -186,6 +186,10 @@ namespace Timberbot
             return legacyId != 0;
         }
 
+        public IReadOnlyList<string> AllGoodIds => _goodService.Goods;
+
+        public bool TreeInCuttingArea(Vector3Int coords) => _treeCuttingArea.IsInCuttingArea(coords);
+
         public int GetLegacyId(EntityComponent ec)
         {
             if (ec == null || ec.GameObject == null)

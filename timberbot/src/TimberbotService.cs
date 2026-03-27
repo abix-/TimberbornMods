@@ -2,8 +2,8 @@
 //
 // This is the main entry point for the Timberbot API mod. Timberborn's Bindito DI
 // system injects game services into the constructor. The service runs as a game
-// singleton: Load() starts the HTTP server, UpdateSingleton() refreshes cached state
-// every N seconds and drains queued POST requests on the Unity main thread.
+// singleton: Load() starts the HTTP server, UpdateSingleton() drains queued POST
+// requests on the Unity main thread and services fresh snapshot publishes.
 //
 // API logic lives in separate classes, each with their own DI:
 //   TimberbotEntityRegistry -- Entity lookup + tracked refs for writes and v2 snapshots
@@ -37,7 +37,7 @@ namespace Timberbot
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
-        private float _refreshInterval = 1.0f;   // seconds between cache refreshes (default: 1s)
+        private float _refreshInterval = 1.0f;   // retained for settings compatibility
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
         // webhook settings applied to WebhookMgr in Load()
@@ -145,21 +145,13 @@ namespace Timberbot
             TimberbotLog.Info("HTTP server stopped");
         }
 
-        private float _lastRefreshTime = 0f;
-
         // Called every frame by Unity. This is the mod's main loop.
-        // It drains POST requests, processes pending fresh-read publishes, keeps the
-        // remaining registry-backed read helpers refreshed, and flushes webhooks.
+        // It drains POST requests, processes pending fresh-read publishes, and flushes webhooks.
         public void UpdateSingleton()
         {
             float now = Time.realtimeSinceStartup;
             _server?.DrainRequests();
             ReadV2.ProcessPendingRefresh(now);
-            if (now - _lastRefreshTime >= _refreshInterval)
-            {
-                _lastRefreshTime = now;
-                Cache.RefreshCachedState();
-            }
             WebhookMgr.FlushWebhooks(now);
         }
     }

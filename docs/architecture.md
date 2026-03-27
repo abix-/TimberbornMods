@@ -21,13 +21,12 @@ Removed:
 
 Still present:
 
-- `TimberbotEntityRegistry` still keeps some older cache/index state for support code
-- `RefreshCachedState()` still runs on cadence for registry-backed data used by writes, placement, debug, and some aggregate reads
+- `TimberbotEntityRegistry` still keeps some older cache/index state for debug/benchmark support code
 
 So the important distinction is:
 
 - **the public read API is no longer served by the old read class**
-- **the registry still contains transitional cache/index responsibilities**
+- **the registry still contains transitional support/index responsibilities**
 
 ## Thread model
 
@@ -46,11 +45,7 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
   |     +-- satisfy waiting fresh reads       |     +-- Respond() sends JSON
   |     +-- publish immutable snapshots       |
   |                                           +-- POST request arrives
-  +-- Registry.RefreshCachedState() [1s]            |
-  |     |                                           +-- queue to _pending
-  |     +-- refresh registry-backed support data
-  |
-  +-- FlushWebhooks() [every frame]
+  +-- FlushWebhooks() [every frame]                 +-- queue to _pending
         |
         +-- batch _pendingEvents -> ThreadPool POST
 ```
@@ -61,7 +56,6 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 | Canonical GET endpoints | background | no |
 | POST endpoints | main thread via `DrainRequests()` | yes, for duration |
 | `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by snapshot build work |
-| `Registry.RefreshCachedState()` | main thread, cadence | yes, small ongoing cost |
 | Webhook flush scheduling | main thread | negligible |
 
 ## High-level pieces
@@ -80,7 +74,6 @@ It owns:
 - per-frame:
   - `DrainRequests()`
   - `ReadV2.ProcessPendingRefresh(now)`
-  - `Registry.RefreshCachedState()`
   - `WebhookMgr.FlushWebhooks(now)`
 
 ### `TimberbotReadV2`
@@ -113,7 +106,7 @@ It currently owns:
 - legacy numeric ID compatibility
 - GUID-backed identity mapping over Timberborn `EntityRegistry`
 - `FindEntity(...)` for writes and placement
-- registry-backed cached/indexed data still used by support paths
+- static/tracked support data still used by debug/benchmark paths
 
 Internal identity model:
 
@@ -216,7 +209,6 @@ Used for aggregate endpoints like:
 These are built from:
 
 - published snapshots
-- registry-backed cached/indexed data
 - explicit thread-safe surfaces
 - a small amount of safe direct service data where needed
 
@@ -233,12 +225,11 @@ This is different from the old always-on cache mirror:
 - old model: continuously refresh a mirrored read graph
 - current model: publish snapshots when readers need them
 
-Current compromise:
+Current state:
 
 - `ReadV2` owns the live read contract
-- `TimberbotEntityRegistry` still refreshes some support data on cadence
-
-So the architecture is already post-legacy, but not yet fully “zero background refresh everywhere.”
+- there is no cadence-driven read refresh in the main update loop
+- some debug/benchmark support code still uses registry-held tracked refs
 
 ## ID model
 

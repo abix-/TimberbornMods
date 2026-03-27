@@ -54,22 +54,22 @@ ENDPOINT_SPECS = [
         "beavers", "/api/beavers", "detail_list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, supports_detail_basic=True, supports_detail_full=True,
-        supports_detail_id=True, compare_mode="list",
+        supports_detail_id=True, projection_backed=True, compare_mode="list",
     ),
     EndpointSpec(
         "trees", "/api/trees", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
-        supports_radius_filter=True, compare_mode="list",
+        supports_radius_filter=True, projection_backed=True, compare_mode="list",
     ),
     EndpointSpec(
         "crops", "/api/crops", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
-        supports_radius_filter=True, compare_mode="list",
+        supports_radius_filter=True, projection_backed=True, compare_mode="list",
     ),
     EndpointSpec(
         "gatherables", "/api/gatherables", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
-        supports_radius_filter=True, compare_mode="list",
+        supports_radius_filter=True, projection_backed=True, compare_mode="list",
     ),
 ]
 

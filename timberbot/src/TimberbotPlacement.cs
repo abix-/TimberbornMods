@@ -94,6 +94,7 @@ namespace Timberbot
         private readonly PreviewFactory _previewFactory;
         private readonly ScienceService _scienceService;
         private readonly FactionService _factionService;
+        private readonly TimberbotReadV2 _readV2;
         private readonly TimberbotEntityRegistry _cache;
 
         public TimberbotPlacement(
@@ -110,6 +111,7 @@ namespace Timberbot
             PreviewFactory previewFactory,
             ScienceService scienceService,
             FactionService factionService,
+            TimberbotReadV2 readV2,
             TimberbotEntityRegistry cache)
         {
             _terrainService = terrainService;
@@ -125,6 +127,7 @@ namespace Timberbot
             _previewFactory = previewFactory;
             _scienceService = scienceService;
             _factionService = factionService;
+            _readV2 = readV2;
             _cache = cache;
         }
 
@@ -307,12 +310,14 @@ namespace Timberbot
             string PlatformKey(int x, int y, int z) => $"F|{x}|{y}|{z}";
             string StairKey(int x, int y, int z, int orient) => $"S|{x}|{y}|{z}|{orient}";
             bool IsBenignOccupied(PlaceBuildingResult r) => r.Error != null && r.Error.StartsWith("occupied by");
+            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
 
             var existingPathKeys = new HashSet<string>();
             var existingPlatformKeys = new HashSet<string>();
             var existingStairKeys = new HashSet<string>();
-            foreach (var cb in _cache.Buildings.Read)
+            for (int i = 0; i < buildingSnapshot.Count; i++)
             {
+                var cb = buildingSnapshot.Definitions[i];
                 if (cb.Name == null || cb.OccupiedTiles == null) continue;
                 bool isPath = cb.Name.Contains("Path");
                 bool isStairs = cb.Name.Contains("Stairs");
@@ -657,6 +662,8 @@ namespace Timberbot
             out List<SurfaceNode> nodes, out List<GraphEdge>[] adj,
             out Dictionary<long, List<int>> nodesByTile, out int connectorCount)
         {
+            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
+            var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
             var baseCost = new ushort[w * h];
             var terrainHeights = new int[w * h];
 
@@ -689,8 +696,9 @@ namespace Timberbot
             var existingPlatformSurfaces = new HashSet<long>();
             var existingStairs = new List<(int sx, int sy, int sz, int dir)>();
 
-            foreach (var cb in _cache.Buildings.Read)
+            for (int i = 0; i < buildingSnapshot.Count; i++)
             {
+                var cb = buildingSnapshot.Definitions[i];
                 if (cb.Name == null || cb.OccupiedTiles == null) continue;
                 bool isPath = cb.Name.Contains("Path");
                 bool isStairs = cb.Name.Contains("Stairs");
@@ -727,8 +735,9 @@ namespace Timberbot
                 }
             }
 
-            foreach (var nr in _cache.NaturalResources.Read)
+            for (int i = 0; i < naturalSnapshot.Count; i++)
             {
+                var nr = naturalSnapshot.States[i];
                 int lx = nr.X - minX;
                 int ly = nr.Y - minY;
                 if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
@@ -1182,26 +1191,21 @@ namespace Timberbot
             // This avoids allocating Vector3Int keys and works for maps up to 999x999x999.
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
-            foreach (var cb in _cache.Buildings.Read)
+            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
+            for (int i = 0; i < buildingSnapshot.Count; i++)
             {
-                if (cb.BlockObject == null) continue;
+                var cb = buildingSnapshot.Definitions[i];
                 // paths and stairs provide connectivity for reachability scoring
                 if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
                 {
-                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
-                    {
-                        var c = block.Coordinates;
+                    foreach (var c in cb.OccupiedTiles)
                         pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
-                    }
                 }
                 // power-conducting buildings (anything with a PowerNode component)
-                if (cb.PowerNode != null)
+                if (cb.HasPowerNode != 0)
                 {
-                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
-                    {
-                        var c = block.Coordinates;
+                    foreach (var c in cb.OccupiedTiles)
                         powerTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
-                    }
                 }
             }
 
@@ -1502,22 +1506,29 @@ namespace Timberbot
                 var bv = preview.BlockObject._blockValidator;
                 if (bv != null)
                 {
+                    var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
+                    var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
                     foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
                     {
                         if (bv.BlockConflictsWithExistingObject(block))
                         {
                             var bc = block.Coordinates;
                             string blocker = null;
-                            foreach (var cb in _cache.Buildings.Read)
+                            for (int i = 0; i < buildingSnapshot.Count; i++)
                             {
+                                var cb = buildingSnapshot.Definitions[i];
                                 if (cb.OccupiedTiles == null) continue;
                                 foreach (var t in cb.OccupiedTiles)
                                     if (t.x == bc.x && t.y == bc.y) { blocker = cb.Name; break; }
                                 if (blocker != null) break;
                             }
                             if (blocker == null)
-                                foreach (var nr in _cache.NaturalResources.Read)
-                                    if (nr.X == bc.x && nr.Y == bc.y) { blocker = nr.Name; break; }
+                                for (int i = 0; i < naturalSnapshot.Count; i++)
+                                {
+                                    var nd = naturalSnapshot.Definitions[i];
+                                    var nr = naturalSnapshot.States[i];
+                                    if (nr.X == bc.x && nr.Y == bc.y) { blocker = nd.Name; break; }
+                                }
                             return $"occupied by {blocker ?? "unknown"} at ({bc.x},{bc.y},{bc.z})";
                         }
                         if (bv.BlockConflictsWithTerrain(block))
