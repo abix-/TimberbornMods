@@ -471,7 +471,7 @@ namespace Timberbot
                     int bz = GetTerrainHeight(bx, by);
                     if (bz <= 0) continue;
                     var br = PlaceBuilding("Path", bx, by, bz, "south");
-                    if (br.Success) { pathCount++; stairTiles.Add(bkey); }
+                    if (br.Success) { pathCount++; existingPathTiles.Add(bkey); }
                     else { skipped++; failedResults.Add(br); }
                 }
             }
