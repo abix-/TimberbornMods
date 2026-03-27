@@ -1669,7 +1669,7 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 
 ## Webhooks
 
-Push notifications for game events. See [webhooks.md](webhooks.md) for the full list of 68 events.
+Push notifications for game events. See [webhooks.md](webhooks.md) for setup, configuration, the full event list (68 events), and circuit breaker behavior.
 
 ### POST /api/webhooks
 

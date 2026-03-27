@@ -198,7 +198,7 @@ Or set defaults in `settings.json` (mod folder):
 }
 ```
 
-The client reads `httpHost` and `httpPort` from settings.json when no CLI flags are given. CLI flags take precedence.
+The client reads `httpHost` and `httpPort` from settings.json when no CLI flags are given. CLI flags take precedence. See [architecture.md](architecture.md#settings) for all settings.
 
 ## Troubleshooting
 

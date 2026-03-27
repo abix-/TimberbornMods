@@ -228,11 +228,18 @@ Rule: functional tests that parse data use JSON. Tests that validate output form
 
 ## Webhooks
 
-67 event handlers registered on Timberborn's `EventBus` (65 in TimberbotWebhook, 2 in TimberbotEntityCache). Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.
+68 event handlers registered on Timberborn's `EventBus` (66 in TimberbotWebhook, 2 in TimberbotEntityCache). See [webhooks.md](webhooks.md) for the full event list, setup, and user-facing docs.
 
+**Internals:**
+
+- Events accumulate in `_pendingEvents` list on the main thread via `PushEvent()`
+- `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`
+- Each flush sends ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`
+- Static `HttpClient` with 5s timeout
 - **Batching:** Configurable via `webhookBatchMs` in settings.json (0 = immediate, default 200ms)
 - **Circuit breaker:** N consecutive failures (default 30, configurable) disables the webhook, logged via `TimberbotLog`
 - **Zero allocations with no subscribers:** `PushEvent()` early-exits if `_webhooks.Count == 0`
+- Subscribers filter by event name (null = all events)
 
 ## Settings
 

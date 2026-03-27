@@ -4,18 +4,10 @@ Push notifications for game events. Instead of polling, the mod sends HTTP POST 
 
 ## Setup
 
-1. Configure in `settings.json` (enabled by default):
-```json
-{
-  "webhooksEnabled": true,
-  "webhookBatchMs": 200,
-  "webhookCircuitBreaker": 30
-}
-```
-
-`webhookBatchMs` controls the batching window in milliseconds. Events accumulate and flush in a single POST per webhook. Default 200ms. Set to 0 for immediate dispatch (no batching).
-
-`webhookCircuitBreaker` controls how many consecutive delivery failures before a webhook is automatically disabled. Default 30.
+1. Configure in `settings.json` (see [architecture.md](architecture.md#settings) for all options):
+   - `webhooksEnabled`: enable/disable (default true)
+   - `webhookBatchMs`: batching window in ms (default 200, 0 = immediate)
+   - `webhookCircuitBreaker`: consecutive failures before auto-disable (default 30)
 
 2. Register a webhook:
 ```bash
@@ -207,12 +199,4 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 
 After 30 consecutive delivery failures (configurable via `webhookCircuitBreaker`), a webhook is automatically disabled. Check status via `GET /api/webhooks` -- disabled webhooks show `"disabled": true` and `"failures": 30`. Re-register to reset.
 
-## Architecture
-
-- Events fire on the Unity main thread via Timberborn's `EventBus`
-- `PushEvent()` serializes and appends to a pending list (no ThreadPool dispatch)
-- `FlushWebhooks()` runs every `webhookBatchMs` from `UpdateSingleton` on main thread
-- Each flush sends ONE batched POST per webhook on background `ThreadPool`
-- Static `HttpClient` with 5s timeout
-- Circuit breaker: 30 consecutive failures disables the webhook (configurable)
-- Subscribers filter by event name (null = all events)
+For webhook internals (batching, threading, circuit breaker implementation) see [architecture.md](architecture.md#webhooks).
