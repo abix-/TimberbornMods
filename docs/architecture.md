@@ -340,17 +340,19 @@ Properties:
 - waits for publish
 - best freshness guarantee
 
-### Cadence-refreshed support data
+### Registry support data
 
 Examples:
 
-- registry-backed caches/indexes still maintained by `RefreshCachedState()`
+- GUID-to-legacy-ID compatibility maps
+- webhook lifecycle hooks
+- tree-cutting and goods helper accessors
 
 Properties:
 
-- still refreshed on the main thread every `refreshIntervalSeconds`
-- used by support paths and some remaining derived computations
-- transitional, not the desired final endstate
+- event-driven, not cadence-driven
+- used for entity lookup and compatibility only
+- no published read DTO buffers live in the registry anymore
 
 ## Webhooks
 
@@ -386,8 +388,8 @@ Settings:
 
 Current meaning:
 
-- `refreshIntervalSeconds` still affects `Registry.RefreshCachedState()`
-- it is no longer the main public read freshness mechanism
+- `refreshIntervalSeconds` is retained for settings compatibility
+- it no longer affects public read freshness or any live read refresh loop
 
 ## Test posture
 
@@ -415,15 +417,15 @@ The architecture is much cleaner than before, but it is not fully finished.
 
 Still transitional:
 
-- `TimberbotEntityRegistry` still carries older cache/index responsibilities
-- `RefreshCachedState()` still runs every cadence
-- some aggregate reads still depend on registry-backed cached data rather than purely published snapshots
+- `/api/debug` and benchmark surfaces are still evolving around the new `ReadV2` vocabulary
+- some docs and historical notes still reference the removed cache architecture
+- fixture/history artifacts still describe the legacy migration path because they are preserved intentionally
 
 The likely endstate from here is:
 
-- shrink `TimberbotEntityRegistry` into a thinner lookup/identity adapter
-- move more remaining read-shaping data fully into `ReadV2`
-- further reduce or remove cadence refresh where it no longer serves writes/tooling
+- keep `TimberbotEntityRegistry` as a thin lookup/identity adapter
+- keep all published read data and debug snapshot access in `ReadV2`
+- continue hardening write-to-read freshness and concurrency validation
 
 ## File map
 

@@ -23,12 +23,11 @@ namespace Timberbot
     // format param: "toon" (default) = flat for tabular display, "json" = full nested data
     // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
     // names: CleanName() strips "(Clone)" and the detected faction suffix from all output
-    // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
+    // entity lookup: Registry resolves numeric API IDs through Timberborn entity GUIDs
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
         private readonly EventBus _eventBus;
         public readonly TimberbotEntityRegistry Registry;
-        public readonly TimberbotEntityRegistry Cache;
         public readonly TimberbotReadV2 ReadV2;
         public readonly TimberbotWebhook WebhookMgr;
         public readonly TimberbotWrite Write;
@@ -56,7 +55,6 @@ namespace Timberbot
         {
             _eventBus = eventBus;
             Registry = registry;
-            Cache = registry;
             ReadV2 = readV2;
             WebhookMgr = webhookMgr;
             Write = write;
@@ -70,7 +68,7 @@ namespace Timberbot
         // Startup sequence:
         //   1. Load settings.json from mod folder (Documents/Timberborn/Mods/Timberbot/)
         //   2. Initialize logging (fresh log file per session)
-        //   3. Wire up cross-references between subsystems (Cache<->Webhooks, Debug<->Service)
+        //   3. Wire up cross-references between subsystems (Registry<->Webhooks, Debug<->Service)
         //   4. Register EventBus listeners (entity lifecycle, weather, buildings, etc)
         //   5. Build entity indexes from existing game state (all buildings/beavers/trees)
         //   6. Start HTTP server on configured port

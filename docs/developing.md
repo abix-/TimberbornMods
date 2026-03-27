@@ -7,15 +7,14 @@ TimberbornMods/
   timberbot/
     src/                              C# mod (runs inside the game)
       TimberbotService.cs               Lifecycle, settings, orchestration (7 DI params)
-      TimberbotEntityCache.cs           Double-buffered entity caching, cached classes, indexes (5 DI params)
-      TimberbotReadV2.cs                All GET read endpoints and native snapshots
+      TimberbotEntityRegistry.cs        GUID-backed entity lookup + numeric-ID bridge (4 DI params)
+      TimberbotReadV2.cs                All GET read endpoints, tracked refs, and published snapshots
       TimberbotWrite.cs                 All POST write endpoints (22 DI params)
       TimberbotPlacement.cs             Building placement, path routing, terrain (14 DI params)
       TimberbotWebhook.cs               Batched push event notifications, circuit breaker (5 DI params)
       TimberbotDebug.cs                 Reflection inspector and benchmark (1 DI param)
       TimberbotHttpServer.cs            HttpListener, routing, request/response handling
       TimberbotJw.cs                    Fluent zero-alloc JSON writer
-      TimberbotDoubleBuffer.cs          Generic double-buffer with Add/RemoveAll/Swap
       TimberbotLog.cs                   File-based error logging, timestamped, thread-safe
       TimberbotConfigurator.cs          Bindito DI module registration
       TimberbotAutoLoad.cs              Auto-load a save at main menu via autoload.json or CLI args
@@ -57,9 +56,9 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 
 1. `TimberbotConfigurator` registers all services as singletons in the `Game` context via Bindito DI
 2. On `Load()`, `TimberbotService` starts an `HttpListener` on port 8085 in a background thread
-3. GET requests are handled directly on the background listener thread (reads from double-buffered cache)
+3. GET requests are handled directly on the background listener thread (reads from `ReadV2` published snapshots)
 4. POST requests are queued in a `ConcurrentQueue<PendingRequest>` and drained on the main thread
-5. `UpdateSingleton()` runs every frame: refreshes cache (1s cadence), drains POST queue, flushes webhooks
+5. `UpdateSingleton()` runs every frame: drains POST queue, services pending fresh publishes, flushes webhooks
 
 For full architecture details see [architecture.md](architecture.md).
 
@@ -92,7 +91,17 @@ For full architecture details see [architecture.md](architecture.md).
 
 ### Test suite
 
-`timberbot/script/test_validation.py` -- 63 tests covering all Python client methods, any save game, any faction.
+Primary live harness: `timberbot/script/test_v2.py`
+
+```bash
+python timberbot/script/test_v2.py smoke
+python timberbot/script/test_v2.py write_to_read
+python timberbot/script/test_v2.py performance -n 200
+python timberbot/script/test_v2.py concurrency
+python timberbot/script/test_v2.py all -n 200
+```
+
+Legacy broader script: `timberbot/script/test_validation.py`
 
 ```bash
 # run all tests (game must be running with mod loaded)
@@ -115,9 +124,11 @@ python timberbot/script/test_validation.py --list
 
 ### What the tests cover
 
-- **Latency**: 20 endpoints x 100 iterations each (2000 calls total). All endpoints under 50ms min
-- **Reliability**: all 2000 responses valid (no errors, no corruption)
-- **Cache consistency**: same endpoint called twice returns same count (no stale refs)
+- **Smoke**: representative coverage of the full `/api/*` read surface
+- **Write-to-read**: POST change -> first GET sees it -> restore -> first GET sees restoration
+- **Performance**: direct endpoint latency comparisons across the live snapshot path
+- **Concurrency**: simultaneous requests against projection-backed endpoints
+- **Legacy validation**: the older `test_validation.py` script is still useful for broad compatibility checks
 - **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + DoubleBuffer)
 - **Data accuracy**: `validate` endpoint compares cached vs live game state per field. `validate_all` checks all entities, all fields, 0 mismatches
 - **Burst**: 7 sequential calls < 3s total (24ms measured)

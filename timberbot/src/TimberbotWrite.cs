@@ -569,7 +569,7 @@ namespace Timberbot
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
                 if (inRange == null) return _jw.Error("invalid_type: no planting range", ("id", buildingId));
 
-                var jw = _cache.Jw.BeginObj().Prop("crop", crop).Arr("spots");
+                var jw = _jw.Reset().BeginObj().Prop("crop", crop).Arr("spots");
                 foreach (var c in inRange.GetCoordinates())
                 {
                     if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
@@ -580,7 +580,7 @@ namespace Timberbot
             }
             else
             {
-                var jw = _cache.Jw.BeginObj().Prop("crop", crop).Arr("spots");
+                var jw = _jw.Reset().BeginObj().Prop("crop", crop).Arr("spots");
                 for (int x = Mathf.Min(x1, x2); x <= Mathf.Max(x1, x2); x++)
                     for (int y = Mathf.Min(y1, y2); y <= Mathf.Max(y1, y2); y++)
                     {

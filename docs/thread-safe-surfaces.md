@@ -61,14 +61,14 @@ Confirmed read properties:
 
 ### Timberbot snapshot data
 
-These are not live Timberborn objects. They are Timberbot-owned snapshot surfaces and are safe to read off-thread within Timberbot's current design.
+These are not live Timberborn objects. They are Timberbot-owned published snapshot surfaces and are safe to read off-thread within Timberbot's current design.
 
-- `Cache.Buildings.Read`
-- `Cache.NaturalResources.Read`
-- `Cache.Beavers.Read`
-- `Cache.Districts`
-- cached primitive/string fields in the cached entity classes
-- cached immutable/shareable data such as building tile footprints
+- `ReadV2.Buildings`
+- `ReadV2.Beavers`
+- `ReadV2.NaturalResources`
+- `ReadV2.Districts`
+- published primitive/string fields inside the snapshot DTOs
+- published immutable/shareable data such as building tile footprints
 
 ## Verify first
 

@@ -214,7 +214,7 @@ namespace Timberbot
         // prevents partial JSON if reflection throws mid-iteration.
         public object CollectPrefabs()
         {
-            var jw = _cache.Jw.BeginArr();
+            var jw = Jw.Reset().BeginArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
@@ -482,7 +482,7 @@ namespace Timberbot
                 }
             }
 
-            var jw = _cache.Jw.BeginObj();
+            var jw = Jw.Reset().BeginObj();
             jw.Obj("placed").Prop("paths", pathCount);
             if (stairCount > 0) jw.Prop("stairs", stairCount);
             if (platformCount > 0) jw.Prop("platforms", platformCount);
@@ -1371,7 +1371,7 @@ namespace Timberbot
 
             int count = results.Count > 10 ? 10 : results.Count;
 
-            var jw = _cache.Jw.BeginObj()
+            var jw = Jw.Reset().BeginObj()
                 .Prop("prefab", prefabName)
                 .Prop("sizeX", size.x).Prop("sizeY", size.y)
                 .Arr("placements");

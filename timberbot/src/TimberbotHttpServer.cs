@@ -2,12 +2,12 @@
 //
 // Runs an HttpListener on a background thread (port 8085 by default).
 // Threading model:
-//   GET requests  -> served directly on the listener thread (reads cached data)
+//   GET requests  -> served directly on the listener thread from ReadV2 snapshots
 //   POST requests -> queued to ConcurrentQueue, drained on Unity main thread (max 10/frame)
 //
 // This split exists because Unity game services are single-threaded. GET endpoints
-// only read from the double-buffered cache (thread-safe), while POST endpoints
-// call game services that must run on the main thread.
+// read only published snapshots or explicit thread-safe game services, while POST
+// endpoints call live game services on the main thread.
 //
 // All responses are JSON. The server serializes whatever object TimberbotService
 // returns using Newtonsoft.Json. TOON format is handled by TimberbotService returning

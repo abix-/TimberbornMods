@@ -252,6 +252,14 @@ namespace Timberbot
         internal ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState>.Snapshot CurrentBeaverSnapshot => _beaverSnapshot.Current;
         internal ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot CurrentNaturalResourceSnapshot => _naturalResourceSnapshot.Current;
         internal DistrictSnapshot[] CurrentDistrictSnapshot => _districtStore.Current;
+        internal ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Snapshot Buildings => _snapshot.Current;
+        internal ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState>.Snapshot Beavers => _beaverSnapshot.Current;
+        internal ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot NaturalResources => _naturalResourceSnapshot.Current;
+        internal DistrictSnapshot[] Districts => _districtStore.Current;
+        internal IReadOnlyList<TrackedBuildingRef> TrackedBuildings => _tracked;
+        internal IReadOnlyList<TrackedBeaverRef> TrackedBeavers => _trackedBeavers;
+        internal IReadOnlyList<TrackedNaturalResourceRef> TrackedNaturalResources => _trackedNaturalResources;
+        internal DistrictCenterRegistry DebugDistrictRegistry => _districtCenterRegistry;
 
         public void Register() => _eventBus.Register(this);
         public void Unregister() => _eventBus.Unregister(this);
