@@ -573,7 +573,7 @@ class Timberbot:
                     row += f"{DIM}?{R}"
                     continue
                 occ = t.get("occupants")
-                occupant = occ[0]["name"] if occ else None
+                occupant = max(occ, key=lambda o: o["z"])["name"] if occ else None
                 entrance = t.get("entrance", False)
                 bg = co = ch = None
                 if entrance and not occupant:
