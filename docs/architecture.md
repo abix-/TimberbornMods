@@ -12,18 +12,34 @@ UpdateSingleton() [every frame]        ListenLoop() [blocking accept]
   +-- RefreshCachedState() [1s cadence]  +-- GET request arrives
   |     |                                |     |
   |     +-- update _*Write buffers       |     +-- RouteRequest() reads _*Read
-  |     +-- swap refs (atomic)           |     +-- TimberbotJw serialization
-  |     |   _*Read <-> _*Write           |     +-- Respond() sends JSON
-  |     |                                |
-  +-- DrainRequests() [POST only]        +-- POST request arrives
-  |     |                                      |
-  |     +-- RouteRequest() mutates game        +-- queue to _pending
-  |     +-- Respond() sends JSON               |
-  |                                            (main thread processes next frame)
+  |     +-- refresh districts in place   |     +-- TimberbotJw serialization
+  |     +-- swap refs (atomic)           |     +-- Respond() sends JSON
+  |     |   _*Read <-> _*Write           |
+  |     |                                +-- POST request arrives
+  +-- RefreshMainThreadData() [1s]             |
+  |     |                                      +-- queue to _pending
+  |     +-- pre-build science JSON             |
+  |     +-- pre-build distribution JSON        (main thread processes next frame)
+  |     |
+  +-- DrainRequests() [POST only]
+  |     |
+  |     +-- RouteRequest() mutates game
+  |     +-- Respond() sends JSON
+  |
   +-- FlushWebhooks() [every frame]
         |
         +-- batch _pendingEvents -> ThreadPool POST
 ```
+
+| Location | Thread | Blocks game? |
+|---|---|---|
+| HTTP listener (accept + queue) | background | no |
+| All GET requests (reads) | background (listener thread) | **no** |
+| All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
+| JSON serialization (`Respond`) | same thread as request | no for GETs |
+| `RefreshCachedState` | main thread, 1s cadence | <1ms for 3500 entities |
+| `RefreshMainThreadData` | main thread, 1s cadence | <1ms (science + distribution) |
+| Double buffer swap | main thread, after refresh | ~0ms (pending changes + ref swap) |
 
 ## Double buffer
 
@@ -143,6 +159,30 @@ return jw.ToString();
 ```
 
 Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConvert.SerializeObject(data)`.
+
+## Reusable collections (TimberbotRead)
+
+GET endpoints run on the background thread. To avoid per-call heap allocations, TimberbotRead holds field-level collections that are allocated once and cleared per call:
+
+| Field | Used by | Replaces |
+|---|---|---|
+| `_treeSpecies`, `_cropSpecies` | CollectSummary | per-call Dicts |
+| `_roleCounts`, `_districtStats`, `_districtDCs` | CollectSummary | per-call Dicts |
+| `_needToGroup`, `_groupMaxPerBeaver`, `_wbGroupTotals`, `_districtWb` | CollectSummary | per-call Dicts |
+| `_resourceTotals` | CollectSummary | per-call Dict |
+| `_invSb`, `_recSb` | CollectBuildings full toon | per-building StringBuilders |
+| `_clusterCells`, `_clusterSpecies`, `_clusterSorted` | TreeClusters, FoodClusters, WriteClustersFiltered | per-call Dicts + List |
+| `_tileOccupants`, `_tileEntrances`, `_tileSeedlings`, `_tileDeadTiles`, `_tileSb` | CollectTiles | per-call Dict + HashSets + SB |
+| `_cropNames`, `_roleMap` | CollectSummary | static, never reallocated |
+
+## Main-thread cached endpoints
+
+Some endpoints require Unity API calls (`GetSpec`, `GetComponent`) that are unsafe on the background HTTP thread. These are pre-built as JSON strings on the main thread in `RefreshMainThreadData()`, called every 1s alongside `RefreshCachedState`. The background thread returns the cached string directly.
+
+| Endpoint | Why cached | What runs on main thread |
+|---|---|---|
+| `CollectScience` | `BuildingService.Buildings` + `GetSpec<BuildingSpec>()` | Iterates all buildings, reads spec + unlock status |
+| `CollectDistribution` | `GetComponent<DistrictDistributionSetting>()` | Iterates districts, reads import/export settings |
 
 ## Data formats
 

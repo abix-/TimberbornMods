@@ -19,70 +19,7 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 All remaining issues are low severity. Benchmark with `/api/benchmark` to measure impact.
 
-## Architecture
-
-### Thread model
-
-| Location | Thread | Blocks game? |
-|---|---|---|
-| HTTP listener (accept + queue) | background | no |
-| All GET requests (reads) | background (listener thread) | **no** |
-| All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
-| JSON serialization (`Respond`) | same thread as request | no for GETs |
-| `RefreshCachedState` (snapshot mutable values) | main thread, cadenced (default 1s) | <1ms for 3500 entities |
-| `RefreshMainThreadData` (science, distribution) | main thread, cadenced (default 1s) | <1ms |
-| Double buffer swap | main thread, after refresh | ~0ms (applies pending adds/removes, then ref swap) |
-
-All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
-
-### Entity tracking
-
-Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame allocation, zero `GetComponent` calls per request, zero main-thread cost for reads.
-
-- **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
-- **Cached classes:** `CachedBuilding` (20 component refs + ~48 cached fields), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + ~22 cached fields). Modified in-place, `Clone()` for double-buffer. Refreshed at 1Hz (configurable via settings.json).
-- **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
-- **Static values at add-time:** EffectRadius, IsGenerator, IsConsumer, NominalPowerInput, NominalPowerOutput, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight, X, Y, Z, Orientation, HasEntrance, EntranceX, EntranceY, OccupiedTiles, Id, Name -- all set once in entity-add handler, never re-read.
-
-| Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
-|---|---|---|---|---|
-| `Buildings` | `TimberbotDoubleBuffer<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove |
-| `NaturalResources` | `TimberbotDoubleBuffer<CachedNaturalResource>` | same | **zero** | entity add/remove |
-| `Beavers` | `TimberbotDoubleBuffer<CachedBeaver>` | same | **zero** | entity add/remove |
-| `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove |
-
-### Cached component refs
-
-| Class | Fields cached | GetComponent calls saved per item |
-|---|---|---|
-| `CachedBuilding` | Entity, BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect, DistrictBuilding | **20** |
-| `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
-| `CachedBeaver` | Go, NeedMgr, WbTracker, Worker, Life, Carrier, Deteriorable, Contaminable, Dweller, Citizen | **10** |
-
-### Serialization
-
-All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300K-char pre-allocated instance (~600KB in .NET UTF-16), `Reset()` per request. Serial on listener thread, never concurrent.
-
-**A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner).
-
-### Reusable collections (TimberbotRead)
-
-Field-level collections allocated once, cleared per call:
-
-| Field | Used by | Replaces |
-|---|---|---|
-| `_treeSpecies`, `_cropSpecies` | CollectSummary | per-call Dicts |
-| `_roleCounts`, `_districtStats`, `_districtDCs` | CollectSummary | per-call Dicts |
-| `_needToGroup`, `_groupMaxPerBeaver`, `_wbGroupTotals`, `_districtWb` | CollectSummary | per-call Dicts |
-| `_resourceTotals` | CollectSummary | per-call Dict |
-| `_invSb`, `_recSb` | CollectBuildings full toon | per-building StringBuilders |
-| `_clusterCells`, `_clusterSpecies`, `_clusterSorted` | TreeClusters, FoodClusters, WriteClustersFiltered | per-call Dicts + List |
-| `_tileOccupants`, `_tileEntrances`, `_tileSeedlings`, `_tileDeadTiles`, `_tileSb` | CollectTiles | per-call Dict + HashSets + SB |
-| `_cropNames`, `_roleMap` | CollectSummary | static, never reallocated |
-
-### Main-thread cached endpoints
-
-CollectScience and CollectDistribution require Unity API calls (`GetSpec`, `GetComponent`) that are unsafe on the background HTTP thread. These are pre-built as JSON strings on the main thread in `RefreshMainThreadData()` (called every 1s alongside `RefreshCachedState`). Background thread returns the cached string directly.
+For thread model, double buffer, cached classes, serialization, and reusable collections see [architecture.md](architecture.md).
 
 ## GC pressure
 
@@ -161,6 +98,10 @@ With subscribers: `TimberbotJw` payload string (1 per event), field-level `_webh
 `new CachedBuilding/Beaver/NaturalResource` + `Clone()` + `CleanName()` + OccupiedTiles list. Once per entity lifetime. Webhook events only with subscribers.
 
 ## Benchmarks
+
+### Serialization A/B test (trees, 2985 items)
+
+Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner).
 
 ### Micro-benchmarks (10K iterations, /api/benchmark)
 
