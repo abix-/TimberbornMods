@@ -25,6 +25,7 @@ As a library:
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import requests
@@ -403,7 +404,7 @@ class Timberbot:
         return self._post("/api/stockpile/good", {"id": building_id, "good": good})
 
     def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0):
-        """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N sections then stop."""
+        """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N stair crossings then stop."""
         body = {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "style": style}
         if sections: body["sections"] = sections
         return self._post("/api/path/place", body)
@@ -1261,6 +1262,14 @@ def _launch(args):
     autoload = {"settlement": settlement, "save": save_name}
     with open(os.path.join(mod_dir, "autoload.json"), "w") as f:
         json.dump(autoload, f)
+
+    # kill existing Timberborn process if running
+    try:
+        subprocess.run(["taskkill", "/f", "/im", "Timberborn.exe"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(2)  # wait for process to fully exit
+    except Exception:
+        pass
 
     # launch via Steam protocol (no CLI args = no Steam dialog)
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")

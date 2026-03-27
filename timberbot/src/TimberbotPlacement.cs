@@ -267,9 +267,12 @@ namespace Timberbot
             return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
-        // Route a path from (x1,y1) to (x2,y2) using A* to avoid obstacles.
-        // Falls back to straight-line when A* finds no route (fully blocked).
-        // Three-pass: 1) A* finds 2D waypoints, 2) plan elevation (stairs/platforms), 3) place.
+        // Route a path from (x1,y1) to (x2,y2) using A* with integrated stair placement.
+        // BuildCostGrid pre-computes valid stair positions at z-change edges and makes them
+        // traversable (cost=20). A* finds the optimal route in one pass, crossing elevations
+        // through pre-validated stair edges. Walking the result: flat tiles get paths, z-change
+        // edges place stairs from the pre-computed lookup. Stair orientation is determined by
+        // which edge was crossed -- no post-hoc guessing.
         public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0)
         {
             string stairsPrefab = "Stairs" + _factionSuffix;
@@ -295,7 +298,9 @@ namespace Timberbot
             int gw = maxX - minX + 1;
             int gh = maxY - minY + 1;
 
-            var costGrid = BuildCostGrid(minX, minY, gw, gh);
+            Dictionary<long, StairEdge> stairEdges;
+            int[] gridHeights;
+            var costGrid = BuildCostGrid(minX, minY, gw, gh, out stairEdges, out gridHeights);
             if (style != "direct" && style != "straight") style = "direct";
 
             var existingPathTiles = new HashSet<long>();
@@ -307,235 +312,121 @@ namespace Timberbot
                     existingPathTiles.Add((long)t.x * 100000 + t.y);
             }
 
-            System.Func<int, int, bool> isBlocked = (tx, ty) =>
-            {
-                int lx = tx - minX, ly = ty - minY;
-                if (lx < 0 || lx >= gw || ly < 0 || ly >= gh) return true;
-                int bi = (ly * gw + lx) * 4;
-                return costGrid[bi] >= 255 && costGrid[bi + 1] >= 255
-                    && costGrid[bi + 2] >= 255 && costGrid[bi + 3] >= 255;
-            };
-
-            // mark a tile as impassable in the edge-based cost grid
-            System.Action<int, int> markImpassable = (tx, ty) =>
-            {
-                int lx = tx - minX, ly = ty - minY;
-                if (lx >= 0 && lx < gw && ly >= 0 && ly < gh)
-                {
-                    int si = (ly * gw + lx) * 4;
-                    costGrid[si] = costGrid[si + 1] = costGrid[si + 2] = costGrid[si + 3] = 255;
-                }
-            };
-
-            var placedTiles = new HashSet<long>(); // all tiles we've placed on (stairs + paths)
+            var placedTiles = new HashSet<long>();
             var errors = new List<string>();
             int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
             var failedResults = new List<PlaceBuildingResult>();
-            var sectionLog = new List<(string type, int fromX, int fromY, int toX, int toY, int paths, int stairs)>();
-            int maxSections = 50; // safety limit
 
-            // --- SECTIONAL LOOP ---
-            int curX = x1, curY = y1;
+            // --- SINGLE A* PASS ---
+            // A* now routes through z-change edges where valid stairs exist (cost=20).
+            // Walk the resulting path: place paths on flat tiles, place stairs on z-change edges.
+            var waypoints = AStarPath(costGrid, gw, gh,
+                x1 - minX, y1 - minY, x2 - minX, y2 - minY, gw * gh * 4, style);
 
-            for (int section = 0; section < maxSections; section++)
+            int stairCrossings = 0;
+            int stoppedX = x2, stoppedY = y2;
+            bool stopped = false;
+
+            if (waypoints == null)
             {
-                // A* from current position to destination
-                var waypoints = AStarPath(costGrid, gw, gh,
-                    curX - minX, curY - minY, x2 - minX, y2 - minY, gw * gh, style);
-
-                if (waypoints == null)
+                errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {stairEdges.Count} stair edges in grid");
+            }
+            else
+            {
+                for (int wi = 0; wi < waypoints.Count; wi++)
                 {
-                    errors.Add($"section {section}: A* found no route from ({curX},{curY}) to ({x2},{y2})");
-                    break;
-                }
+                    int lx = waypoints[wi].Item1, ly = waypoints[wi].Item2;
+                    int px = lx + minX, py = ly + minY;
+                    int idx = ly * gw + lx;
+                    int pz = gridHeights[idx];
+                    if (pz <= 0) continue;
 
-                // walk waypoints looking for z-change
-                int prevZ = GetTerrainHeight(curX, curY);
-                int zChangeWi = -1;
-                for (int wi = 1; wi < waypoints.Count; wi++)
-                {
-                    int wx = waypoints[wi].Item1 + minX;
-                    int wy = waypoints[wi].Item2 + minY;
-                    int wz = GetTerrainHeight(wx, wy);
-                    if (wz <= 0) continue;
-                    if (wz != prevZ) { zChangeWi = wi; break; }
-                    prevZ = wz;
-                }
-
-                if (zChangeWi < 0)
-                {
-                    // no z-change -- place paths along entire route to destination
-                    int secPaths = 0;
-                    foreach (var (lwx, lwy) in waypoints)
+                    // check if this step crosses a z-change (stair edge)
+                    if (wi > 0)
                     {
-                        int px = lwx + minX, py = lwy + minY;
-                        int pz = GetTerrainHeight(px, py);
-                        if (pz <= 0) continue;
-                        long key = (long)px * 100000 + py;
-                        if (placedTiles.Contains(key) || existingPathTiles.Contains(key)) continue;
-                        var r = PlaceBuilding("Path", px, py, pz, "south");
-                        if (r.Success) { pathCount++; secPaths++; placedTiles.Add(key); markImpassable(px, py); }
-                        else { skipped++; failedResults.Add(r); }
-                    }
-                    sectionLog.Add(("flat", curX, curY, x2, y2, secPaths, 0));
-                    break; // done
-                }
-
-                // z-change found -- compute stair
-                int cx = waypoints[zChangeWi].Item1 + minX;
-                int cy = waypoints[zChangeWi].Item2 + minY;
-                int tz = GetTerrainHeight(cx, cy);
-                int pzBefore = GetTerrainHeight(waypoints[zChangeWi - 1].Item1 + minX, waypoints[zChangeWi - 1].Item2 + minY);
-                int zDiff = tz - pzBefore;
-                int levels = System.Math.Abs(zDiff);
-                bool goingUp = zDiff > 0;
-                int baseZ = System.Math.Min(pzBefore, tz);
-
-                if (!stairsUnlocked)
-                {
-                    errors.Add($"section {section}: stairs not unlocked at ({cx},{cy})");
-                    break;
-                }
-                if (levels > 1 && !platformUnlocked)
-                {
-                    errors.Add($"section {section}: platforms not unlocked for {levels}-level at ({cx},{cy})");
-                    break;
-                }
-
-                // travel direction: dominant cardinal axis from z-change toward destination
-                // ensures entrance faces back toward curPos, exit faces toward destination
-                int dirX = x2 - (waypoints[zChangeWi].Item1 + minX);
-                int dirY = y2 - (waypoints[zChangeWi].Item2 + minY);
-                int tdx, tdy;
-                if (System.Math.Abs(dirX) >= System.Math.Abs(dirY))
-                    { tdx = dirX > 0 ? 1 : -1; tdy = 0; }
-                else
-                    { tdx = 0; tdy = dirY > 0 ? 1 : -1; }
-                // stair orientation: faces uphill
-                int updx = goingUp ? tdx : -tdx;
-                int updy = goingUp ? tdy : -tdy;
-                int orientIdx = updx > 0 ? 3 : updx < 0 ? 1 : updy > 0 ? 2 : 0;
-
-                // compute ramp tiles
-                var rampTiles = new List<(int x, int y, int bz, int plats)>();
-                int entX, entY, extX, extY;
-
-                if (levels == 1)
-                {
-                    int stairX = goingUp ? cx - tdx : cx;
-                    int stairY = goingUp ? cy - tdy : cy;
-                    entX = stairX - tdx;
-                    entY = stairY - tdy;
-                    extX = stairX + tdx;
-                    extY = stairY + tdy;
-                    rampTiles.Add((stairX, stairY, baseZ, 0));
-                }
-                else
-                {
-                    int firstX = cx - tdx * levels;
-                    int firstY = cy - tdy * levels;
-                    for (int step = 0; step < levels; step++)
-                        rampTiles.Add((firstX + tdx * step, firstY + tdy * step, baseZ, step));
-                    entX = firstX - tdx;
-                    entY = firstY - tdy;
-                    int lastX = firstX + tdx * (levels - 1);
-                    int lastY = firstY + tdy * (levels - 1);
-                    extX = lastX + tdx;
-                    extY = lastY + tdy;
-                }
-
-                // check obstructions
-                bool blocked = isBlocked(entX, entY) || isBlocked(extX, extY);
-                foreach (var rt in rampTiles)
-                    if (!blocked && isBlocked(rt.x, rt.y)) blocked = true;
-                if (blocked)
-                {
-                    errors.Add($"section {section}: stair obstructed at ({cx},{cy})");
-                    break;
-                }
-
-                // place stair
-                int secStairs = 0;
-                foreach (var (rtx, rty, rtBaseZ, platCount) in rampTiles)
-                {
-                    long key = (long)rtx * 100000 + rty;
-                    if (existingPathTiles.Contains(key)) continue;
-                    for (int p = 0; p < platCount; p++)
-                    {
-                        var r = PlaceBuilding(platformPrefab, rtx, rty, rtBaseZ + p, "south");
-                        if (r.Success) platformCount++; else { skipped++; failedResults.Add(r); }
-                    }
-                    var rs = PlaceBuilding(stairsPrefab, rtx, rty, rtBaseZ + platCount, OrientNames[orientIdx]);
-                    if (rs.Success) { stairCount++; secStairs++; } else { skipped++; failedResults.Add(rs); }
-                    placedTiles.Add(key);
-                    markImpassable(rtx, rty);
-                }
-
-                // place entrance/exit paths
-                foreach (var (bx, by) in new[] { (entX, entY), (extX, extY) })
-                {
-                    long bkey = (long)bx * 100000 + by;
-                    if (placedTiles.Contains(bkey) || existingPathTiles.Contains(bkey)) continue;
-                    int bz = GetTerrainHeight(bx, by);
-                    if (bz <= 0) continue;
-                    var br = PlaceBuilding("Path", bx, by, bz, "south");
-                    if (br.Success) { pathCount++; placedTiles.Add(bkey); existingPathTiles.Add(bkey); }
-                    else { skipped++; failedResults.Add(br); }
-                }
-
-                // A* from curX,curY to stair entrance, place paths
-                int secPaths2 = 0;
-                if (curX != entX || curY != entY)
-                {
-                    var entWaypoints = AStarPath(costGrid, gw, gh,
-                        curX - minX, curY - minY, entX - minX, entY - minY, gw * gh, style);
-                    if (entWaypoints != null)
-                    {
-                        foreach (var (lwx, lwy) in entWaypoints)
+                        int plx = waypoints[wi - 1].Item1, ply = waypoints[wi - 1].Item2;
+                        int prevIdx = ply * gw + plx;
+                        if (gridHeights[idx] != gridHeights[prevIdx])
                         {
-                            int px = lwx + minX, py = lwy + minY;
-                            int pz = GetTerrainHeight(px, py);
-                            if (pz <= 0) continue;
-                            long key = (long)px * 100000 + py;
-                            if (placedTiles.Contains(key) || existingPathTiles.Contains(key)) continue;
-                            var r = PlaceBuilding("Path", px, py, pz, "south");
-                            if (r.Success) { pathCount++; secPaths2++; placedTiles.Add(key); markImpassable(px, py); }
-                            else { skipped++; failedResults.Add(r); }
+                            // z-change: look up pre-computed stair placement
+                            long edgeKey = (long)prevIdx * 100000 + idx;
+                            StairEdge se;
+                            if (stairEdges.TryGetValue(edgeKey, out se))
+                            {
+                                if (!stairsUnlocked)
+                                {
+                                    errors.Add($"stairs not unlocked at ({px},{py})");
+                                    stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break;
+                                }
+
+                                // place the stair building on the lower tile
+                                long skey = (long)se.StairX * 100000 + se.StairY;
+                                if (!existingPathTiles.Contains(skey) && !placedTiles.Contains(skey))
+                                {
+                                    var rs = PlaceBuilding(stairsPrefab, se.StairX, se.StairY, se.BaseZ, OrientNames[se.OrientIdx]);
+                                    if (rs.Success) { stairCount++; placedTiles.Add(skey); }
+                                    else { skipped++; failedResults.Add(rs); errors.Add($"stair failed at ({se.StairX},{se.StairY})"); stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break; }
+                                }
+
+                                // place entrance path (one tile before stair)
+                                long ekey = (long)se.EntX * 100000 + se.EntY;
+                                if (!existingPathTiles.Contains(ekey) && !placedTiles.Contains(ekey))
+                                {
+                                    int ez = GetTerrainHeight(se.EntX, se.EntY);
+                                    if (ez > 0)
+                                    {
+                                        var er = PlaceBuilding("Path", se.EntX, se.EntY, ez, "south");
+                                        if (er.Success) { pathCount++; placedTiles.Add(ekey); }
+                                        else { skipped++; failedResults.Add(er); }
+                                    }
+                                }
+
+                                // place exit path (one tile after stair, on higher terrain)
+                                long xkey = (long)se.ExtX * 100000 + se.ExtY;
+                                if (!existingPathTiles.Contains(xkey) && !placedTiles.Contains(xkey))
+                                {
+                                    int xz = GetTerrainHeight(se.ExtX, se.ExtY);
+                                    if (xz > 0)
+                                    {
+                                        var xr = PlaceBuilding("Path", se.ExtX, se.ExtY, xz, "south");
+                                        if (xr.Success) { pathCount++; placedTiles.Add(xkey); }
+                                        else { skipped++; failedResults.Add(xr); }
+                                    }
+                                }
+
+                                stairCrossings++;
+                                // sections limit: stop after N stair crossings
+                                if (sections > 0 && stairCrossings >= sections)
+                                {
+                                    stoppedX = se.ExtX; stoppedY = se.ExtY; stopped = true; break;
+                                }
+                                continue; // skip placing a regular path on the z-change tile
+                            }
+                            else
+                            {
+                                errors.Add($"no stair edge from ({plx + minX},{ply + minY}) to ({px},{py})");
+                                stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break;
+                            }
                         }
                     }
-                    else
-                    {
-                        errors.Add($"section {section}: no route from ({curX},{curY}) to stair entrance ({entX},{entY})");
-                    }
+
+                    // flat tile: place path
+                    long key = (long)px * 100000 + py;
+                    if (placedTiles.Contains(key) || existingPathTiles.Contains(key)) continue;
+                    var r = PlaceBuilding("Path", px, py, pz, "south");
+                    if (r.Success) { pathCount++; placedTiles.Add(key); }
+                    else { skipped++; failedResults.Add(r); }
                 }
-
-                sectionLog.Add(("stair", curX, curY, extX, extY, secPaths2, secStairs));
-
-                // sections limit: stop after N sections
-                if (sections > 0 && section + 1 >= sections) { curX = extX; curY = extY; break; }
-
-                // advance to stair exit
-                curX = extX;
-                curY = extY;
             }
 
             // serialize
             var jw = _cache.Jw.BeginObj();
-            if (sections > 0) jw.Prop("sections", sections);
             jw.Obj("placed").Prop("paths", pathCount);
             if (stairCount > 0) jw.Prop("stairs", stairCount);
             if (platformCount > 0) jw.Prop("platforms", platformCount);
             jw.CloseObj().Prop("skipped", skipped);
-
-            // debug: sections
-            jw.Arr("sections");
-            foreach (var s in sectionLog)
-                jw.OpenObj().Prop("type", s.type).Prop("from", $"{s.fromX},{s.fromY}")
-                    .Prop("to", $"{s.toX},{s.toY}").Prop("paths", s.paths).Prop("stairs", s.stairs).CloseObj();
-            jw.CloseArr();
-
-            if (curX != x2 || curY != y2)
-                jw.Prop("stoppedAt", $"{curX},{curY}");
+            jw.Prop("stairEdgesInGrid", stairEdges.Count);
+            if (stopped) jw.Prop("stoppedAt", $"{stoppedX},{stoppedY}");
 
             if (failedResults.Count > 0 || errors.Count > 0)
             {
@@ -550,16 +441,28 @@ namespace Timberbot
             return jw.ToString();
         }
 
+        // Stair placement info pre-computed during grid building.
+        // Key: (fromIdx, toIdx) where fromIdx is the lower tile and toIdx is the higher tile.
+        // The stair occupies the lower tile, entrance is one tile further back, exit is the higher tile.
+        private struct StairEdge
+        {
+            public int StairX, StairY, BaseZ, Levels;
+            public int EntX, EntY, ExtX, ExtY;
+            public int OrientIdx;
+        }
+
         // Build an edge-based cost grid for A* over the region (minX,minY) with dimensions (w,h).
         // Layout: ushort[w * h * 4] -- 4 directional entry costs per tile.
         // Direction indices match ddx/ddy: 0=from west(+X), 1=from east(-X), 2=from south(+Y), 3=from north(-Y).
         // Base costs: 0=existing path, 2=open ground, 8=shallow water, 50=deep water, 255=impassable.
-        // Z-change penalty: +30 per z-level difference on that edge. Caps at 254.
-        private ushort[] BuildCostGrid(int minX, int minY, int w, int h)
+        // Z-change edges with valid stair placements get cost=20 (traversable).
+        // stairEdges: output lookup of pre-validated stair placements keyed by (fromIdx, toIdx).
+        private ushort[] BuildCostGrid(int minX, int minY, int w, int h,
+            out Dictionary<long, StairEdge> stairEdges, out int[] heights)
         {
             // first pass: compute base tile costs and terrain heights
             var baseCost = new ushort[w * h];
-            var heights = new int[w * h];
+            heights = new int[w * h];
 
             for (int ly = 0; ly < h; ly++)
             {
@@ -618,11 +521,15 @@ namespace Timberbot
                 baseCost[ly * w + lx] = 255;
             }
 
-            // second pass: build edge-based grid with z-change penalties
+            // second pass: build edge-based grid with z-change handling
             // directions: 0=from west(+X), 1=from east(-X), 2=from south(+Y), 3=from north(-Y)
-            int[] ndx = { -1, 1, 0, 0 };  // neighbor offset for each entry direction
+            // movement deltas for each direction d: ddx[d], ddy[d]
+            // ndx/ndy: neighbor offset for each entry direction d.
+            // d=0: neighbor at -X (west), entry "from west". d=1: +X (east). d=2: -Y (south). d=3: +Y (north).
+            int[] ndx = { -1, 1, 0, 0 };
             int[] ndy = { 0, 0, -1, 1 };
             var grid = new ushort[w * h * 4];
+            stairEdges = new Dictionary<long, StairEdge>();
 
             for (int ly = 0; ly < h; ly++)
             {
@@ -647,10 +554,71 @@ namespace Timberbot
                             continue;
                         }
                         int nIdx = nly * w + nlx;
-                        if (heights[idx] != heights[nIdx])
-                            grid[idx4 + d] = 255; // z-change = impassable, handled by stair logic
-                        else
+                        if (heights[idx] == heights[nIdx])
+                        {
                             grid[idx4 + d] = bc;
+                            continue;
+                        }
+
+                        // z-change edge: check if a single-level stair can be placed here
+                        int zDiff = heights[nIdx] - heights[idx];
+                        if (System.Math.Abs(zDiff) == 1)
+                        {
+                            // travel direction: from neighbor into this tile (opposite of ndx/ndy)
+                            int tdx = -ndx[d], tdy = -ndy[d];
+                            // travel direction: from neighbor (nIdx) into this tile (idx)
+                            // goingUp: this tile (idx) is higher than neighbor
+                            bool goingUp = heights[idx] > heights[nIdx];
+                            // stair goes on the lower tile
+                            int lowerLx = goingUp ? nlx : lx;
+                            int lowerLy = goingUp ? nly : ly;
+                            int baseZ = System.Math.Min(heights[idx], heights[nIdx]);
+
+                            // stair tile = lower tile, entrance = one tile back from lower in travel dir
+                            int stairLx = lowerLx, stairLy = lowerLy;
+                            int entLx = stairLx - tdx, entLy = stairLy - tdy;
+
+                            // check entrance tile is in bounds and unobstructed
+                            bool entValid = entLx >= 0 && entLx < w && entLy >= 0 && entLy < h
+                                && baseCost[entLy * w + entLx] < 255
+                                && heights[entLy * w + entLx] == baseZ;
+
+                            // check stair tile is unobstructed
+                            bool stairValid = baseCost[stairLy * w + stairLx] < 255;
+
+                            if (entValid && stairValid)
+                            {
+                                // make this edge traversable with stair cost
+                                grid[idx4 + d] = 20;
+
+                                // uphill direction for orientation
+                                int updx = goingUp ? tdx : -tdx;
+                                int updy = goingUp ? tdy : -tdy;
+                                int orientIdx = updx > 0 ? 3 : updx < 0 ? 1 : updy > 0 ? 2 : 0;
+
+                                // key: (from, to) = (nIdx, idx) since A* steps from neighbor into this tile
+                                long edgeKey = (long)nIdx * 100000 + idx;
+                                if (!stairEdges.ContainsKey(edgeKey))
+                                {
+                                    stairEdges[edgeKey] = new StairEdge
+                                    {
+                                        StairX = stairLx + minX, StairY = stairLy + minY,
+                                        BaseZ = baseZ, Levels = 1,
+                                        EntX = entLx + minX, EntY = entLy + minY,
+                                        ExtX = (goingUp ? nlx : lx) + minX, ExtY = (goingUp ? nly : ly) + minY,
+                                        OrientIdx = orientIdx
+                                    };
+                                }
+                            }
+                            else
+                            {
+                                grid[idx4 + d] = 255; // no valid stair placement
+                            }
+                        }
+                        else
+                        {
+                            grid[idx4 + d] = 255; // multi-level z-change: impassable for now
+                        }
                     }
                 }
             }
@@ -679,7 +647,7 @@ namespace Timberbot
             int startIdx = sy * w + sx;
             int goalIdx = gy * w + gx;
             gScore[startIdx] = 0;
-            int h0 = (System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy)) * 4;
+            int h0 = (System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy)) * 2;
             fScore[startIdx] = h0;
             open.Add((h0, startIdx));
 
@@ -760,7 +728,7 @@ namespace Timberbot
                             else if (reducedX || reducedY) bias = 1;                  // reduced an axis, not the larger
                             else bias = 3;                                            // moved away from goal
                         }
-                        int nf = baseH * 4 + bias;
+                        int nf = tentG + baseH * 2 + bias;
                         if (fScore.ContainsKey(nidx))
                             open.Remove((fScore[nidx], nidx));
                         fScore[nidx] = nf;
