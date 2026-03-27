@@ -25,7 +25,6 @@ As a library:
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import requests
@@ -1197,7 +1196,6 @@ def _cast(a):
             return a
 
 
-_TIMBERBORN_EXE = r"C:\Games\Steam\steamapps\common\Timberborn\Timberborn.exe"
 _SAVES_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Saves")
 
 
@@ -1256,14 +1254,15 @@ def _launch(args):
         timbers.sort(key=lambda f: os.path.getmtime(os.path.join(sdir, f)), reverse=True)
         save_name = timbers[0][:-7]  # strip .timber
 
-    if not os.path.isfile(_TIMBERBORN_EXE):
-        print(f"  {_RED}error: game not found at {_TIMBERBORN_EXE}{_RST}", file=sys.stderr)
-        sys.exit(1)
+    # write autoload.json for the mod to pick up (avoids Steam CLI arg dialog)
+    mod_dir = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot")
+    autoload = {"settlement": settlement, "save": save_name}
+    with open(os.path.join(mod_dir, "autoload.json"), "w") as f:
+        json.dump(autoload, f)
 
-    # build launch command with auto-load args
-    cmd = [_TIMBERBORN_EXE, "-skipModManager", "--tb-settlement", settlement, "--tb-save", save_name]
+    # launch via Steam protocol (no CLI args = no Steam dialog)
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
-    subprocess.Popen(cmd, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+    os.startfile("steam://rungameid/1062090")
 
     # poll until the mod's HTTP API responds
     print(f"  {_DIM}waiting for game to load (timeout {timeout}s)...{_RST}")
