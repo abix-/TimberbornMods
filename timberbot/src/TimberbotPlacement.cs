@@ -318,9 +318,9 @@ namespace Timberbot
                 }
             }
 
-            // --- PASS 1: FIND Z-CHANGES AND PLACE STAIRS FIRST ---
-            // Scan waypoints for elevation changes. Place stairs/platforms immediately
-            // so they exist before paths are laid. Record occupied tiles to skip later.
+            // --- PASS 1: PLAN ---
+            // Scan waypoints for z-changes. Compute stair positions, orientations,
+            // entrance/exit tiles. No placement yet -- just planning.
             var existingPathTiles = new HashSet<long>();
             foreach (var cb in _cache.Buildings.Read)
             {
@@ -330,7 +330,18 @@ namespace Timberbot
                     existingPathTiles.Add((long)t.x * 100000 + t.y);
             }
 
-            var stairTiles = new HashSet<long>(); // tiles occupied by stairs we place
+            // check if a world tile is obstructed (building/tree/out of grid/overhang)
+            System.Func<int, int, bool> isBlocked = (tx, ty) =>
+            {
+                int lx = tx - minX, ly = ty - minY;
+                if (lx < 0 || lx >= gw || ly < 0 || ly >= gh) return true;
+                return costGrid[ly * gw + lx] >= 255;
+            };
+
+            // stair plan entry: ramp tiles + entrance/exit + orientation
+            var stairPlans = new List<(List<(int x, int y, int baseZ, int platCount)> rampTiles,
+                int entX, int entY, int extX, int extY, int orientIdx, int baseZ)>();
+            var stairTiles = new HashSet<long>();
             var errors = new List<string>();
             int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
             var failedResults = new List<PlaceBuildingResult>();
@@ -358,133 +369,156 @@ namespace Timberbot
                     errors.Add($"z-change at ({cx},{cy}): {levels}-level jump requires platforms (need {platformPrefab})");
                     prevZ = tz; continue;
                 }
+                if (wi < 1) { prevZ = tz; continue; }
 
                 int baseZ = System.Math.Min(prevZ, tz);
                 bool goingUp = zDiff > 0;
 
-                // direction from lower to higher tile
-                int lowerWi = goingUp ? wi - 1 : wi;
-                int higherWi = goingUp ? wi : wi - 1;
-                if (lowerWi < 0 || higherWi < 0) { prevZ = tz; continue; }
-                int lowerX = waypoints[lowerWi].Item1 + minX;
-                int lowerY = waypoints[lowerWi].Item2 + minY;
-                int higherX = waypoints[higherWi].Item1 + minX;
-                int higherY = waypoints[higherWi].Item2 + minY;
-                int sdx = higherX - lowerX;
-                int sdy = higherY - lowerY;
-                int orientIdx = sdx > 0 ? 3 : sdx < 0 ? 1 : sdy > 0 ? 2 : 0;
-
-                // check if a world tile is obstructed (building/tree/out of grid/overhang)
-                System.Func<int, int, bool> isBlocked = (tx, ty) =>
-                {
-                    int lx = tx - minX, ly = ty - minY;
-                    if (lx < 0 || lx >= gw || ly < 0 || ly >= gh) return true;
-                    return costGrid[ly * gw + lx] >= 255; // includes overhangs from cost grid
-                };
+                // travel direction: always waypoints[wi] - waypoints[wi-1]
+                int tdx = (waypoints[wi].Item1 + minX) - (waypoints[wi - 1].Item1 + minX);
+                int tdy = (waypoints[wi].Item2 + minY) - (waypoints[wi - 1].Item2 + minY);
+                // stair faces uphill: going up = travel dir, going down = reverse travel dir
+                int updx = goingUp ? tdx : -tdx;
+                int updy = goingUp ? tdy : -tdy;
+                int orientIdx = updx > 0 ? 3 : updx < 0 ? 1 : updy > 0 ? 2 : 0;
 
                 if (levels == 1)
                 {
-                    // single stair: check stair tile and entrance tile
-                    int ent1X = lowerX - sdx, ent1Y = lowerY - sdy;
-                    if (isBlocked(lowerX, lowerY) || isBlocked(ent1X, ent1Y))
+                    // single stair on the lower-z tile
+                    int stairX = goingUp ? cx - tdx : cx;
+                    int stairY = goingUp ? cy - tdy : cy;
+                    int entX = stairX - tdx; // 1 tile before stair (incoming path side)
+                    int entY = stairY - tdy;
+                    int extX = stairX + tdx; // 1 tile after stair (outgoing path side)
+                    int extY = stairY + tdy;
+
+                    if (isBlocked(stairX, stairY) || isBlocked(entX, entY))
                     {
                         errors.Add($"z-change at ({cx},{cy}): stair or entrance obstructed");
                         prevZ = tz; continue;
                     }
-                    stairTiles.Add((long)lowerX * 100000 + lowerY);
-                    if (!existingPathTiles.Contains((long)lowerX * 100000 + lowerY))
-                    {
-                        var r = PlaceBuilding(stairsPrefab, lowerX, lowerY, baseZ, OrientNames[orientIdx]);
-                        if (r.Success) stairCount++; else { skipped++; failedResults.Add(r); }
-                    }
+
+                    var rampTiles = new List<(int, int, int, int)> { (stairX, stairY, baseZ, 0) };
+                    stairPlans.Add((rampTiles, entX, entY, extX, extY, orientIdx, baseZ));
+                    stairTiles.Add((long)stairX * 100000 + stairY);
                 }
                 else
                 {
-                    // multi-level: collect all ramp + entrance/exit tiles, check for obstructions
-                    int rampOrient = goingUp ? orientIdx : (orientIdx + 2) % 4;
+                    // multi-level ramp: extends in travel direction from z-change point
+                    // first ramp tile is at cx (the z-change waypoint), extending forward
+                    var rampTiles = new List<(int x, int y, int baseZ, int platCount)>();
+                    int firstX = goingUp ? cx - tdx * levels : cx;
+                    int firstY = goingUp ? cy - tdy * levels : cy;
 
-                    // compute entrance and exit positions
-                    int entX, entY, extX, extY;
-                    if (goingUp)
+                    for (int step = 0; step < levels; step++)
                     {
-                        entX = cx - sdx * (levels + 1); entY = cy - sdy * (levels + 1);
-                        extX = cx; extY = cy;
-                    }
-                    else
-                    {
-                        entX = cx - sdx; entY = cy - sdy;
-                        extX = cx + sdx * levels; extY = cy + sdy * levels;
+                        int rtx = firstX + tdx * step;
+                        int rty = firstY + tdy * step;
+                        int platCount = goingUp ? step : (levels - 1 - step);
+                        rampTiles.Add((rtx, rty, baseZ, platCount));
                     }
 
-                    // check all tiles: ramp tiles + entrance + exit
+                    // entrance: 1 tile before first ramp tile
+                    int entX = firstX - tdx;
+                    int entY = firstY - tdy;
+                    // exit: 1 tile after last ramp tile
+                    int lastX = firstX + tdx * (levels - 1);
+                    int lastY = firstY + tdy * (levels - 1);
+                    int extX = lastX + tdx;
+                    int extY = lastY + tdy;
+
+                    // check all tiles for obstructions
                     bool blocked = isBlocked(entX, entY) || isBlocked(extX, extY);
-                    if (!blocked)
+                    for (int step = 0; step < levels && !blocked; step++)
                     {
-                        for (int step = 0; step < levels && !blocked; step++)
-                        {
-                            int rtx = goingUp ? cx - sdx * (levels - step) : cx + sdx * step;
-                            int rty = goingUp ? cy - sdy * (levels - step) : cy + sdy * step;
-                            if (isBlocked(rtx, rty)) blocked = true;
-                        }
+                        if (isBlocked(rampTiles[step].x, rampTiles[step].y)) blocked = true;
                     }
                     if (blocked)
                     {
-                        errors.Add($"z-change at ({cx},{cy}): {levels}-level ramp obstructed by building or resource");
+                        errors.Add($"z-change at ({cx},{cy}): {levels}-level ramp obstructed");
                         prevZ = tz; continue;
                     }
 
-                    // place ramp
-                    for (int step = 0; step < levels; step++)
-                    {
-                        int rampTileX = goingUp ? cx - sdx * (levels - step) : cx + sdx * step;
-                        int rampTileY = goingUp ? cy - sdy * (levels - step) : cy + sdy * step;
-
-                        stairTiles.Add((long)rampTileX * 100000 + rampTileY);
-                        if (existingPathTiles.Contains((long)rampTileX * 100000 + rampTileY)) continue;
-
-                        int platCount = goingUp ? step : (levels - 1 - step);
-                        for (int p = 0; p < platCount; p++)
-                        {
-                            var r = PlaceBuilding(platformPrefab, rampTileX, rampTileY, baseZ + p, "south");
-                            if (r.Success) platformCount++; else { skipped++; failedResults.Add(r); }
-                        }
-                        var rs = PlaceBuilding(stairsPrefab, rampTileX, rampTileY, baseZ + platCount, OrientNames[rampOrient]);
-                        if (rs.Success) stairCount++; else { skipped++; failedResults.Add(rs); }
-                    }
-
-                    // place path at ramp entrance (bottom) and exit (top)
-                    foreach (var (bx, by) in new[] { (entX, entY), (extX, extY) })
-                    {
-                        long bkey = (long)bx * 100000 + by;
-                        if (stairTiles.Contains(bkey) || existingPathTiles.Contains(bkey)) continue;
-                        int bz = GetTerrainHeight(bx, by);
-                        if (bz <= 0) continue;
-                        var br = PlaceBuilding("Path", bx, by, bz, "south");
-                        if (br.Success) { pathCount++; stairTiles.Add(bkey); }
-                        else { skipped++; failedResults.Add(br); }
-                    }
+                    stairPlans.Add((rampTiles, entX, entY, extX, extY, orientIdx, baseZ));
+                    foreach (var rt in rampTiles)
+                        stairTiles.Add((long)rt.x * 100000 + rt.y);
                 }
                 prevZ = tz;
             }
 
-            // --- PASS 2: PLACE PATHS (skipping stair-occupied tiles) ---
-            prevZ = 0;
-            for (int wi = 0; wi < waypoints.Count; wi++)
+            // --- PASS 2: PLACE STAIRS ---
+            foreach (var plan in stairPlans)
             {
-                int cx = waypoints[wi].Item1 + minX;
-                int cy = waypoints[wi].Item2 + minY;
-                int tz = GetTerrainHeight(cx, cy);
-                if (wi == 0) prevZ = tz;
-                if (tz <= 0) { prevZ = tz; continue; }
+                foreach (var (rtx, rty, rtBaseZ, platCount) in plan.rampTiles)
+                {
+                    long key = (long)rtx * 100000 + rty;
+                    if (existingPathTiles.Contains(key)) continue;
 
-                long key = (long)cx * 100000 + cy;
-                if (stairTiles.Contains(key) || existingPathTiles.Contains(key))
-                { prevZ = tz; continue; }
+                    for (int p = 0; p < platCount; p++)
+                    {
+                        var r = PlaceBuilding(platformPrefab, rtx, rty, rtBaseZ + p, "south");
+                        if (r.Success) platformCount++; else { skipped++; failedResults.Add(r); }
+                    }
+                    var rs = PlaceBuilding(stairsPrefab, rtx, rty, rtBaseZ + platCount, OrientNames[plan.orientIdx]);
+                    if (rs.Success) stairCount++; else { skipped++; failedResults.Add(rs); }
+                }
 
-                var result = PlaceBuilding("Path", cx, cy, tz, "south");
-                if (result.Success) pathCount++;
-                else { skipped++; failedResults.Add(result); }
-                prevZ = tz;
+                // place path at entrance and exit to connect to stair
+                foreach (var (bx, by) in new[] { (plan.entX, plan.entY), (plan.extX, plan.extY) })
+                {
+                    long bkey = (long)bx * 100000 + by;
+                    if (stairTiles.Contains(bkey) || existingPathTiles.Contains(bkey)) continue;
+                    int bz = GetTerrainHeight(bx, by);
+                    if (bz <= 0) continue;
+                    var br = PlaceBuilding("Path", bx, by, bz, "south");
+                    if (br.Success) { pathCount++; stairTiles.Add(bkey); }
+                    else { skipped++; failedResults.Add(br); }
+                }
+            }
+
+            // --- PASS 3: A* PATH SEGMENTS BETWEEN STAIR ENDPOINTS ---
+            // Mark stair tiles as impassable in cost grid so new A* avoids them
+            foreach (var sk in stairTiles)
+            {
+                int stx = (int)(sk / 100000) - minX;
+                int sty = (int)(sk % 100000) - minY;
+                if (stx >= 0 && stx < gw && sty >= 0 && sty < gh)
+                    costGrid[sty * gw + stx] = 255;
+            }
+
+            // build segment endpoints: start → stair1.ent, stair1.ext → stair2.ent, ... → end
+            var segments = new List<(int sx, int sy, int ex, int ey)>();
+            int segStartX = x1, segStartY = y1;
+            foreach (var plan in stairPlans)
+            {
+                segments.Add((segStartX, segStartY, plan.entX, plan.entY));
+                segStartX = plan.extX;
+                segStartY = plan.extY;
+            }
+            segments.Add((segStartX, segStartY, x2, y2));
+
+            // run A* for each segment, place paths
+            foreach (var (sx, sy, ex, ey) in segments)
+            {
+                if (sx == ex && sy == ey) continue; // zero-length segment
+                var segWaypoints = AStarPath(costGrid, gw, gh,
+                    sx - minX, sy - minY, ex - minX, ey - minY, gw * gh, style);
+                if (segWaypoints == null) continue; // no route for this segment
+
+                foreach (var (lwx, lwy) in segWaypoints)
+                {
+                    int cx = lwx + minX;
+                    int cy = lwy + minY;
+                    int tz = GetTerrainHeight(cx, cy);
+                    if (tz <= 0) continue;
+
+                    long key = (long)cx * 100000 + cy;
+                    if (stairTiles.Contains(key) || existingPathTiles.Contains(key)) continue;
+
+                    var result = PlaceBuilding("Path", cx, cy, tz, "south");
+                    if (result.Success) pathCount++;
+                    else { skipped++; failedResults.Add(result); }
+                }
             }
 
             // serialize
