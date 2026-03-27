@@ -25,6 +25,7 @@ As a library:
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import requests
@@ -1196,6 +1197,95 @@ def _cast(a):
             return a
 
 
+_TIMBERBORN_EXE = r"C:\Games\Steam\steamapps\common\Timberborn\Timberborn.exe"
+_SAVES_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Saves")
+
+
+def _launch(args):
+    """Launch Timberborn and auto-load a save.
+
+    Usage: timberbot.py launch settlement:<name> [save:<filename>] [timeout:120]
+    """
+    settlement = None
+    save_name = None
+    timeout = 120
+
+    for a in args:
+        if ":" in a:
+            key, val = a.split(":", 1)
+            if key == "settlement":
+                settlement = val
+            elif key == "save":
+                save_name = val
+            elif key == "timeout":
+                try:
+                    timeout = int(val)
+                except ValueError:
+                    pass
+
+    if not settlement:
+        print(f"  {_RED}error: settlement:<name> is required{_RST}", file=sys.stderr)
+        print("  usage: timberbot.py launch settlement:<name> [save:<filename>] [timeout:120]", file=sys.stderr)
+        sys.exit(1)
+
+    # validate settlement exists
+    sdir = os.path.join(_SAVES_DIR, settlement)
+    if not os.path.isdir(sdir):
+        print(f"  {_RED}error: settlement folder not found: {sdir}{_RST}", file=sys.stderr)
+        avail = [d for d in os.listdir(_SAVES_DIR)
+                 if os.path.isdir(os.path.join(_SAVES_DIR, d))]
+        if avail:
+            print(f"  available: {', '.join(sorted(avail))}", file=sys.stderr)
+        sys.exit(1)
+
+    # validate or pick save
+    if save_name:
+        # strip .timber extension if provided
+        if save_name.endswith(".timber"):
+            save_name = save_name[:-7]
+        spath = os.path.join(sdir, save_name + ".timber")
+        if not os.path.isfile(spath):
+            print(f"  {_RED}error: save not found: {spath}{_RST}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # pick most recent .timber file
+        timbers = [f for f in os.listdir(sdir) if f.endswith(".timber")]
+        if not timbers:
+            print(f"  {_RED}error: no saves in {sdir}{_RST}", file=sys.stderr)
+            sys.exit(1)
+        timbers.sort(key=lambda f: os.path.getmtime(os.path.join(sdir, f)), reverse=True)
+        save_name = timbers[0][:-7]  # strip .timber
+
+    if not os.path.isfile(_TIMBERBORN_EXE):
+        print(f"  {_RED}error: game not found at {_TIMBERBORN_EXE}{_RST}", file=sys.stderr)
+        sys.exit(1)
+
+    # build launch command with auto-load args
+    cmd = [_TIMBERBORN_EXE, "--tb-settlement", settlement, "--tb-save", save_name]
+    print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
+    subprocess.Popen(cmd, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+
+    # poll until the mod's HTTP API responds
+    print(f"  {_DIM}waiting for game to load (timeout {timeout}s)...{_RST}")
+    start = time.time()
+    bot = Timberbot(json_mode=True)
+    while time.time() - start < timeout:
+        try:
+            s = bot.summary()
+            name = ""
+            for d in s.get("districts", []):
+                if d.get("name"):
+                    name = d["name"]
+                    break
+            print(f"  {_BGRN}ready{_RST}  settlement: {name or settlement}")
+            return
+        except Exception:
+            time.sleep(3)
+
+    print(f"  {_RED}timeout after {timeout}s -- game may still be loading{_RST}", file=sys.stderr)
+    sys.exit(1)
+
+
 def _method_params(method):
     """Get parameter names (excluding self) for a method."""
     sig = inspect.signature(method)
@@ -1234,6 +1324,7 @@ def main():
                     print(f"    {usage.strip()}")
         print(f"\n  {'top':30s} live colony dashboard")
         print(f"  {'manager':30s} auto-manage haulers (keep 1-4 idle)")
+        print(f"  {'launch':30s} launch game and auto-load a save")
         sys.exit(1)
 
     json_mode = "--json" in sys.argv
@@ -1262,6 +1353,10 @@ def main():
 
     if method_name == "manager":
         _manage()
+        return
+
+    if method_name == "launch":
+        _launch(args)
         return
 
     bot = Timberbot(host=host_override, port=port_override, json_mode=json_mode)

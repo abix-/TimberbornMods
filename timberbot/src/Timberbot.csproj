@@ -354,6 +354,10 @@
     <Reference Include="Timberborn.HazardousWeatherSystemUI" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystemUI.dll</HintPath></Reference>
     <Reference Include="Timberborn.FactionSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.FactionSystem.dll</HintPath></Reference>
     <Reference Include="Timberborn.GameStartup" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameStartup.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameSaveRepositorySystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameSaveRepositorySystem.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameSaveRepositorySystemUI" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameSaveRepositorySystemUI.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameSceneLoading" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameSceneLoading.dll</HintPath></Reference>
+    <Reference Include="Timberborn.PlatformUtilities" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.PlatformUtilities.dll</HintPath></Reference>
     <Reference Include="Timberborn.EntityNaming" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.EntityNaming.dll</HintPath></Reference>
 
     <Reference Include="System.Collections.Immutable">
@@ -387,8 +391,10 @@
     <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
     <Copy SourceFiles="settings.json" DestinationFolder="$(ModDir)" Condition="!Exists('$(ModDir)\settings.json')" />
     <Copy SourceFiles="..\script\timberbot.py" DestinationFolder="$(ModDir)" />
-    <MakeDir Directories="$(ModDir)\timberbot\skill" />
-    <Copy SourceFiles="..\skill\SKILL.md" DestinationFolder="$(ModDir)\timberbot\skill" />
+    <Delete Files="$(ModDir)\timberbot\skill\SKILL.md" Condition="Exists('$(ModDir)\timberbot\skill\SKILL.md')" />
+    <RemoveDir Directories="$(ModDir)\timberbot\skill" Condition="Exists('$(ModDir)\timberbot\skill')" />
+    <MakeDir Directories="$(ModDir)\skill" />
+    <Copy SourceFiles="..\..\skill\timberbot.md" DestinationFolder="$(ModDir)\skill" />
     <MakeDir Directories="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\getting-started.md" DestinationFolder="$(ModDir)\docs" />
