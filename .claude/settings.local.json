@@ -19,7 +19,15 @@
       "Bash(grep -rl \"NeedSystem\\\\|Wellbeing\\\\|NeedCollection\\\\|NeedSpec\\\\|NeedApplication\" C:GamesSteamsteamappscommonTimberbornTimberborn_DataManaged/*.dll)",
       "Bash(grep -rn \"AllBuildings\\\\|AllTemplates\\\\|GetAll\\\\|Templates\\\\|Prefabs\\\\|BuildingSpecification\\\\|BuildingTemplateRegistry\" C:/code/timberborn/timberbot --include=*.cs)",
       "Bash(grep -rn \"BuildingService\\\\|Building\\\\|Template\" C:/code/timberborn/docs --include=*.md)",
-      "Bash(grep -v \"^[[:space:]]*$\")"
+      "Bash(grep -v \"^[[:space:]]*$\")",
+      "Bash(grep -c '`timberbot.py ' ~/.claude/skills/timberbot/SKILL.md)",
+      "Bash(grep -oP '`\\(timberbot\\\\.py \\\\w+|timberbot\\\\.py [a-z_]+\\)' ~/.claude/skills/timberbot/SKILL.md)",
+      "Bash(xargs grep:*)",
+      "Bash(dotnet tool:*)",
+      "Bash(ilspycmd C:/Games/Steam/steamapps/common/Timberborn/Timberborn_Data/Managed/Timberborn.GameSaveRepositorySystemUI.dll)",
+      "Bash(ilspycmd C:/Games/Steam/steamapps/common/Timberborn/Timberborn_Data/Managed/Timberborn.GameSceneLoading.dll)",
+      "Skill(rtfm)",
+      "Bash(ilspycmd:*)"
     ]
   }
 }

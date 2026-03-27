@@ -7,7 +7,7 @@ How Timberbot's HTTP API works under the hood.
 ```
 MAIN THREAD (Unity)                    BACKGROUND THREAD (HttpListener)
 ========================               ================================
-UpdateSingleton() [60fps]              ListenLoop() [blocking accept]
+UpdateSingleton() [every frame]        ListenLoop() [blocking accept]
   |                                      |
   +-- RefreshCachedState() [1s cadence]  +-- GET request arrives
   |     |                                |     |
@@ -16,15 +16,18 @@ UpdateSingleton() [60fps]              ListenLoop() [blocking accept]
   |     |   _*Read <-> _*Write           |     +-- Respond() sends JSON
   |     |                                |
   +-- DrainRequests() [POST only]        +-- POST request arrives
-        |                                      |
-        +-- RouteRequest() mutates game        +-- queue to _pending
-        +-- Respond() sends JSON               |
-                                               (main thread processes next frame)
+  |     |                                      |
+  |     +-- RouteRequest() mutates game        +-- queue to _pending
+  |     +-- Respond() sends JSON               |
+  |                                            (main thread processes next frame)
+  +-- FlushWebhooks() [every frame]
+        |
+        +-- batch _pendingEvents -> ThreadPool POST
 ```
 
 ## Double buffer
 
-`DoubleBuffer<T>` generic class manages two pre-allocated lists per entity type. Main thread writes to `.Write`, background reads from `.Read`. Ref swap publishes updates.
+`TimberbotDoubleBuffer<T>` generic class manages two pre-allocated lists per entity type. Main thread writes to `.Write`, background reads from `.Read`. Ref swap publishes updates.
 
 ```
 Cadence N:   main refreshes _buildings.Write  |  background reads _buildings.Read
@@ -66,17 +69,26 @@ Component references resolved once at entity-add time. Mutable state refreshed o
 ```
 CachedBuilding {
   // immutable refs (set at add-time, never refreshed)
-  Entity, Id, Name, BlockObject, Pausable, Floodgate, Workplace, ...
-  HasFloodgate(int), HasClutch(int), HasWonder(int), IsGenerator(int), IsConsumer(int), ...
-  EffectRadius, NominalPower, X, Y, Z, Orientation
+  Entity, Id, Name, BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio,
+  Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch,
+  Manufactory, BreedingPod, RangedEffect, DistrictBuilding
+  HasFloodgate(int), HasClutch(int), HasWonder(int), IsGenerator(int), IsConsumer(int),
+  HasEntrance(int)
+  EffectRadius, NominalPowerInput, NominalPowerOutput, X, Y, Z, Orientation
   OccupiedTiles (immutable List, safe to share between buffers)
+  EntranceX, EntranceY
 
   // mutable primitives (refreshed by RefreshCachedState at 1Hz)
   Finished(int), Paused(int), Unreachable(int), Powered(int),
-  AssignedWorkers, DesiredWorkers, FloodgateHeight, BuildProgress, ...
+  AssignedWorkers, DesiredWorkers, MaxWorkers, Dwellers, MaxDwellers,
+  FloodgateHeight, FloodgateMaxHeight, BuildProgress, MaterialProgress, HasMaterials(int),
+  ClutchEngaged(int), WonderActive(int),
+  PowerDemand, PowerSupply, PowerNetworkId,
+  CurrentRecipe, ProductionProgress, ReadyToProduce(int), NeedsNutrients(int),
+  Stock, Capacity, District, ConstructionPriority, WorkplacePriorityStr
 
   // mutable reference types (SEPARATE instances per buffer!)
-  Recipes (List<string>), Inventory (Dict), NutrientStock (Dict)
+  Recipes (List<string>), Inventory (Dict<string,int>), NutrientStock (Dict<string,int>)
 }
 
 CachedNaturalResource {
@@ -88,27 +100,33 @@ CachedNaturalResource {
 
 CachedBeaver {
   // immutable refs
-  Id, Name, IsBot(int), NeedMgr, WbTracker, Worker, Life, Carrier, ...
+  Id, Name, IsBot(int), Go, NeedMgr, WbTracker, Worker, Life, Carrier,
+  Deteriorable, Contaminable, Dweller, Citizen
   // mutable primitives
-  Wellbeing, X, Y, Z, Workplace, District, HasHome(int), ...
+  Wellbeing, X, Y, Z, Workplace, District, HasHome(int), Contaminated(int),
+  LifeProgress, DeteriorationProgress,
+  IsCarrying(int), CarryingGood, CarryAmount, LiftingCapacity, Overburdened(int),
+  AnyCritical(int)
   // mutable reference type (SEPARATE instance per buffer!)
   Needs (List<CachedNeed>)  -- CachedNeed.Favorable/Critical/Active are int 0/1
 }
 
 CachedDistrict {
   Name, Adults, Children, Bots
-  Resources (Dict<string, int>) -- goodId -> availableStock
+  Resources (Dict<string, (int available, int all)>) -- goodId -> (available, total)
+  ResourcesToon (string) -- pre-serialized: "Water":50,"Log":236,...
+  ResourcesJson (string) -- pre-serialized: "Water":{"available":50,"all":54},...
   // not double-buffered (tiny list, 1-3 items, refreshed in place)
 }
 ```
 
 ## Serialization
 
-All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with depth-aware auto-separator handling. Allocated once (300KB), `Reset()` per request. Serial on the listener thread, never concurrent.
+`TimberbotJw` is a fluent zero-alloc JSON writer with depth-aware auto-separator handling. Each component owns its own instance sized for its workload. The main read instance (300KB) lives in `TimberbotEntityCache.Jw`; smaller instances (512-1024 bytes) exist in HttpServer, Debug, Write, Webhook, and Placement. Each is `Reset()` per request, serial within its owning thread.
 
 ```csharp
-// single shared instance
-private readonly TimberbotJw _jw = new TimberbotJw(300000);
+// main read instance (300KB) -- used by all GET list endpoints
+public readonly TimberbotJw Jw = new TimberbotJw(300000);
 
 // usage -- auto-commas, nesting-aware, fluent chaining
 var jw = _jw.Reset().OpenArr();
@@ -170,7 +188,7 @@ Rule: functional tests that parse data use JSON. Tests that validate output form
 
 ## Webhooks
 
-68 event handlers registered on Timberborn's `EventBus`. Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.
+67 event handlers registered on Timberborn's `EventBus` (65 in TimberbotWebhook, 2 in TimberbotEntityCache). Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.
 
 - **Batching:** Configurable via `webhookBatchMs` in settings.json (0 = immediate, default 200ms)
 - **Circuit breaker:** N consecutive failures (default 30, configurable) disables the webhook, logged via `TimberbotLog`
@@ -187,12 +205,14 @@ Rule: functional tests that parse data use JSON. Tests that validate output form
   "httpPort": 8085,
   "httpHost": "127.0.0.1",
   "webhooksEnabled": true,
-  "webhookBatchMs": 200
+  "webhookBatchMs": 200,
+  "webhookCircuitBreaker": 30
 }
 ```
 
-- `httpHost`: host address for Python client remote connections (read by timberbot.py, not the server). Default `"127.0.0.1"`
+- `httpHost`: host address for Python client remote connections (read by timberbot.py only, not the C# server). Default `"127.0.0.1"`
 - `webhookBatchMs`: batching window in milliseconds (default 200, 0 = immediate dispatch)
+- `webhookCircuitBreaker`: consecutive failures before disabling a webhook (default 30)
 
 Loaded once on game load. Missing file or fields use defaults.
 
@@ -208,9 +228,7 @@ List endpoints support server-side pagination and filtering via query params:
 
 ## Faction Detection
 
-`FactionService.Current.Id` (from `Timberborn.GameFactionSystem`) detects the active faction
-at startup. The suffix (e.g. `.IronTeeth`, `.Folktails`) is cached in `TimberbotEntityCache.FactionSuffix`
-and used by `CleanName()` (strip faction from entity names) and `RoutePath()` (correct stairs/platform prefabs).
+`TimberbotPlacement.DetectFaction()` uses `FactionService.Current.Id` (from `Timberborn.GameFactionSystem`) to detect the active faction at startup. The suffix (e.g. `.IronTeeth`, `.Folktails`) is stored in the static `TimberbotEntityCache.FactionSuffix` and used by `CleanName()` (strip faction from entity names) and `RoutePath()` (correct stairs/platform prefabs).
 
 ## Request flow
 
@@ -247,10 +265,10 @@ Mutable values (paused, workers, wellbeing) are up to `refreshIntervalSeconds` s
 
 ```
 TimberbotService.cs           -- Lifecycle, settings, orchestration (7 DI params)
-TimberbotEntityCache.cs       -- Double-buffered entity caching, cached classes, indexes (3 DI params)
-TimberbotRead.cs              -- All GET read endpoints (10 DI params)
-TimberbotWrite.cs             -- All POST write endpoints (20 DI params)
-TimberbotPlacement.cs         -- Building placement, path routing, terrain (13 DI params)
+TimberbotEntityCache.cs       -- Double-buffered entity caching, cached classes, indexes (5 DI params)
+TimberbotRead.cs              -- All GET read endpoints (19 DI params)
+TimberbotWrite.cs             -- All POST write endpoints (22 DI params)
+TimberbotPlacement.cs         -- Building placement, path routing, terrain (14 DI params)
 TimberbotWebhook.cs           -- Batched push event notifications, circuit breaker (5 DI params)
 TimberbotDebug.cs             -- Reflection inspector and benchmark (1 DI param)
 TimberbotHttpServer.cs        -- HttpListener, routing, request/response handling
@@ -258,4 +276,6 @@ TimberbotJw.cs                -- Fluent zero-alloc JSON writer
 TimberbotDoubleBuffer.cs      -- Generic double-buffer with Add/RemoveAll/Swap
 TimberbotLog.cs               -- File-based error logging, timestamped, thread-safe
 TimberbotConfigurator.cs      -- Bindito DI module registration
+TimberbotAutoLoad.cs          -- Auto-load a save at main menu via autoload.json or CLI args
+TimberbotAutoLoadConfigurator.cs -- MainMenu context DI registration for auto-load
 ```

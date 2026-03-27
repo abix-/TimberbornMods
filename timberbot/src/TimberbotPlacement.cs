@@ -454,7 +454,7 @@ namespace Timberbot
         // Build an edge-based cost grid for A* over the region (minX,minY) with dimensions (w,h).
         // Layout: ushort[w * h * 4] -- 4 directional entry costs per tile.
         // Direction indices match ddx/ddy: 0=from west(+X), 1=from east(-X), 2=from south(+Y), 3=from north(-Y).
-        // Base costs: 0=existing path, 2=open ground, 8=shallow water, 50=deep water, 255=impassable.
+        // Base costs: 1=existing path, 2=open ground, 8=shallow water, 50=deep water, 255=impassable.
         // Z-change edges with valid stair placements get cost=20 (traversable).
         // stairEdges: output lookup of pre-validated stair placements keyed by (fromIdx, toIdx).
         private ushort[] BuildCostGrid(int minX, int minY, int w, int h,
@@ -509,7 +509,7 @@ namespace Timberbot
                 {
                     int lx = t.x - minX, ly = t.y - minY;
                     if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
-                    baseCost[ly * w + lx] = isPath ? (ushort)0 : (ushort)255;
+                    baseCost[ly * w + lx] = isPath ? (ushort)1 : (ushort)255;
                 }
             }
 
@@ -626,9 +626,9 @@ namespace Timberbot
             return grid;
         }
 
-        // A* pathfinding on a flat cost grid. 4-directional, Manhattan heuristic.
-        // Every tile has a cost (1=open, 255=obstacle). No impassable -- cost alone steers routing.
-        // style: "direct" = staircase (alternate axes), "straight" = minimize turns (long runs).
+        // A* pathfinding on an edge-cost grid. 4-directional, plain Manhattan heuristic.
+        // Existing path has cost 1, so h = Manhattan is admissible and f = g + h is safe A*.
+        // style only acts as a secondary tie-break among equal-f nodes.
         // Returns list of (localX, localY) from start to goal, or null if maxNodes exceeded.
         private static List<(int, int)> AStarPath(ushort[] grid, int w, int h, int sx, int sy, int gx, int gy, int maxNodes, string style)
         {
@@ -637,19 +637,23 @@ namespace Timberbot
 
             bool straight = style == "straight";
 
-            // Scale fScore by 4 to leave room for tie-breaking bias (0-3).
-            // This preserves A* optimality -- ties between equal-cost paths are broken by style.
             var gScore = new Dictionary<int, int>();
-            var fScore = new Dictionary<int, int>();
+            var openScore = new Dictionary<int, (int f, int bias)>();
             var cameFrom = new Dictionary<int, int>();
-            var open = new SortedSet<(int f, int idx)>();
+            var open = new SortedSet<(int f, int bias, int idx)>();
 
             int startIdx = sy * w + sx;
             int goalIdx = gy * w + gx;
+            int start4 = startIdx * 4;
+            int goal4 = goalIdx * 4;
+            bool startBlocked = grid[start4] >= 255 && grid[start4 + 1] >= 255 && grid[start4 + 2] >= 255 && grid[start4 + 3] >= 255;
+            bool goalBlocked = grid[goal4] >= 255 && grid[goal4 + 1] >= 255 && grid[goal4 + 2] >= 255 && grid[goal4 + 3] >= 255;
+            if (startBlocked || goalBlocked) return null;
+
             gScore[startIdx] = 0;
-            int h0 = (System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy)) * 2;
-            fScore[startIdx] = h0;
-            open.Add((h0, startIdx));
+            int h0 = System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy);
+            openScore[startIdx] = (h0, 0);
+            open.Add((h0, 0, startIdx));
 
             int[] ddx = { 1, -1, 0, 0 };
             int[] ddy = { 0, 0, 1, -1 };
@@ -658,7 +662,7 @@ namespace Timberbot
 
             while (open.Count > 0)
             {
-                var (cf, cidx) = open.Min;
+                var (_, _, cidx) = open.Min;
                 open.Remove(open.Min);
 
                 if (cidx == goalIdx)
@@ -681,7 +685,7 @@ namespace Timberbot
                 int cy2 = cidx / w;
                 int cg = gScore.ContainsKey(cidx) ? gScore[cidx] : int.MaxValue;
 
-                // direction we arrived from (for "straight" style turn penalty)
+                // direction we arrived from (for optional equal-f tie-breaking)
                 int prevDx = 0, prevDy = 0;
                 if (straight && cameFrom.ContainsKey(cidx))
                 {
@@ -705,34 +709,34 @@ namespace Timberbot
                         cameFrom[nidx] = cidx;
                         gScore[nidx] = tentG;
                         int baseH = System.Math.Abs(gx - nx) + System.Math.Abs(gy - ny);
-                        // tie-breaking bias (0-3): doesn't affect optimality, just path shape
+                        // Style preference only breaks ties among equal-f nodes.
                         int bias;
                         if (straight)
                         {
-                            // penalize direction changes: 0 = same dir, 2 = turn
                             bool samedir = (ddx[d] == prevDx && ddy[d] == prevDy) || (prevDx == 0 && prevDy == 0);
                             bias = samedir ? 0 : 2;
                         }
                         else
                         {
-                            // "direct": prefer reducing the larger remaining axis first
-                            // bias=0 when stepping toward the axis with more distance, bias=2 otherwise
                             int remX = System.Math.Abs(gx - nx);
                             int remY = System.Math.Abs(gy - ny);
                             int remXbefore = System.Math.Abs(gx - cx2);
                             int remYbefore = System.Math.Abs(gy - cy2);
                             bool reducedX = remX < remXbefore;
                             bool reducedY = remY < remYbefore;
-                            if (reducedX && remXbefore >= remYbefore) bias = 0;      // reduced the larger axis
-                            else if (reducedY && remYbefore >= remXbefore) bias = 0;  // reduced the larger axis
-                            else if (reducedX || reducedY) bias = 1;                  // reduced an axis, not the larger
-                            else bias = 3;                                            // moved away from goal
+                            if (reducedX && remXbefore >= remYbefore) bias = 0;
+                            else if (reducedY && remYbefore >= remXbefore) bias = 0;
+                            else if (reducedX || reducedY) bias = 1;
+                            else bias = 3;
                         }
-                        int nf = tentG + baseH * 2 + bias;
-                        if (fScore.ContainsKey(nidx))
-                            open.Remove((fScore[nidx], nidx));
-                        fScore[nidx] = nf;
-                        open.Add((nf, nidx));
+                        int nf = tentG + baseH;
+                        if (openScore.ContainsKey(nidx))
+                        {
+                            var prevOpen = openScore[nidx];
+                            open.Remove((prevOpen.f, prevOpen.bias, nidx));
+                        }
+                        openScore[nidx] = (nf, bias);
+                        open.Add((nf, bias, nidx));
                     }
                 }
             }

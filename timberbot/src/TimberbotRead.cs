@@ -328,9 +328,6 @@ namespace Timberbot
 
             if (format == "json")
             {
-                // capture sub-collections BEFORE using _cache.Jw -- they share the same JwWriter
-                var treeClustersJson = CollectTreeClusters("json") as string;
-                var foodClustersJson = CollectFoodClusters("json") as string;
                 var jj = _cache.Jw.BeginObj();
                 jj.Prop("settlement", GetSettlementName());
                 jj.Prop("faction", faction);
@@ -422,26 +419,9 @@ namespace Timberbot
                 jj.Obj("buildings");
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
-                // nearby clusters -- pre-captured before BeginObj, parse and filter to DC z + 40 tiles
-                void writeFilteredClusters(string key, string rawJson)
-                {
-                    var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(rawJson ?? "[]");
-                    jj.Arr(key);
-                    if (list != null) foreach (var c in list)
-                    {
-                        int cx = System.Convert.ToInt32(c["x"]), cy = System.Convert.ToInt32(c["y"]), cz = System.Convert.ToInt32(c["z"]);
-                        if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
-                        {
-                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(c["grown"])).Prop("total", System.Convert.ToInt32(c["total"]));
-                            if (c.TryGetValue("species", out var spObj) && spObj is Newtonsoft.Json.Linq.JObject sp)
-                            { jj.Obj("species"); foreach (var kv in sp) jj.Prop(kv.Key, (int)kv.Value); jj.CloseObj(); }
-                            jj.CloseObj();
-                        }
-                    }
-                    jj.CloseArr();
-                }
-                writeFilteredClusters("treeClusters", treeClustersJson);
-                writeFilteredClusters("foodClusters", foodClustersJson);
+                // nearby clusters -- built inline from cached data, no Newtonsoft
+                WriteClustersFiltered(jj, "treeClusters", _cache.NaturalResources.Read, null, dcX, dcY, dcZ, 40, 10, 5);
+                WriteClustersFiltered(jj, "foodClusters", _cache.NaturalResources.Read, TimberbotEntityCache.TreeSpecies, dcX, dcY, dcZ, 40, 10, 5);
                 return jj.End();
             }
 
@@ -600,20 +580,18 @@ namespace Timberbot
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 if (nr.Cuttable == null) continue;
-                if (nr.Living == null || nr.Living.IsDead) continue;
-                if (nr.BlockObject == null) continue;
+                if (nr.Alive == 0) continue;
 
-                var c = nr.BlockObject.Coordinates;
-                int cx = c.x / cellSize * cellSize + cellSize / 2;
-                int cy = c.y / cellSize * cellSize + cellSize / 2;
+                int cx = nr.X / cellSize * cellSize + cellSize / 2;
+                int cy = nr.Y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
 
                 if (!cells.ContainsKey(key))
-                { cells[key] = new int[] { 0, 0, cx, cy, c.z }; cellSpecies[key] = new Dictionary<string, int>(); }
+                { cells[key] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[key] = new Dictionary<string, int>(); }
 
                 cells[key][1]++;
                 cellSpecies[key][nr.Name] = cellSpecies[key].GetValueOrDefault(nr.Name) + 1;
-                if (nr.Growable != null && nr.Growable.IsGrown)
+                if (nr.Grown != 0)
                     cells[key][0]++;
             }
 
@@ -624,7 +602,6 @@ namespace Timberbot
             {
                 var s = cells[sorted[i]];
                 jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
-                // top species by count
                 var sp = cellSpecies[sorted[i]];
                 jw.Obj("species");
                 foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
@@ -641,20 +618,18 @@ namespace Timberbot
             {
                 if (nr.Gatherable == null) continue;
                 if (TimberbotEntityCache.TreeSpecies.Contains(nr.Name)) continue;
-                if (nr.Living == null || nr.Living.IsDead) continue;
-                if (nr.BlockObject == null) continue;
+                if (nr.Alive == 0) continue;
 
-                var c = nr.BlockObject.Coordinates;
-                int cx = c.x / cellSize * cellSize + cellSize / 2;
-                int cy = c.y / cellSize * cellSize + cellSize / 2;
+                int cx = nr.X / cellSize * cellSize + cellSize / 2;
+                int cy = nr.Y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
 
                 if (!cells.ContainsKey(key))
-                { cells[key] = new int[] { 0, 0, cx, cy, c.z }; cellSpecies[key] = new Dictionary<string, int>(); }
+                { cells[key] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[key] = new Dictionary<string, int>(); }
 
                 cells[key][1]++;
                 cellSpecies[key][nr.Name] = cellSpecies[key].GetValueOrDefault(nr.Name) + 1;
-                if (nr.Growable != null && nr.Growable.IsGrown)
+                if (nr.Grown != 0)
                     cells[key][0]++;
             }
 
@@ -671,6 +646,51 @@ namespace Timberbot
                 jw.CloseObj().CloseObj();
             }
             return jw.End();
+        }
+
+        // Write cluster data directly into an existing JW, filtered by proximity to DC.
+        // Used by CollectSummary json to avoid serialize-then-deserialize via Newtonsoft.
+        // excludeSpecies=null for tree clusters, excludeSpecies=TreeSpecies for food clusters.
+        private void WriteClustersFiltered(TimberbotJw jw, string key,
+            List<TimberbotEntityCache.CachedNaturalResource> resources,
+            System.Collections.Generic.HashSet<string> excludeSpecies,
+            int dcX, int dcY, int dcZ, int maxDist, int cellSize, int top)
+        {
+            var cells = new Dictionary<long, int[]>();
+            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
+            foreach (var nr in resources)
+            {
+                // tree clusters: excludeSpecies=null, require Cuttable
+                // food clusters: excludeSpecies=TreeSpecies, require Gatherable
+                if (excludeSpecies == null) { if (nr.Cuttable == null) continue; }
+                else { if (nr.Gatherable == null || excludeSpecies.Contains(nr.Name)) continue; }
+                if (nr.Alive == 0) continue;
+
+                int cx = nr.X / cellSize * cellSize + cellSize / 2;
+                int cy = nr.Y / cellSize * cellSize + cellSize / 2;
+                // proximity filter: skip cells outside range
+                if (nr.Z != dcZ || System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) > maxDist) continue;
+                long k = (long)cx * 100000 + cy;
+
+                if (!cells.ContainsKey(k))
+                { cells[k] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[k] = new Dictionary<string, int>(); }
+                cells[k][1]++;
+                cellSpecies[k][nr.Name] = cellSpecies[k].GetValueOrDefault(nr.Name) + 1;
+                if (nr.Grown != 0) cells[k][0]++;
+            }
+            var sorted = new List<long>(cells.Keys);
+            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
+            jw.Arr(key);
+            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            {
+                var s = cells[sorted[i]];
+                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
+                var sp = cellSpecies[sorted[i]];
+                jw.Obj("species");
+                foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
+                jw.CloseObj().CloseObj();
+            }
+            jw.CloseArr();
         }
 
         public object CollectTime()
