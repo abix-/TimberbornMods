@@ -430,7 +430,8 @@ namespace Timberbot
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0,
-                            body?.Value<string>("style") ?? "direct");
+                            body?.Value<string>("style") ?? "direct",
+                            body?.Value<int>("sections") ?? 0);
                     case "/api/placement/find":
                         return _service.Placement.FindPlacement(
                             body?.Value<string>("prefab") ?? "",

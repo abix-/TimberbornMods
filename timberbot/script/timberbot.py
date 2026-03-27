@@ -402,9 +402,11 @@ class Timberbot:
         """Set allowed good on a single-good stockpile."""
         return self._post("/api/stockpile/good", {"id": building_id, "good": good})
 
-    def place_path(self, x1, y1, x2, y2, z=0, style="direct"):
-        """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns)."""
-        return self._post("/api/path/place", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "style": style})
+    def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0):
+        """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N sections then stop."""
+        body = {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "style": style}
+        if sections: body["sections"] = sections
+        return self._post("/api/path/place", body)
 
     # -- helpers --
 
