@@ -12,13 +12,6 @@ None.
 
 | # | Issue | Cost | Location |
 |---|---|---|---|
-| 4 | `CollectSummary`: ~20 temp collections per call (6 Dicts, 1 HashSet+11 strings, roleMap 9 arrays, 3 more Dicts) | ~20 objects | `TimberbotRead.cs:171-301` |
-| 5 | `CollectBuildings` full toon: `new StringBuilder` x2 per building (invSb, recSb) + `.ToString()` | 2N SBs + 2N strings | `TimberbotRead.cs:857-865` |
-| 6 | `CollectTreeClusters`: `new Dictionary` x2 + `new int[]` per cell + `new List` + Sort | many per call | `TimberbotRead.cs:598-620` |
-| 7 | `CollectFoodClusters`: same as #6 | many per call | `TimberbotRead.cs:638-661` |
-| 8 | `CollectTiles`: `new Dictionary` + 3 `new HashSet` + `new List` per occupied tile + `new StringBuilder` per toon tile | many per call | `TimberbotRead.cs:1261-1376` |
-| 9 | **Thread-questionable:** `CollectDistribution` calls `dc.GetComponent<DistrictDistributionSetting>()` on background thread | unknown | `TimberbotRead.cs:1222` |
-| 10 | **Thread-questionable:** `CollectScience` iterates `_buildingService.Buildings` + `GetSpec<T>()` on background thread | N GetSpec calls | `TimberbotRead.cs:1124-1130` |
 | 11 | District refresh allocates `new CachedDistrict` + `new Dictionary` per district every 1s | ~3 objects/sec | `TimberbotEntityCache.cs:377-421` |
 
 ### Low
@@ -32,7 +25,6 @@ None.
 | 16 | `CollectPowerNetworks`: `new Dictionary` + `new PowerNetwork` + `new List<int>` per network | ~N networks | `TimberbotRead.cs:1076-1084` |
 | 17 | `CollectWellbeing`: 4 Dicts + `new List<NeedSpec>` per group | ~10 objects | `TimberbotRead.cs:1143-1155` |
 | 18 | `CollectNotifications`: `n.Subject.ToString()` + `n.Description.ToString()` per notification | 2N strings | `TimberbotRead.cs:1209` |
-| 19 | `CollectDistribution`: `gs.ImportOption.ToString()` enum per good per district | N strings | `TimberbotRead.cs:1228` |
 | 20 | **Thread-questionable:** `CollectWellbeing`/`CollectSummary` call `_factionNeedService.GetBeaverNeeds()` on background thread | unknown | `TimberbotRead.cs:290,1142` |
 | 21 | Unity GC spikes freeze all threads | random 0.5-2s | Unity runtime (unavoidable) |
 | 22 | `sb.ToString()` alloc per HTTP response | 1 string, 100-500KB | `TimberbotJw.ToString()` (unavoidable) |
@@ -44,6 +36,13 @@ None.
 | ~~1~~ | ~~Thread-unsafe: `CollectTreeClusters` reads Unity components on background thread~~ | **FIXED** -- uses cached `nr.Alive`, `nr.X/Y/Z`, `nr.Grown` |
 | ~~2~~ | ~~Thread-unsafe: `CollectFoodClusters` -- same as #1~~ | **FIXED** -- same approach |
 | ~~3~~ | ~~`CollectSummary` json: `JsonConvert.DeserializeObject` re-parses cluster JSON~~ | **FIXED** -- `WriteClustersFiltered` builds inline via JW, zero Newtonsoft |
+| ~~4~~ | ~~`CollectSummary`: ~20 temp collections per call~~ | **FIXED** -- hoisted to field-level dicts/sets, cleared per call. Static roleMap/cropNames |
+| ~~5~~ | ~~`CollectBuildings` full toon: new StringBuilder x2 per building~~ | **FIXED** -- reuses field-level `_invSb`/`_recSb`, cleared per building |
+| ~~6~~ | ~~`CollectTreeClusters`: new Dictionary x2 + new int[] per cell~~ | **FIXED** -- reuses field-level `_clusterCells`/`_clusterSpecies`/`_clusterSorted` |
+| ~~7~~ | ~~`CollectFoodClusters`: same as #6~~ | **FIXED** -- same reusable fields |
+| ~~8~~ | ~~`CollectTiles`: new Dictionary + 3 HashSet + StringBuilder per tile~~ | **FIXED** -- reuses field-level `_tileOccupants`/`_tileEntrances`/`_tileSeedlings`/`_tileDeadTiles`/`_tileSb` |
+| ~~9~~ | ~~`CollectDistribution` GetComponent on background thread~~ | **FIXED** -- pre-built on main thread via `RefreshMainThreadData()` |
+| ~~10~~ | ~~`CollectScience` GetSpec on background thread~~ | **FIXED** -- pre-built on main thread via `RefreshMainThreadData()` |
 | ~~23~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | **DISPROVED** -- 0 GC0 across 11.4M calls. 1.8x slower than manual but no alloc |
 
 ## Entity tracking

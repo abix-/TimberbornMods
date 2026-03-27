@@ -158,6 +158,7 @@ namespace Timberbot
             {
                 _lastRefreshTime = now;
                 Cache.RefreshCachedState();
+                Read.RefreshMainThreadData();
             }
             _server?.DrainRequests();
             WebhookMgr.FlushWebhooks(now);

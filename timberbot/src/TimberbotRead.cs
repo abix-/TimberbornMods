@@ -67,6 +67,49 @@ namespace Timberbot
         private readonly ISoilContaminationService _soilContaminationService;
         private readonly ISoilMoistureService _soilMoistureService;
 
+        // reusable collections -- allocated once, cleared per call to avoid GC pressure
+        private readonly Dictionary<string, int[]> _treeSpecies = new Dictionary<string, int[]>();
+        private readonly Dictionary<string, int[]> _cropSpecies = new Dictionary<string, int[]>();
+        private readonly Dictionary<string, int> _roleCounts = new Dictionary<string, int>();
+        private readonly Dictionary<string, int[]> _districtStats = new Dictionary<string, int[]>();
+        private readonly Dictionary<string, (int x, int y, int z, string orientation, int entranceX, int entranceY)> _districtDCs = new Dictionary<string, (int, int, int, string, int, int)>();
+        private readonly Dictionary<string, string> _needToGroup = new Dictionary<string, string>();
+        private readonly Dictionary<string, float> _groupMaxPerBeaver = new Dictionary<string, float>();
+        private readonly Dictionary<string, float> _wbGroupTotals = new Dictionary<string, float>();
+        private readonly Dictionary<string, float[]> _districtWb = new Dictionary<string, float[]>();
+        private readonly Dictionary<string, int> _resourceTotals = new Dictionary<string, int>();
+        private static readonly HashSet<string> _cropNames = new HashSet<string>
+            { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
+        private static readonly Dictionary<string, string[]> _roleMap = new Dictionary<string, string[]> {
+            {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
+            {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
+            {"housing", new[]{"Lodge","MiniLodge","DoubleLodge","TripleLodge","Rowhouse","Barrack"}},
+            {"wood", new[]{"Lumberjack","LumberMill","IndustrialLumberMill","Forester"}},
+            {"storage", new[]{"Warehouse","Pile","ReservePile","ReserveWarehouse","ReserveTank"}},
+            {"power", new[]{"PowerWheel","LargePowerWheel","WaterWheel","WindTurbine","LargeWindTurbine","SteamEngine","PowerShaft","Clutch","GravityBattery"}},
+            {"science", new[]{"Inventor","Numbercruncher","Observatory"}},
+            {"production", new[]{"GearWorkshop","Smelter","Metalsmith","Scavenger","Mine","BotAssembler","BotPartFactory","PaperMill","PrintingPress","WoodWorkshop","Centrifuge","ExplosivesFactory","Refinery"}},
+            {"leisure", new[]{"Campfire","Scratcher","Shower","DoubleShower","SwimmingPool","Carousel","MudPit","MudBath","ExercisePlaza","WindTunnel","Motivatorium","Lido","Detailer","ContemplationSpot","Agora","DanceHall","RooftopTerrace","MedicalBed","TeethGrindstone","Herbalist","DecontaminationPod","ChargingStation"}},
+        };
+        // reusable SBs for CollectBuildings full toon (inventory/recipes per building)
+        private readonly System.Text.StringBuilder _invSb = new System.Text.StringBuilder(256);
+        private readonly System.Text.StringBuilder _recSb = new System.Text.StringBuilder(128);
+        // reusable collections for cluster methods
+        private readonly Dictionary<long, int[]> _clusterCells = new Dictionary<long, int[]>();
+        private readonly Dictionary<long, Dictionary<string, int>> _clusterSpecies = new Dictionary<long, Dictionary<string, int>>();
+        private readonly List<long> _clusterSorted = new List<long>();
+        // reusable collections for CollectTiles
+        private readonly Dictionary<long, List<(string name, int z)>> _tileOccupants = new Dictionary<long, List<(string, int)>>();
+        private readonly HashSet<long> _tileEntrances = new HashSet<long>();
+        private readonly HashSet<long> _tileSeedlings = new HashSet<long>();
+        private readonly HashSet<long> _tileDeadTiles = new HashSet<long>();
+        private readonly System.Text.StringBuilder _tileSb = new System.Text.StringBuilder(256);
+        // cached science data (refreshed lazily, avoids GetSpec on background thread)
+        private string _cachedScienceJson;
+        private int _cachedSciencePoints = -1;
+        // cached distribution data (avoids GetComponent on background thread)
+        private string _cachedDistributionJson;
+
         public TimberbotRead(
             IGoodService goodService,
             DistrictCenterRegistry districtCenterRegistry,
@@ -107,6 +150,49 @@ namespace Timberbot
             _buildingUnlockingService = buildingUnlockingService;
             _factionNeedService = factionNeedService;
             _notificationSaver = notificationSaver;
+        }
+
+        // Called from main thread (RefreshCachedState) to pre-build data that requires
+        // Unity component access (GetComponent, GetSpec). Background thread reads the cached strings.
+        public void RefreshMainThreadData()
+        {
+            try
+            {
+                // science: iterate BuildingService.Buildings + GetSpec on main thread
+                var sjw = new TimberbotJw(4096);
+                sjw.Reset().OpenObj().Prop("points", _scienceService.SciencePoints);
+                sjw.Arr("unlockables");
+                foreach (var building in _buildingService.Buildings)
+                {
+                    var bs = building.GetSpec<BuildingSpec>();
+                    if (bs == null || bs.ScienceCost <= 0) continue;
+                    var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                    var name = templateSpec?.TemplateName ?? "unknown";
+                    sjw.OpenObj().Prop("name", name).Prop("cost", bs.ScienceCost).Prop("unlocked", _buildingUnlockingService.Unlocked(bs)).CloseObj();
+                }
+                sjw.CloseArr().CloseObj();
+                _cachedScienceJson = sjw.ToString();
+                _cachedSciencePoints = _scienceService.SciencePoints;
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("cache.science", _ex); }
+
+            try
+            {
+                // distribution: iterate DistrictCenterRegistry + GetComponent on main thread
+                var djw = new TimberbotJw(4096);
+                djw.BeginArr();
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                {
+                    var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
+                    if (distSetting == null) continue;
+                    djw.OpenObj().Prop("district", dc.DistrictName).Arr("goods");
+                    foreach (var gs in distSetting.GoodDistributionSettings)
+                        djw.OpenObj().Prop("good", gs.GoodId).Prop("importOption", gs.ImportOption.ToString()).Prop("exportThreshold", gs.ExportThreshold, "F0").CloseObj();
+                    djw.CloseArr().CloseObj();
+                }
+                _cachedDistributionJson = djw.End();
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("cache.distribution", _ex); }
         }
 
         public string GetSettlementName()
@@ -167,9 +253,11 @@ namespace Timberbot
             // --- aggregate counters (built from cached data) ---
             int treeMarkedGrown = 0, treeMarkedSeedling = 0, treeUnmarkedGrown = 0;
             int cropReady = 0, cropGrowing = 0;
-            // per-species breakdowns (avoids client fetching all trees/crops just to count)
-            var treeSpecies = new Dictionary<string, int[]>(); // [markedGrown, unmarkedGrown, seedling]
-            var cropSpecies = new Dictionary<string, int[]>(); // [ready, growing]
+            // per-species breakdowns -- reuse field-level dicts
+            _treeSpecies.Clear();
+            _cropSpecies.Clear();
+            var treeSpecies = _treeSpecies;
+            var cropSpecies = _cropSpecies;
             int occupiedBeds = 0, totalBeds = 0;
             int totalVacancies = 0, assignedWorkers = 0;
             float totalWellbeing = 0f;
@@ -181,8 +269,7 @@ namespace Timberbot
             // Both are "natural resources" in the game. We split them by name to give
             // separate counts. Trees are tracked by marked/unmarked/grown status (for
             // the lumberjack). Crops by ready/growing (for food planning).
-            var _cropNames = new System.Collections.Generic.HashSet<string>
-                { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
+            // _cropNames is a static field, no per-call alloc
             foreach (var c in _cache.NaturalResources.Read)
             {
                 if (c.Cuttable == null) continue; // skip non-cuttable resources
@@ -211,21 +298,13 @@ namespace Timberbot
             // Aggregate housing, employment, alerts, DC location, and role counts -- PER DISTRICT.
             int dcX = 0, dcY = 0, dcZ = 0;
             bool foundDC = false;
-            var roleCounts = new Dictionary<string, int>();
-            // per-district accumulators: [0]=occupiedBeds [1]=totalBeds [2]=assigned [3]=vacancies [4]=unstaffed [5]=unpowered [6]=unreachable
-            var districtStats = new Dictionary<string, int[]>();
-            var districtDCs = new Dictionary<string, (int x, int y, int z, string orientation, int entranceX, int entranceY)>();
-            var roleMap = new Dictionary<string, string[]> {
-                {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
-                {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
-                {"housing", new[]{"Lodge","MiniLodge","DoubleLodge","TripleLodge","Rowhouse","Barrack"}},
-                {"wood", new[]{"Lumberjack","LumberMill","IndustrialLumberMill","Forester"}},
-                {"storage", new[]{"Warehouse","Pile","ReservePile","ReserveWarehouse","ReserveTank"}},
-                {"power", new[]{"PowerWheel","LargePowerWheel","WaterWheel","WindTurbine","LargeWindTurbine","SteamEngine","PowerShaft","Clutch","GravityBattery"}},
-                {"science", new[]{"Inventor","Numbercruncher","Observatory"}},
-                {"production", new[]{"GearWorkshop","Smelter","Metalsmith","Scavenger","Mine","BotAssembler","BotPartFactory","PaperMill","PrintingPress","WoodWorkshop","Centrifuge","ExplosivesFactory","Refinery"}},
-                {"leisure", new[]{"Campfire","Scratcher","Shower","DoubleShower","SwimmingPool","Carousel","MudPit","MudBath","ExercisePlaza","WindTunnel","Motivatorium","Lido","Detailer","ContemplationSpot","Agora","DanceHall","RooftopTerrace","MedicalBed","TeethGrindstone","Herbalist","DecontaminationPod","ChargingStation"}},
-            };
+            _roleCounts.Clear();
+            _districtStats.Clear();
+            _districtDCs.Clear();
+            var roleCounts = _roleCounts;
+            var districtStats = _districtStats;
+            var districtDCs = _districtDCs;
+            var roleMap = _roleMap;
 
             foreach (var c in _cache.Buildings.Read)
             {
@@ -288,17 +367,20 @@ namespace Timberbot
             // critical = any need below warning threshold (immediate danger)
             // Also accumulate per-category wellbeing (avoids client needing separate /api/wellbeing call)
             var beaverNeeds = _factionNeedService.GetBeaverNeeds();
-            var needToGroup = new Dictionary<string, string>();
-            var groupMaxPerBeaver = new Dictionary<string, float>();
+            _needToGroup.Clear();
+            _groupMaxPerBeaver.Clear();
+            var needToGroup = _needToGroup;
+            var groupMaxPerBeaver = _groupMaxPerBeaver;
             foreach (var ns in beaverNeeds)
             {
                 if (string.IsNullOrEmpty(ns.NeedGroupId)) continue;
                 needToGroup[ns.Id] = ns.NeedGroupId;
                 groupMaxPerBeaver[ns.NeedGroupId] = groupMaxPerBeaver.GetValueOrDefault(ns.NeedGroupId) + ns.FavorableWellbeing;
             }
-            var wbGroupTotals = new Dictionary<string, float>();
-            // per-district wellbeing: [0]=totalWellbeing [1]=beaverCount [2]=miserable [3]=critical
-            var districtWb = new Dictionary<string, float[]>();
+            _wbGroupTotals.Clear();
+            _districtWb.Clear();
+            var wbGroupTotals = _wbGroupTotals;
+            var districtWb = _districtWb;
             foreach (var c in _cache.Beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
@@ -452,7 +534,8 @@ namespace Timberbot
 
             // population + resources -- aggregate across all districts before emitting
             int totalFood = 0, totalWater = 0, logStock = 0, plankStock = 0, gearStock = 0;
-            var resourceTotals = new Dictionary<string, int>();
+            _resourceTotals.Clear();
+            var resourceTotals = _resourceTotals;
             foreach (var dc in _cache.Districts)
             {
                 if (dc.Resources != null)
@@ -575,8 +658,9 @@ namespace Timberbot
         // trees is the best place to mark for cutting (high yield per lumberjack trip).
         public object CollectTreeClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
-            var cells = new Dictionary<long, int[]>();
-            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
+            _clusterCells.Clear(); _clusterSpecies.Clear();
+            var cells = _clusterCells;
+            var cellSpecies = _clusterSpecies;
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 if (nr.Cuttable == null) continue;
@@ -595,14 +679,14 @@ namespace Timberbot
                     cells[key][0]++;
             }
 
-            var sorted = new List<long>(cells.Keys);
-            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
+            _clusterSorted.Clear(); _clusterSorted.AddRange(cells.Keys);
+            _clusterSorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
             var jw = _cache.Jw.BeginArr();
-            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            for (int i = 0; i < System.Math.Min(top, _clusterSorted.Count); i++)
             {
-                var s = cells[sorted[i]];
+                var s = cells[_clusterSorted[i]];
                 jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
-                var sp = cellSpecies[sorted[i]];
+                var sp = cellSpecies[_clusterSorted[i]];
                 jw.Obj("species");
                 foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
                 jw.CloseObj().CloseObj();
@@ -612,8 +696,9 @@ namespace Timberbot
 
         public object CollectFoodClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
-            var cells = new Dictionary<long, int[]>();
-            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
+            _clusterCells.Clear(); _clusterSpecies.Clear();
+            var cells = _clusterCells;
+            var cellSpecies = _clusterSpecies;
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 if (nr.Gatherable == null) continue;
@@ -633,14 +718,14 @@ namespace Timberbot
                     cells[key][0]++;
             }
 
-            var sorted = new List<long>(cells.Keys);
-            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
+            _clusterSorted.Clear(); _clusterSorted.AddRange(cells.Keys);
+            _clusterSorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
             var jw = _cache.Jw.BeginArr();
-            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            for (int i = 0; i < System.Math.Min(top, _clusterSorted.Count); i++)
             {
-                var s = cells[sorted[i]];
+                var s = cells[_clusterSorted[i]];
                 jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
-                var sp = cellSpecies[sorted[i]];
+                var sp = cellSpecies[_clusterSorted[i]];
                 jw.Obj("species");
                 foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
                 jw.CloseObj().CloseObj();
@@ -656,36 +741,32 @@ namespace Timberbot
             System.Collections.Generic.HashSet<string> excludeSpecies,
             int dcX, int dcY, int dcZ, int maxDist, int cellSize, int top)
         {
-            var cells = new Dictionary<long, int[]>();
-            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
+            _clusterCells.Clear(); _clusterSpecies.Clear();
             foreach (var nr in resources)
             {
-                // tree clusters: excludeSpecies=null, require Cuttable
-                // food clusters: excludeSpecies=TreeSpecies, require Gatherable
                 if (excludeSpecies == null) { if (nr.Cuttable == null) continue; }
                 else { if (nr.Gatherable == null || excludeSpecies.Contains(nr.Name)) continue; }
                 if (nr.Alive == 0) continue;
 
                 int cx = nr.X / cellSize * cellSize + cellSize / 2;
                 int cy = nr.Y / cellSize * cellSize + cellSize / 2;
-                // proximity filter: skip cells outside range
                 if (nr.Z != dcZ || System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) > maxDist) continue;
                 long k = (long)cx * 100000 + cy;
 
-                if (!cells.ContainsKey(k))
-                { cells[k] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[k] = new Dictionary<string, int>(); }
-                cells[k][1]++;
-                cellSpecies[k][nr.Name] = cellSpecies[k].GetValueOrDefault(nr.Name) + 1;
-                if (nr.Grown != 0) cells[k][0]++;
+                if (!_clusterCells.ContainsKey(k))
+                { _clusterCells[k] = new int[] { 0, 0, cx, cy, nr.Z }; _clusterSpecies[k] = new Dictionary<string, int>(); }
+                _clusterCells[k][1]++;
+                _clusterSpecies[k][nr.Name] = _clusterSpecies[k].GetValueOrDefault(nr.Name) + 1;
+                if (nr.Grown != 0) _clusterCells[k][0]++;
             }
-            var sorted = new List<long>(cells.Keys);
-            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
+            _clusterSorted.Clear(); _clusterSorted.AddRange(_clusterCells.Keys);
+            _clusterSorted.Sort((a, b) => _clusterCells[b][0].CompareTo(_clusterCells[a][0]));
             jw.Arr(key);
-            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            for (int i = 0; i < System.Math.Min(top, _clusterSorted.Count); i++)
             {
-                var s = cells[sorted[i]];
+                var s = _clusterCells[_clusterSorted[i]];
                 jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
-                var sp = cellSpecies[sorted[i]];
+                var sp = _clusterSpecies[_clusterSorted[i]];
                 jw.Obj("species");
                 foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
                 jw.CloseObj().CloseObj();
@@ -874,15 +955,15 @@ namespace Timberbot
                 // inventory: flat string for toon, object for json
                 if (format == "toon")
                 {
-                    var invSb = new System.Text.StringBuilder();
+                    _invSb.Clear();
                     if (c.Inventory != null)
-                        foreach (var kvp in c.Inventory) { if (invSb.Length > 0) invSb.Append('/'); invSb.Append(kvp.Key).Append(':').Append(kvp.Value); }
-                    jw.Prop("inventory", invSb.ToString());
+                        foreach (var kvp in c.Inventory) { if (_invSb.Length > 0) _invSb.Append('/'); _invSb.Append(kvp.Key).Append(':').Append(kvp.Value); }
+                    jw.Prop("inventory", _invSb.ToString());
 
-                    var recSb = new System.Text.StringBuilder();
+                    _recSb.Clear();
                     if (c.Recipes != null)
-                        for (int ri = 0; ri < c.Recipes.Count; ri++) { if (recSb.Length > 0) recSb.Append('/'); recSb.Append(c.Recipes[ri]); }
-                    jw.Prop("recipes", recSb.ToString());
+                        for (int ri = 0; ri < c.Recipes.Count; ri++) { if (_recSb.Length > 0) _recSb.Append('/'); _recSb.Append(c.Recipes[ri]); }
+                    jw.Prop("recipes", _recSb.ToString());
                 }
                 else
                 {
@@ -1136,21 +1217,11 @@ namespace Timberbot
             return _cache.Jw.Result(("endHours", _workingHoursManager.EndHours), ("areWorkingHours", _workingHoursManager.AreWorkingHours));
         }
 
-        // Science points and unlockable buildings with costs and status
+        // Science points and unlockable buildings with costs and status.
+        // Data pre-built on main thread by RefreshMainThreadData() to avoid GetSpec on background thread.
         public object CollectScience(string format = "toon")
         {
-            var jw = _cache.Jw.BeginObj().Prop("points", _scienceService.SciencePoints);
-            jw.Arr("unlockables");
-            foreach (var building in _buildingService.Buildings)
-            {
-                var bs = building.GetSpec<BuildingSpec>();
-                if (bs == null || bs.ScienceCost <= 0) continue;
-                var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
-                var name = templateSpec?.TemplateName ?? "unknown";
-                jw.OpenObj().Prop("name", name).Prop("cost", bs.ScienceCost).Prop("unlocked", _buildingUnlockingService.Unlocked(bs)).CloseObj();
-            }
-            jw.CloseArr().CloseObj();
-            return jw.ToString();
+            return _cachedScienceJson ?? _cache.Jw.Error("not_ready");
         }
 
         // Population wellbeing breakdown by need group (SocialLife, Fun, Nutrition, etc).
@@ -1233,24 +1304,11 @@ namespace Timberbot
             return jw.End();
         }
 
-        // Import/export settings per good per district
+        // Import/export settings per good per district.
+        // Data pre-built on main thread by RefreshMainThreadData() to avoid GetComponent on background thread.
         public object CollectDistribution(string format = "toon")
         {
-            var jw = _cache.Jw.BeginArr();
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
-            {
-                var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
-                if (distSetting == null) continue;
-                jw.OpenObj().Prop("district", dc.DistrictName).Arr("goods");
-                try
-                {
-                    foreach (var gs in distSetting.GoodDistributionSettings)
-                        jw.OpenObj().Prop("good", gs.GoodId).Prop("importOption", gs.ImportOption.ToString()).Prop("exportThreshold", gs.ExportThreshold, "F0").CloseObj();
-                }
-                catch (System.Exception _ex) { TimberbotLog.Error("distribution", _ex); }
-                jw.CloseArr().CloseObj();
-            }
-            return jw.End();
+            return _cachedDistributionJson ?? _cache.Jw.Error("not_ready");
         }
 
         // Tile data for a rectangular region. Returns terrain height, water depth,
@@ -1278,10 +1336,14 @@ namespace Timberbot
             // a path on z=2 with a building on z=3). We track occupant names by z-level.
             // Also track building entrances (for path connectivity analysis),
             // seedlings (trees not yet grown), and dead resources (stumps).
-            var occupants = new Dictionary<long, List<(string name, int z)>>();
-            var entrances = new HashSet<long>();
-            var seedlings = new HashSet<long>();
-            var deadTiles = new HashSet<long>();
+            _tileOccupants.Clear();
+            _tileEntrances.Clear();
+            _tileSeedlings.Clear();
+            _tileDeadTiles.Clear();
+            var occupants = _tileOccupants;
+            var entrances = _tileEntrances;
+            var seedlings = _tileSeedlings;
+            var deadTiles = _tileDeadTiles;
 
             var buildings = _cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
@@ -1378,7 +1440,8 @@ namespace Timberbot
                         if (occList != null)
                         {
                             occList.Sort((a, b) => a.name != b.name ? string.Compare(a.name, b.name) : a.z - b.z);
-                            var sb = new System.Text.StringBuilder();
+                            _tileSb.Clear();
+                            var sb = _tileSb;
                             int si = 0;
                             while (si < occList.Count)
                             {
