@@ -6,11 +6,7 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 ### High
 
-| # | Issue | Cost | Location |
-|---|---|---|---|
-| 1 | **Thread-unsafe:** `CollectTreeClusters` reads `nr.Living.IsDead`, `nr.BlockObject.Coordinates`, `nr.Growable.IsGrown` on background thread instead of cached `nr.Alive`, `nr.X/Y/Z`, `nr.Grown` | crash risk | `TimberbotRead.cs:603,606,616` |
-| 2 | **Thread-unsafe:** `CollectFoodClusters` -- same as #1 | crash risk | `TimberbotRead.cs:644,647,657` |
-| 3 | `CollectSummary` json: `JsonConvert.DeserializeObject` re-parses tree/food cluster JSON via Newtonsoft | O(N) allocs | `TimberbotRead.cs:428` |
+None.
 
 ### Medium
 
@@ -45,6 +41,9 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 | # | Issue | Status |
 |---|---|---|
+| ~~1~~ | ~~Thread-unsafe: `CollectTreeClusters` reads Unity components on background thread~~ | **FIXED** -- uses cached `nr.Alive`, `nr.X/Y/Z`, `nr.Grown` |
+| ~~2~~ | ~~Thread-unsafe: `CollectFoodClusters` -- same as #1~~ | **FIXED** -- same approach |
+| ~~3~~ | ~~`CollectSummary` json: `JsonConvert.DeserializeObject` re-parses cluster JSON~~ | **FIXED** -- `WriteClustersFiltered` builds inline via JW, zero Newtonsoft |
 | ~~23~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | **DISPROVED** -- 0 GC0 across 11.4M calls. 1.8x slower than manual but no alloc |
 
 ## Entity tracking
