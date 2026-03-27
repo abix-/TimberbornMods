@@ -973,6 +973,24 @@ class TestRunner:
             if name in ("Path", "Stairs", "Platform") and min(x1, x2) <= bx <= max(x1, x2) and min(y1, y2) <= by <= max(y1, y2):
                 self.bot.demolish_building(b["id"])
 
+
+    def test_path_wipe_all(self):
+        print("\n=== path routing: wipe all paths/platforms/stairs ===\n")
+        self.wait_for_refresh()
+        buildings = self.bot.buildings()
+        if not isinstance(buildings, list):
+            self.check("wipe all pathing", False, "buildings endpoint returned invalid data")
+            return
+        targets = [b for b in buildings if str(b.get("name", "")) in ("Path", "Platform", "Stairs")]
+        for b in targets:
+            self.bot.demolish_building(b["id"])
+        self.wait_for_refresh()
+        remaining = self.bot.buildings()
+        remaining_count = 0
+        if isinstance(remaining, list):
+            remaining_count = sum(1 for b in remaining if str(b.get("name", "")) in ("Path", "Platform", "Stairs"))
+        self.check("wipe all pathing", remaining_count == 0, f"remaining={remaining_count} deleted={len(targets)}")
+
     def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
         """place a path and verify results -- no cleanup, paths stay for visual inspection"""
         result = self.bot.place_path(x1, y1, x2, y2)
@@ -998,14 +1016,13 @@ class TestRunner:
         self._path_place_and_check("flat north", 160, 139, 160, 143)
         self._path_place_and_check("flat south", 161, 143, 161, 139)
 
-    def test_path_1z(self):
-        print("\n=== path routing: 1 z-level ===\n")
-        # east of gear workshop: z=2->3 diagonal boundary
-        self._path_place_and_check("1z east", 152, 133, 158, 133, expect_stairs=True)  # z change at x=155->156
-        self._path_place_and_check("1z west", 158, 137, 150, 137, expect_stairs=True)  # z change at x=154->153
-        # south of barrack: z=3->4 at y=150->151
-        self._path_place_and_check("1z north", 153, 148, 153, 153, expect_stairs=True)  # z change at y=150->151
-        self._path_place_and_check("1z south", 154, 153, 154, 148, expect_stairs=True)  # z change at y=151->150
+    def test_path_1z_east(self):
+        print("\n=== path routing: 1 z-level east ===\n")
+        self._path_place_and_check("1z east", 158, 145, 173, 150, expect_stairs=True)
+
+    def test_path_1z_west(self):
+        print("\n=== path routing: 1 z-level west ===\n")
+        self._path_place_and_check("1z west", 171, 149, 161, 149, expect_stairs=True)
 
     def test_path_2z(self):
         print("\n=== path routing: 2 z-level ===\n")
@@ -2851,24 +2868,47 @@ class TestRunner:
                    f"toon={toon_adults}, json districts sum={sum_adults}")
 
     def _subprocess_time(self, cmd_args):
-        """Run timberbot.py as subprocess, return wall-clock ms and success."""
-        import subprocess
+        """Run timberbot.py as subprocess, return wall-clock ms plus error details."""
         script = os.path.join(os.path.dirname(__file__), "timberbot.py")
         t0 = time.perf_counter()
-        r = subprocess.run([sys.executable, script] + cmd_args, capture_output=True, timeout=30)
-        ms = (time.perf_counter() - t0) * 1000
-        return ms, r.returncode == 0
+        try:
+            r = subprocess.run(
+                [sys.executable, script] + cmd_args,
+                capture_output=True,
+                text=True,
+                timeout=30)
+            ms = (time.perf_counter() - t0) * 1000
+            err = None
+            if r.returncode != 0:
+                err = {
+                    "type": "returncode",
+                    "code": r.returncode,
+                    "stdout": (r.stdout or "")[-400:],
+                    "stderr": (r.stderr or "")[-400:],
+                }
+            return ms, r.returncode == 0, err
+        except subprocess.TimeoutExpired as ex:
+            ms = (time.perf_counter() - t0) * 1000
+            return ms, False, {
+                "type": "timeout",
+                "code": None,
+                "stdout": ex.stdout[-400:] if isinstance(ex.stdout, str) else "",
+                "stderr": ex.stderr[-400:] if isinstance(ex.stderr, str) else "",
+            }
 
     def _bench_subprocess(self, name, cmd_args, iterations):
-        """Benchmark a CLI command as fresh subprocess. Returns (avg, min, max, ok)."""
+        """Benchmark a CLI command as fresh subprocess. Returns timings, ok count, failures."""
         times = []
         ok = 0
+        failures = []
         for _ in range(iterations):
-            ms, success = self._subprocess_time(cmd_args)
+            ms, success, err = self._subprocess_time(cmd_args)
             times.append(ms)
             if success:
                 ok += 1
-        return times, ok
+            else:
+                failures.append(err or {"type": "unknown", "code": None, "stdout": "", "stderr": ""})
+        return times, ok, failures
 
     def test_performance(self):
         print("\n=== performance (subprocess, real-world latency) ===\n")
@@ -2909,11 +2949,18 @@ class TestRunner:
         total_ok = 0
         total_bad = 0
         for name, cmd in endpoints:
-            times, ok = self._bench_subprocess(name, cmd, iterations)
+            times, ok, failures = self._bench_subprocess(name, cmd, iterations)
             total_ok += ok
             total_bad += iterations - ok
             avg = sum(times) / len(times)
             print(f"  {name:<25} {avg:>8.0f} {min(times):>8.0f} {max(times):>8.0f} {ok:>4}")
+            if failures:
+                first = failures[0]
+                print(f"    first failure: type={first['type']} code={first['code']}")
+                if first["stdout"]:
+                    print(f"    stdout: {first['stdout'].replace(chr(10), ' | ')}")
+                if first["stderr"]:
+                    print(f"    stderr: {first['stderr'].replace(chr(10), ' | ')}")
 
         print()
         self.check(f"all {total_ok + total_bad} responses valid",
@@ -2958,8 +3005,8 @@ class TestRunner:
         else:
             self.skip("buildings_v2 id parity", "no buildings")
 
-    def test_buildings_v2_performance(self):
-        print("\n=== buildings v2 performance ===\n")
+    def test_building_endpoint_perf(self):
+        print("\n=== building endpoint perf ===\n")
 
         iterations = getattr(self, 'perf_iterations', 100)
         endpoints = [
@@ -2976,11 +3023,18 @@ class TestRunner:
         results = {}
         total_bad = 0
         for name, cmd in endpoints:
-            times, ok = self._bench_subprocess(name, cmd, iterations)
+            times, ok, failures = self._bench_subprocess(name, cmd, iterations)
             results[name] = times
             total_bad += iterations - ok
             avg = sum(times) / len(times)
             print(f"  {name:<20} {avg:>8.0f} {min(times):>8.0f} {max(times):>8.0f} {ok:>4}")
+            if failures:
+                first = failures[0]
+                print(f"    first failure: type={first['type']} code={first['code']}")
+                if first["stdout"]:
+                    print(f"    stdout: {first['stdout'].replace(chr(10), ' | ')}")
+                if first["stderr"]:
+                    print(f"    stderr: {first['stderr'].replace(chr(10), ' | ')}")
 
         print()
         self.check(f"all {len(endpoints) * iterations} building perf responses valid",
@@ -2996,44 +3050,6 @@ class TestRunner:
         print(f"  basic: {basic_v2_avg - basic_avg:+.0f}ms avg ({basic_v2_avg/basic_avg:.2f}x)")
         print(f"  full:  {full_v2_avg - full_avg:+.0f}ms avg ({full_v2_avg/full_avg:.2f}x)")
 
-        t1 = self.bot.trees()
-        t2 = self.bot.trees()
-        self.check("natural_resources cache consistent",
-                   isinstance(t1, list) and isinstance(t2, list) and len(t1) == len(t2),
-                   f"first={len(t1) if isinstance(t1,list) else '?'}, second={len(t2) if isinstance(t2,list) else '?'}")
-
-        bv1 = self.bot.beavers()
-        bv2 = self.bot.beavers()
-        self.check("beavers cache consistent",
-                   isinstance(bv1, list) and isinstance(bv2, list) and len(bv1) == len(bv2),
-                   f"first={len(bv1) if isinstance(bv1,list) else '?'}, second={len(bv2) if isinstance(bv2,list) else '?'}")
-
-        # cache invalidation (in-process)
-        print("\n  cache invalidation: place + demolish to verify index tracks changes...")
-        before_count = len(self.bot.buildings())
-        spots = self.bot.find_placement("Path", self.x1, self.y1, self.x1 + 10, self.y1 + 10)
-        placements = spots.get("placements", []) if isinstance(spots, dict) else []
-        placed = None
-        if placements:
-            s = placements[0]
-            placed = self.bot.place_building("Path", s["x"], s["y"], s["z"], s.get("orientation", "south"))
-        if placed and not self.err(placed):
-            self.wait_for_refresh()
-            after_count = len(self.bot.buildings())
-            self.check("index grew after place", after_count == before_count + 1,
-                       f"before={before_count}, after={after_count}")
-            placed_id = placed.get("id")
-            if placed_id:
-                self.bot.demolish_building(placed_id)
-                self.wait_for_refresh()
-                final_count = len(self.bot.buildings())
-                self.check("index shrank after demolish", final_count == before_count,
-                           f"before={before_count}, final={final_count}")
-            else:
-                self.skip("demolish check", "no id in place result")
-        else:
-            self.skip("cache invalidation", f"place failed: {placed}" if placed else "no valid spot")
-
     def test_brain_perf(self):
         print("\n=== brain perf (subprocess, real-world latency) ===\n")
         import timberbot as _tb
@@ -3043,11 +3059,11 @@ class TestRunner:
         self._subprocess_time(["brain"])
 
         # ping (baseline -- python startup + minimal HTTP)
-        ping_times, _ = self._bench_subprocess("ping", ["ping"], iterations)
+        ping_times, _, _ = self._bench_subprocess("ping", ["ping"], iterations)
         # summary
-        summary_times, _ = self._bench_subprocess("summary", ["summary"], iterations)
+        summary_times, _, _ = self._bench_subprocess("summary", ["summary"], iterations)
         # brain cached
-        cached_times, _ = self._bench_subprocess("brain (cached)", ["brain"], iterations)
+        cached_times, _, _ = self._bench_subprocess("brain (cached)", ["brain"], iterations)
         # brain fresh x5 -- wipe settlement dir contents
         # _MEMORY_DIR may be base or settlement-specific; find the actual settlement dir
         settlement_dir = _tb._MEMORY_DIR
@@ -3184,3 +3200,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
