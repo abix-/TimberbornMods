@@ -1261,7 +1261,7 @@ def _launch(args):
         sys.exit(1)
 
     # build launch command with auto-load args
-    cmd = [_TIMBERBORN_EXE, "--tb-settlement", settlement, "--tb-save", save_name]
+    cmd = [_TIMBERBORN_EXE, "-skipModManager", "--tb-settlement", settlement, "--tb-save", save_name]
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
     subprocess.Popen(cmd, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
 
