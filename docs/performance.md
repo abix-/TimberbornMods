@@ -4,16 +4,48 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 ## Open issues
 
-| # | Issue | Severity | Cost | Location |
-|---|---|---|---|---|
-| ~~1~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | -- | -- | **DISPROVED** -- 0 GC0 across 11.4M calls (10K iter benchmark). 1.8x slower than manual but no alloc |
-| 2 | Unity GC spikes freeze all threads | Low (unavoidable) | random 0.5-2s | Unity runtime |
-| 3 | `sb.ToString()` alloc per HTTP response | Low (unavoidable) | 1 string per request, 100-500KB | `TimberbotJw.ToString()` |
-| 4 | District refresh allocates every cycle | Low | new CachedDistrict + Dict per district per 1s | `TimberbotEntityCache.cs:377-421` |
-| 5 | Bots inflate beaver index without needing needs | Info | linear with bot count | late-game risk |
-| 6 | Power endpoint iterates all buildings per call | Info | linear with building count | late-game risk |
+### High
 
-No actionable issues. All remaining items are accepted or unavoidable.
+| # | Issue | Cost | Location |
+|---|---|---|---|
+| 1 | **Thread-unsafe:** `CollectTreeClusters` reads `nr.Living.IsDead`, `nr.BlockObject.Coordinates`, `nr.Growable.IsGrown` on background thread instead of cached `nr.Alive`, `nr.X/Y/Z`, `nr.Grown` | crash risk | `TimberbotRead.cs:603,606,616` |
+| 2 | **Thread-unsafe:** `CollectFoodClusters` -- same as #1 | crash risk | `TimberbotRead.cs:644,647,657` |
+| 3 | `CollectSummary` json: `JsonConvert.DeserializeObject` re-parses tree/food cluster JSON via Newtonsoft | O(N) allocs | `TimberbotRead.cs:428` |
+
+### Medium
+
+| # | Issue | Cost | Location |
+|---|---|---|---|
+| 4 | `CollectSummary`: ~20 temp collections per call (6 Dicts, 1 HashSet+11 strings, roleMap 9 arrays, 3 more Dicts) | ~20 objects | `TimberbotRead.cs:171-301` |
+| 5 | `CollectBuildings` full toon: `new StringBuilder` x2 per building (invSb, recSb) + `.ToString()` | 2N SBs + 2N strings | `TimberbotRead.cs:857-865` |
+| 6 | `CollectTreeClusters`: `new Dictionary` x2 + `new int[]` per cell + `new List` + Sort | many per call | `TimberbotRead.cs:598-620` |
+| 7 | `CollectFoodClusters`: same as #6 | many per call | `TimberbotRead.cs:638-661` |
+| 8 | `CollectTiles`: `new Dictionary` + 3 `new HashSet` + `new List` per occupied tile + `new StringBuilder` per toon tile | many per call | `TimberbotRead.cs:1261-1376` |
+| 9 | **Thread-questionable:** `CollectDistribution` calls `dc.GetComponent<DistrictDistributionSetting>()` on background thread | unknown | `TimberbotRead.cs:1222` |
+| 10 | **Thread-questionable:** `CollectScience` iterates `_buildingService.Buildings` + `GetSpec<T>()` on background thread | N GetSpec calls | `TimberbotRead.cs:1124-1130` |
+| 11 | District refresh allocates `new CachedDistrict` + `new Dictionary` per district every 1s | ~3 objects/sec | `TimberbotEntityCache.cs:377-421` |
+
+### Low
+
+| # | Issue | Cost | Location |
+|---|---|---|---|
+| 12 | `CollectSummary` toon: `$"..."` interpolations for beds, workers, alerts + `new List<string>` + `string.Join` | ~7 strings | `TimberbotRead.cs:515-538` |
+| 13 | `CollectAlerts`: `$"{c.AssignedWorkers}/{c.DesiredWorkers}"` per unstaffed building | N strings | `TimberbotRead.cs:563` |
+| 14 | `CollectBuildings` basic: `$"{c.AssignedWorkers}/{c.DesiredWorkers}"` per building with workers | N strings | `TimberbotRead.cs:816` |
+| 15 | `CollectBeavers` basic: string concat `critical + "+" + n.Id` per critical need | N strings | `TimberbotRead.cs:1019-1020` |
+| 16 | `CollectPowerNetworks`: `new Dictionary` + `new PowerNetwork` + `new List<int>` per network | ~N networks | `TimberbotRead.cs:1076-1084` |
+| 17 | `CollectWellbeing`: 4 Dicts + `new List<NeedSpec>` per group | ~10 objects | `TimberbotRead.cs:1143-1155` |
+| 18 | `CollectNotifications`: `n.Subject.ToString()` + `n.Description.ToString()` per notification | 2N strings | `TimberbotRead.cs:1209` |
+| 19 | `CollectDistribution`: `gs.ImportOption.ToString()` enum per good per district | N strings | `TimberbotRead.cs:1228` |
+| 20 | **Thread-questionable:** `CollectWellbeing`/`CollectSummary` call `_factionNeedService.GetBeaverNeeds()` on background thread | unknown | `TimberbotRead.cs:290,1142` |
+| 21 | Unity GC spikes freeze all threads | random 0.5-2s | Unity runtime (unavoidable) |
+| 22 | `sb.ToString()` alloc per HTTP response | 1 string, 100-500KB | `TimberbotJw.ToString()` (unavoidable) |
+
+### Closed
+
+| # | Issue | Status |
+|---|---|---|
+| ~~23~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | **DISPROVED** -- 0 GC0 across 11.4M calls. 1.8x slower than manual but no alloc |
 
 ## Entity tracking
 
