@@ -12,11 +12,11 @@ Related background:
 
 ## Current status
 
-The v2 read path is no longer just a design spike. It is now the native implementation behind the canonical `/api/v2/*` surface.
+The fresh-on-request read path is no longer just a design spike. It is now the native implementation behind the canonical `/api/*` surface.
 
 Implemented:
 
-- canonical `/api/v2/*` GET routing
+- canonical `/api/*` GET routing
 - `TimberbotReadV2` as the single v2 read service
 - generic collection, value, paging, and snapshot helpers folded into [`TimberbotReadV2.cs`](../timberbot/src/TimberbotReadV2.cs)
 - removal of the temporary top-level helper files:
@@ -33,8 +33,8 @@ Implemented:
 Important implementation note:
 
 - `TimberbotReadV2` no longer calls `_legacyRead.*`
-- `/api/*` still exists as the parity oracle
-- `/api/v2/*` no longer depends on `TimberbotRead` internally
+- `/api/*` is now the only live read surface
+- `TimberbotRead` and `/api/v1/*` were removed after parity + fixture capture
 
 The new harness is intentionally separate from `test_validation.py` and covers:
 
@@ -60,14 +60,15 @@ Console behavior is quiet-by-default:
 
 Current live status after build, reload, and retest:
 
-- full `/api/v2/*` smoke: `24 passed, 0 failed`
-- full `/api/*` vs `/api/v2/*` parity: `442 passed, 0 failed`
+- final `/api/v1/*` vs `/api/*` parity run before removal: `318 passed, 0 failed`
+- post-cut `/api/*` full suite: `64 passed, 0 failed, 33 skipped`
 
 Important concrete progress:
 
 - the stale legacy building-row bug was fixed
-- `GET /api/buildings` and `GET /api/v2/buildings` now match across the full supported matrix
+- `GET /api/buildings` matched legacy across the full supported matrix before `v1` removal
 - `TimberbotReadV2` no longer contains any `_legacyRead.*` calls
+- `TimberbotRead` has been deleted from the mod
 - the generic v2 helpers are now internal to `TimberbotReadV2`, not separate top-level classes
 
 Latest verified artifact files:

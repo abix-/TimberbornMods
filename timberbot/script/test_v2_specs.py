@@ -4,8 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class EndpointSpec:
     name: str
-    legacy_path: str
-    v2_path: str
+    path: str
     group: str
     supports_format: bool = False
     supports_pagination: bool = False
@@ -26,49 +25,49 @@ class FreshnessScenario:
 
 
 ENDPOINT_SPECS = [
-    EndpointSpec("ping", "/api/ping", "/api/v2/ping", "scalar"),
-    EndpointSpec("settlement", "/api/settlement", "/api/v2/settlement", "scalar"),
-    EndpointSpec("population", "/api/population", "/api/v2/population", "scalar"),
-    EndpointSpec("time", "/api/time", "/api/v2/time", "scalar"),
-    EndpointSpec("weather", "/api/weather", "/api/v2/weather", "scalar"),
-    EndpointSpec("workhours", "/api/workhours", "/api/v2/workhours", "scalar"),
-    EndpointSpec("speed", "/api/speed", "/api/v2/speed", "scalar"),
-    EndpointSpec("prefabs", "/api/prefabs", "/api/v2/prefabs", "scalar"),
-    EndpointSpec("summary", "/api/summary", "/api/v2/summary", "format", supports_format=True),
-    EndpointSpec("resources", "/api/resources", "/api/v2/resources", "format", supports_format=True),
-    EndpointSpec("districts", "/api/districts", "/api/v2/districts", "format", supports_format=True),
-    EndpointSpec("distribution", "/api/distribution", "/api/v2/distribution", "format", supports_format=True),
-    EndpointSpec("science", "/api/science", "/api/v2/science", "format", supports_format=True),
-    EndpointSpec("wellbeing", "/api/wellbeing", "/api/v2/wellbeing", "format", supports_format=True),
-    EndpointSpec("power", "/api/power", "/api/v2/power", "format", supports_format=True),
-    EndpointSpec("tree_clusters", "/api/tree_clusters", "/api/v2/tree_clusters", "format", supports_format=True),
-    EndpointSpec("food_clusters", "/api/food_clusters", "/api/v2/food_clusters", "format", supports_format=True),
-    EndpointSpec("alerts", "/api/alerts", "/api/v2/alerts", "paged", supports_format=True, supports_pagination=True),
-    EndpointSpec("notifications", "/api/notifications", "/api/v2/notifications", "paged", supports_format=True, supports_pagination=True),
+    EndpointSpec("ping", "/api/ping", "scalar"),
+    EndpointSpec("settlement", "/api/settlement", "scalar"),
+    EndpointSpec("population", "/api/population", "scalar"),
+    EndpointSpec("time", "/api/time", "scalar"),
+    EndpointSpec("weather", "/api/weather", "scalar"),
+    EndpointSpec("workhours", "/api/workhours", "scalar"),
+    EndpointSpec("speed", "/api/speed", "scalar"),
+    EndpointSpec("prefabs", "/api/prefabs", "scalar"),
+    EndpointSpec("summary", "/api/summary", "format", supports_format=True),
+    EndpointSpec("resources", "/api/resources", "format", supports_format=True),
+    EndpointSpec("districts", "/api/districts", "format", supports_format=True),
+    EndpointSpec("distribution", "/api/distribution", "format", supports_format=True),
+    EndpointSpec("science", "/api/science", "format", supports_format=True),
+    EndpointSpec("wellbeing", "/api/wellbeing", "format", supports_format=True),
+    EndpointSpec("power", "/api/power", "format", supports_format=True),
+    EndpointSpec("tree_clusters", "/api/tree_clusters", "format", supports_format=True),
+    EndpointSpec("food_clusters", "/api/food_clusters", "format", supports_format=True),
+    EndpointSpec("alerts", "/api/alerts", "paged", supports_format=True, supports_pagination=True),
+    EndpointSpec("notifications", "/api/notifications", "paged", supports_format=True, supports_pagination=True),
     EndpointSpec(
-        "buildings", "/api/buildings", "/api/v2/buildings", "detail_list",
+        "buildings", "/api/buildings", "detail_list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, supports_detail_basic=True, supports_detail_full=True,
         supports_detail_id=True, projection_backed=True, compare_mode="list",
     ),
     EndpointSpec(
-        "beavers", "/api/beavers", "/api/v2/beavers", "detail_list",
+        "beavers", "/api/beavers", "detail_list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, supports_detail_basic=True, supports_detail_full=True,
         supports_detail_id=True, compare_mode="list",
     ),
     EndpointSpec(
-        "trees", "/api/trees", "/api/v2/trees", "list",
+        "trees", "/api/trees", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, compare_mode="list",
     ),
     EndpointSpec(
-        "crops", "/api/crops", "/api/v2/crops", "list",
+        "crops", "/api/crops", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, compare_mode="list",
     ),
     EndpointSpec(
-        "gatherables", "/api/gatherables", "/api/v2/gatherables", "list",
+        "gatherables", "/api/gatherables", "list",
         supports_format=True, supports_pagination=True, supports_name_filter=True,
         supports_radius_filter=True, compare_mode="list",
     ),

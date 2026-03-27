@@ -8,7 +8,7 @@ TimberbornMods/
     src/                              C# mod (runs inside the game)
       TimberbotService.cs               Lifecycle, settings, orchestration (7 DI params)
       TimberbotEntityCache.cs           Double-buffered entity caching, cached classes, indexes (5 DI params)
-      TimberbotRead.cs                  All GET read endpoints (19 DI params)
+      TimberbotReadV2.cs                All GET read endpoints and native snapshots
       TimberbotWrite.cs                 All POST write endpoints (22 DI params)
       TimberbotPlacement.cs             Building placement, path routing, terrain (14 DI params)
       TimberbotWebhook.cs               Batched push event notifications, circuit breaker (5 DI params)
@@ -65,9 +65,9 @@ For full architecture details see [architecture.md](architecture.md).
 
 ## Adding a new GET endpoint
 
-1. Add a `Collect*` method to `TimberbotRead.cs` -- reads from `_cache.Buildings.Read` / `_cache.Beavers.Read` / `_cache.NaturalResources.Read`
+1. Add a `Collect*` method to `TimberbotReadV2.cs`
 2. Add the route to `RouteRequest()` in `TimberbotHttpServer.cs`
-3. If you need new game services, inject them via the `TimberbotRead` constructor
+3. If you need new game services, inject them via the `TimberbotReadV2` constructor
 4. Add a matching method to the `Timberbot` class in `timberbot/script/timberbot.py`
 
 ## Adding a new POST endpoint

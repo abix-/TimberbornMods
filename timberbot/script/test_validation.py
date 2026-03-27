@@ -975,21 +975,64 @@ class TestRunner:
 
 
     def test_path_wipe_all(self):
-        print("\n=== path routing: wipe all paths/platforms/stairs ===\n")
+        print("\n=== wipe all buildings and crops ===\n")
         self.wait_for_refresh()
+        map_info = self.bot.tiles()
+        map_size = map_info.get("mapSize", {}) if isinstance(map_info, dict) else {}
+        map_x = map_size.get("x", 256)
+        map_y = map_size.get("y", 256)
+        map_z = map_size.get("z", 23)
         buildings = self.bot.buildings()
         if not isinstance(buildings, list):
-            self.check("wipe all pathing", False, "buildings endpoint returned invalid data")
+            self.check("wipe all buildings and crops", False, "buildings endpoint returned invalid data")
             return
-        targets = [b for b in buildings if str(b.get("name", "")) in ("Path", "Platform", "Stairs")]
+        targets = [b for b in buildings if b.get("id") is not None]
         for b in targets:
             self.bot.demolish_building(b["id"])
+        for z in range(map_z):
+            self.bot.clear_planting(0, 0, map_x - 1, map_y - 1, z)
         self.wait_for_refresh()
         remaining = self.bot.buildings()
+        remaining_crops = self.bot.crops()
         remaining_count = 0
+        remaining_crop_count = 0
         if isinstance(remaining, list):
-            remaining_count = sum(1 for b in remaining if str(b.get("name", "")) in ("Path", "Platform", "Stairs"))
-        self.check("wipe all pathing", remaining_count == 0, f"remaining={remaining_count} deleted={len(targets)}")
+            remaining_count = len([b for b in remaining if b.get("id") is not None])
+        if isinstance(remaining_crops, list):
+            remaining_crop_count = len(remaining_crops)
+        self.check(
+            "wipe all buildings and crops",
+            remaining_count == 0 and remaining_crop_count == 0,
+            f"remaining_buildings={remaining_count} remaining_crops={remaining_crop_count} deleted_buildings={len(targets)}"
+        )
+
+
+    def _path_place_lumberjacks_north(self, x1, y1, x2, y2):
+        """place a lumberjack flag 1 tile north of each endpoint if not already present"""
+        prefab = self.prefab("LumberjackFlag")
+        buildings = self.bot.buildings()
+        existing = set()
+        if isinstance(buildings, list):
+            for b in buildings:
+                if str(b.get("name", "")) == "LumberjackFlag":
+                    existing.add((b.get("x"), b.get("y"), b.get("z")))
+        endpoints = {(x1, y1), (x2, y2)}
+        for ex, ey in endpoints:
+            bx = ex
+            by = ey + 1
+            tiles = self.bot.tiles(bx, by, bx, by)
+            tile_list = tiles.get("tiles", []) if isinstance(tiles, dict) else []
+            if not tile_list:
+                continue
+            bz = tile_list[0].get("terrain", 0)
+            if bz <= 0:
+                continue
+            if (bx, by, bz) in existing:
+                continue
+            result = self.bot.place_building(prefab, bx, by, bz, "south")
+            if isinstance(result, dict) and result.get("id"):
+                existing.add((bx, by, bz))
+                self.wait_for_refresh()
 
     def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
         """place a path and verify results -- no cleanup, paths stay for visual inspection"""
@@ -1018,20 +1061,63 @@ class TestRunner:
 
     def test_path_1z_east(self):
         print("\n=== path routing: 1 z-level east ===\n")
-        self._path_place_and_check("1z east", 158, 145, 173, 150, expect_stairs=True)
+        self._path_demolish_range(160, 144, 177, 151)
+        self._path_place_lumberjacks_north(161, 145, 176, 150)
+        self._path_place_and_check("1z east", 161, 145, 176, 150, expect_stairs=True)
 
     def test_path_1z_west(self):
         print("\n=== path routing: 1 z-level west ===\n")
+        self._path_demolish_range(160, 148, 172, 150)
+        self._path_place_lumberjacks_north(171, 149, 161, 149)
         self._path_place_and_check("1z west", 171, 149, 161, 149, expect_stairs=True)
+
+    def test_path_1z_north(self):
+        print("\n=== path routing: 1 z-level north ===\n")
+        # isolated ridge north of the flat-path area: z=3 at y=149-150, z=4 at y=151+
+        self._path_demolish_range(158, 148, 160, 155)
+        self._path_place_and_check("1z north", 159, 149, 159, 154, expect_stairs=True)
+
+    def test_path_1z_south(self):
+        print("\n=== path routing: 1 z-level south ===\n")
+        # separate vertical slice to avoid reusing the north test's connector
+        self._path_demolish_range(162, 144, 164, 155)
+        self._path_place_and_check("1z south", 163, 154, 163, 145, expect_stairs=True)
+
+    def test_path_1z(self):
+        print("\n=== path routing: 1 z-level ===\n")
+        self.test_path_1z_east()
+        self.test_path_1z_west()
+        self.test_path_1z_north()
+        self.test_path_1z_south()
+
+    def test_path_2z_north(self):
+        print("\n=== path routing: 2 z-level north ===\n")
+        # behind lumber mill: z=2->4 at y=149->150
+        self._path_demolish_range(136, 145, 138, 153)
+        self._path_place_and_check("2z north", 137, 146, 137, 152, expect_stairs=True, expect_platforms=True)
+
+    def test_path_2z_south(self):
+        print("\n=== path routing: 2 z-level south ===\n")
+        self._path_demolish_range(136, 145, 138, 153)
+        self._path_place_and_check("2z south", 137, 152, 137, 146, expect_stairs=True, expect_platforms=True)
+
+    def test_path_2z_east(self):
+        print("\n=== path routing: 2 z-level east ===\n")
+        # west of barrack: z=6->4 at x=150->151
+        self._path_demolish_range(147, 153, 155, 155)
+        self._path_place_and_check("2z east", 148, 154, 154, 154, expect_stairs=True, expect_platforms=True)
+
+    def test_path_2z_west(self):
+        print("\n=== path routing: 2 z-level west ===\n")
+        self._path_demolish_range(147, 154, 155, 156)
+        self._path_place_and_check("2z west", 154, 155, 148, 155, expect_stairs=True, expect_platforms=True)
 
     def test_path_2z(self):
         print("\n=== path routing: 2 z-level ===\n")
-        # behind lumber mill: z=2->4 at y=149->150
-        self._path_place_and_check("2z north", 137, 146, 137, 152, expect_stairs=True, expect_platforms=True)
-        self._path_place_and_check("2z south", 138, 152, 138, 146, expect_stairs=True, expect_platforms=True)
-        # west of barrack: z=6->4 at x=150->151
-        self._path_place_and_check("2z east", 148, 154, 154, 154, expect_stairs=True, expect_platforms=True)
-        self._path_place_and_check("2z west", 154, 155, 148, 155, expect_stairs=True, expect_platforms=True)
+        self.test_path_2z_north()
+        self.test_path_2z_south()
+        self.test_path_2z_east()
+        self.test_path_2z_west()
 
     def test_path_errors(self):
         print("\n=== path routing: errors ===\n")
@@ -1042,11 +1128,10 @@ class TestRunner:
                    json.dumps(result)[:100])
 
     def test_path_astar_diagonal(self):
-        """A* routes from gear workshop (147,135) 200 tiles north-east."""
+        """A* routes from the bottom-left corner to the top-right corner."""
         print("\n=== path routing: A* diagonal ===\n")
-        # near gear workshop (147,135), offset south 10 east 5
-        x1, y1 = 152, 125
-        x2, y2 = 255, 255
+        x1, y1 = 0, 0
+        x2, y2 = self.map_x - 1, self.map_y - 1
         result = self.bot.place_path(x1, y1, x2, y2)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
         self.check("diagonal: paths placed via A*",

@@ -6,8 +6,7 @@
 // every N seconds and drains queued POST requests on the Unity main thread.
 //
 // API logic lives in separate classes, each with their own DI:
-//   TimberbotEntityCache   -- Double-buffered entity caching, indexes, RefreshCachedState
-//   TimberbotRead          -- All GET read endpoints
+//   TimberbotEntityRegistry -- Entity lookup + tracked refs for writes and v2 snapshots
 //   TimberbotWrite         -- All POST write endpoints
 //   TimberbotPlacement     -- Building placement, path routing, terrain
 //   TimberbotWebhook       -- Batched push event notifications
@@ -28,10 +27,10 @@ namespace Timberbot
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
         private readonly EventBus _eventBus;
-        public readonly TimberbotEntityCache Cache;
+        public readonly TimberbotEntityRegistry Registry;
+        public readonly TimberbotEntityRegistry Cache;
         public readonly TimberbotReadV2 ReadV2;
         public readonly TimberbotWebhook WebhookMgr;
-        public readonly TimberbotRead Read;
         public readonly TimberbotWrite Write;
         public readonly TimberbotPlacement Placement;
         public readonly TimberbotDebug DebugTool;
@@ -48,19 +47,18 @@ namespace Timberbot
 
         public TimberbotService(
             EventBus eventBus,
-            TimberbotEntityCache cache,
+            TimberbotEntityRegistry registry,
             TimberbotReadV2 readV2,
             TimberbotWebhook webhookMgr,
-            TimberbotRead read,
             TimberbotWrite write,
             TimberbotPlacement placement,
             TimberbotDebug debug)
         {
             _eventBus = eventBus;
-            Cache = cache;
+            Registry = registry;
+            Cache = registry;
             ReadV2 = readV2;
             WebhookMgr = webhookMgr;
-            Read = read;
             Write = write;
             Placement = placement;
             DebugTool = debug;
@@ -87,14 +85,14 @@ namespace Timberbot
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
             TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
-            Cache.WebhookMgr = WebhookMgr;  // cache pushes webhook events on entity lifecycle
+            Registry.WebhookMgr = WebhookMgr;  // registry pushes webhook events on entity lifecycle
             DebugTool.Service = this;         // debug needs Service reference for endpoint benchmarks
             _eventBus.Register(this);
             WebhookMgr.Register();            // subscribe to 68 game events
             ReadV2.Register();           // subscribe to entity lifecycle events for v2 snapshots
-            Cache.Register();                 // subscribe to entity lifecycle events
+            Registry.Register();              // subscribe to entity lifecycle events
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
-            Cache.BuildAllIndexes();           // populate indexes from existing entities (uses CleanName)
+            Registry.BuildAllIndexes();        // populate indexes from existing entities (uses CleanName)
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
@@ -139,7 +137,7 @@ namespace Timberbot
         public void Unload()
         {
             ReadV2.Unregister();
-            Cache.Unregister();
+            Registry.Unregister();
             WebhookMgr.Unregister();
             _eventBus.Unregister(this);
             _server?.Stop();
@@ -150,13 +148,8 @@ namespace Timberbot
         private float _lastRefreshTime = 0f;
 
         // Called every frame by Unity. This is the mod's main loop.
-        // Three things happen each frame:
-        //   1. Cache refresh (every _refreshInterval seconds, default 1s):
-        //      reads mutable state from all entities, swaps double buffers
-        //   2. Drain POST requests (up to 10/frame):
-        //      executes queued write commands from the HTTP server
-        //   3. Flush webhooks (every BatchSeconds, default 200ms):
-        //      sends batched events to registered webhook URLs
+        // It drains POST requests, processes pending fresh-read publishes, keeps the
+        // remaining registry-backed read helpers refreshed, and flushes webhooks.
         public void UpdateSingleton()
         {
             float now = Time.realtimeSinceStartup;
@@ -166,7 +159,6 @@ namespace Timberbot
             {
                 _lastRefreshTime = now;
                 Cache.RefreshCachedState();
-                Read.RefreshMainThreadData();
             }
             WebhookMgr.FlushWebhooks(now);
         }

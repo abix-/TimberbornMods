@@ -214,11 +214,11 @@ class Timberbot:
         return self._get("/api/buildings", params=params)
 
     def buildings_v2(self, limit=0, offset=0, detail="basic"):
-        """All buildings from the fresh-on-request v2 snapshot endpoint."""
+        """Compatibility alias for the native /api/buildings snapshot path."""
         params = {"limit": limit, "offset": offset}
         if detail != "basic":
             params["detail"] = detail
-        return self._get("/api/v2/buildings", params=params)
+        return self._get("/api/buildings", params=params)
 
     def trees(self, limit=0, offset=0):
         """Trees: [{id, name, x, y, z, marked, alive, grown, growth}]."""

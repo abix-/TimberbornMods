@@ -1,4 +1,4 @@
-// TimberbotEntityCache.cs -- Double-buffered entity caching system.
+// TimberbotEntityRegistry.cs -- Entity lookup and tracked refs for Timberbot.
 //
 // Main thread (RefreshCachedState, every 1s):
 //   1. Walk all cached entities, read their mutable state into the Write buffer
@@ -59,7 +59,7 @@ namespace Timberbot
     //
     // The double buffer (Buildings, NaturalResources, Beavers) lets the HTTP background
     // thread read cached data without locks. See TimberbotDoubleBuffer for details.
-    public class TimberbotEntityCache
+    public class TimberbotEntityRegistry
     {
         // game services injected via constructor
         private readonly EntityRegistry _entityRegistry;
@@ -79,8 +79,11 @@ namespace Timberbot
         // district snapshot (refreshed at 1Hz, not double-buffered -- tiny list, 1-3 items)
         public readonly List<CachedDistrict> Districts = new List<CachedDistrict>();
 
-        // O(1) entity lookup by Unity instance ID (for write commands that target specific entities)
-        private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
+        // Compatibility bridge between Timberbot's public numeric IDs and Timberborn's
+        // canonical entity GUIDs. Public API keeps the numeric handle; internal lookup
+        // resolves through EntityRegistry.GetEntity(Guid).
+        private readonly Dictionary<int, Guid> _legacyToEntityId = new Dictionary<int, Guid>();
+        private readonly Dictionary<Guid, int> _entityIdToLegacy = new Dictionary<Guid, int>();
 
         // shared JSON writer instance: 300KB pre-allocated StringBuilder, reused via Reset()
         public readonly TimberbotJw Jw = new TimberbotJw(300000);
@@ -96,7 +99,7 @@ namespace Timberbot
         public static readonly string[] OrientNames = { "south", "west", "north", "east" };
         public static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
 
-        public TimberbotEntityCache(
+        public TimberbotEntityRegistry(
             EntityRegistry entityRegistry,
             TreeCuttingArea treeCuttingArea,
             EventBus eventBus,
@@ -140,12 +143,62 @@ namespace Timberbot
             return true;
         }
 
-        // O(1) entity lookup by Unity instance ID. Used by write commands that
-        // target a specific building/beaver (e.g. set_workers building_id:-12345).
+        // Public API compatibility: resolve the numeric Timberbot ID through the
+        // GUID bridge into the game's EntityRegistry.
         public EntityComponent FindEntity(int id)
         {
-            _entityCache.TryGetValue(id, out var result);
-            return result;
+            if (!TryGetEntityId(id, out var entityId))
+                return null;
+
+            var ec = FindEntity(entityId);
+            if (ec != null)
+                return ec;
+
+            _legacyToEntityId.Remove(id);
+            if (entityId != Guid.Empty)
+                _entityIdToLegacy.Remove(entityId);
+            return null;
+        }
+
+        public EntityComponent FindEntity(Guid entityId)
+        {
+            return entityId == Guid.Empty ? null : _entityRegistry.GetEntity(entityId);
+        }
+
+        public bool TryGetEntityId(int legacyId, out Guid entityId)
+        {
+            return _legacyToEntityId.TryGetValue(legacyId, out entityId);
+        }
+
+        public bool TryGetLegacyId(Guid entityId, out int legacyId)
+        {
+            if (_entityIdToLegacy.TryGetValue(entityId, out legacyId))
+                return true;
+
+            var ec = FindEntity(entityId);
+            if (ec == null)
+            {
+                legacyId = 0;
+                return false;
+            }
+
+            legacyId = GetLegacyId(ec);
+            return legacyId != 0;
+        }
+
+        public int GetLegacyId(EntityComponent ec)
+        {
+            if (ec == null || ec.GameObject == null)
+                return 0;
+
+            int legacyId = ec.GameObject.GetInstanceID();
+            var entityId = ec.EntityId;
+            if (legacyId != 0 && entityId != Guid.Empty)
+            {
+                _legacyToEntityId[legacyId] = entityId;
+                _entityIdToLegacy[entityId] = legacyId;
+            }
+            return legacyId;
         }
 
         // Called every 1 second on the main thread. Reads mutable properties from
@@ -453,7 +506,7 @@ namespace Timberbot
             for (int i = buffer.Write.Count - 1; i >= 0; i--)
             {
                 int id = getId(buffer.Write[i]);
-                if (_entityCache.ContainsKey(id)) continue;
+                if (_legacyToEntityId.ContainsKey(id)) continue;
                 buffer.Write.RemoveAt(i);
                 staleFound = true;
             }
@@ -461,7 +514,7 @@ namespace Timberbot
             for (int i = buffer.Read.Count - 1; i >= 0; i--)
             {
                 int id = getId(buffer.Read[i]);
-                if (!_entityCache.ContainsKey(id))
+                if (!_legacyToEntityId.ContainsKey(id))
                     buffer.Read.RemoveAt(i);
             }
         }
@@ -472,7 +525,8 @@ namespace Timberbot
             Buildings.Clear();
             NaturalResources.Clear();
             Beavers.Clear();
-            _entityCache.Clear();
+            _legacyToEntityId.Clear();
+            _entityIdToLegacy.Clear();
             foreach (var ec in _entityRegistry.Entities)
                 AddToIndexes(ec);
         }
@@ -488,8 +542,7 @@ namespace Timberbot
         // never needs to resolve components again.
         private void AddToIndexes(EntityComponent ec)
         {
-            // cache for O(1) lookup by ID in write commands
-            _entityCache[ec.GameObject.GetInstanceID()] = ec;
+            int legacyId = GetLegacyId(ec);
 
             // === BUILDING ===
             // Resolve all 18 component refs at add-time. Most will be null (a Path has
@@ -500,7 +553,7 @@ namespace Timberbot
                 var cb = new CachedBuilding
                 {
                     Entity = ec,
-                    Id = ec.GameObject.GetInstanceID(),
+                    Id = legacyId,
                     Name = CleanName(ec.GameObject.name),
                     BlockObject = ec.GetComponent<BlockObject>(),
                     Pausable = ec.GetComponent<PausableBuilding>(),
@@ -581,7 +634,7 @@ namespace Timberbot
             {
                 var nr = new CachedNaturalResource
                 {
-                    Id = ec.GameObject.GetInstanceID(),
+                    Id = legacyId,
                     Name = CleanName(ec.GameObject.name),
                     BlockObject = ec.GetComponent<BlockObject>(),
                     Living = ec.GetComponent<LivingNaturalResource>(),
@@ -599,7 +652,7 @@ namespace Timberbot
             {
                 var cb = new CachedBeaver
                 {
-                    Id = ec.GameObject.GetInstanceID(),
+                    Id = legacyId,
                     Name = CleanName(ec.GameObject.name),
                     IsBot = ec.GetComponent<Bot>() != null ? 1 : 0, // bots have Bot component, beavers don't
                     Go = ec.GameObject,
@@ -622,8 +675,19 @@ namespace Timberbot
         // RemoveAll scans both Write and Read buffers so both stay in sync.
         private void RemoveFromIndexes(EntityComponent ec)
         {
-            int id = ec.GameObject.GetInstanceID();
-            _entityCache.Remove(id);
+            int id = 0;
+            var entityId = ec != null ? ec.EntityId : Guid.Empty;
+            if (entityId != Guid.Empty && _entityIdToLegacy.TryGetValue(entityId, out var mappedLegacyId))
+            {
+                id = mappedLegacyId;
+                _entityIdToLegacy.Remove(entityId);
+                _legacyToEntityId.Remove(id);
+            }
+            else if (ec != null && ec.GameObject != null)
+            {
+                id = ec.GameObject.GetInstanceID();
+                _legacyToEntityId.Remove(id);
+            }
             Buildings.RemoveAll(b => b.Id == id);
             NaturalResources.RemoveAll(n => n.Id == id);
             Beavers.RemoveAll(b => b.Id == id);
@@ -640,9 +704,9 @@ namespace Timberbot
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    WebhookMgr.PushEvent("building.placed", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
+                    WebhookMgr.PushEvent("building.placed", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
                 else if (ec.GetComponent<NeedManager>() != null)
-                    WebhookMgr.PushEvent("beaver.born", WebhookMgr.DataEntityBot(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name), ec.GetComponent<Bot>() != null));
+                    WebhookMgr.PushEvent("beaver.born", WebhookMgr.DataEntityBot(GetLegacyId(ec), CleanName(ec.GameObject.name), ec.GetComponent<Bot>() != null));
             }
         }
 
@@ -655,9 +719,9 @@ namespace Timberbot
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    WebhookMgr.PushEvent("building.demolished", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
+                    WebhookMgr.PushEvent("building.demolished", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
                 else if (ec.GetComponent<NeedManager>() != null)
-                    WebhookMgr.PushEvent("beaver.died", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
+                    WebhookMgr.PushEvent("beaver.died", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
             }
             RemoveFromIndexes(e.Entity);
         }

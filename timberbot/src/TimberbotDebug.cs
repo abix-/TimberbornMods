@@ -14,8 +14,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Timberborn.BlockObjectTools;
 using UnityEngine;
-using CachedBuilding = Timberbot.TimberbotEntityCache.CachedBuilding;
-using CachedBeaver = Timberbot.TimberbotEntityCache.CachedBeaver;
+using CachedBuilding = Timberbot.TimberbotEntityRegistry.CachedBuilding;
+using CachedBeaver = Timberbot.TimberbotEntityRegistry.CachedBeaver;
 
 namespace Timberbot
 {
@@ -349,30 +349,30 @@ namespace Timberbot
             int nv = Service.Cache.Beavers.Read.Count;
             int nr = Service.Cache.NaturalResources.Read.Count;
 
-            results.Add(BenchCall("CollectSummary", n, () => Service.Read.CollectSummary("json")));
-            results.Add(BenchCall("CollectBuildings", n, () => Service.Read.CollectBuildings("json", "basic"), nb));
-            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => Service.Read.CollectBuildings("json", "full"), nb));
-            results.Add(BenchCall("CollectBeavers", n, () => Service.Read.CollectBeavers("json", "basic"), nv));
-            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => Service.Read.CollectBeavers("json", "full"), nv));
-            results.Add(BenchCall("CollectTrees", n, () => Service.Read.CollectTrees(), nr));
-            results.Add(BenchCall("CollectCrops", n, () => Service.Read.CollectCrops(), nr));
-            results.Add(BenchCall("CollectGatherables", n, () => Service.Read.CollectGatherables()));
-            results.Add(BenchCall("CollectPowerNetworks", n, () => Service.Read.CollectPowerNetworks()));
-            results.Add(BenchCall("CollectAlerts", n, () => Service.Read.CollectAlerts()));
-            results.Add(BenchCall("CollectWellbeing", n, () => Service.Read.CollectWellbeing(), nv));
-            results.Add(BenchCall("CollectScience", n, () => Service.Read.CollectScience()));
-            results.Add(BenchCall("CollectResources", n, () => Service.Read.CollectResources("json")));
-            results.Add(BenchCall("CollectPopulation", n, () => Service.Read.CollectPopulation(), nv));
-            results.Add(BenchCall("CollectDistricts", n, () => Service.Read.CollectDistricts("json")));
-            results.Add(BenchCall("CollectDistribution", n, () => Service.Read.CollectDistribution()));
-            results.Add(BenchCall("CollectTime", n, () => Service.Read.CollectTime()));
-            results.Add(BenchCall("CollectWeather", n, () => Service.Read.CollectWeather()));
-            results.Add(BenchCall("CollectSpeed", n, () => Service.Read.CollectSpeed()));
-            results.Add(BenchCall("CollectWorkHours", n, () => Service.Read.CollectWorkHours()));
-            results.Add(BenchCall("CollectNotifications", n, () => Service.Read.CollectNotifications()));
-            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.Read.CollectTreeClusters()));
+            results.Add(BenchCall("CollectSummary", n, () => Service.ReadV2.CollectSummary("json")));
+            results.Add(BenchCall("CollectBuildings", n, () => Service.ReadV2.CollectBuildings("json", "basic"), nb));
+            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => Service.ReadV2.CollectBuildings("json", "full"), nb));
+            results.Add(BenchCall("CollectBeavers", n, () => Service.ReadV2.CollectBeavers("json", "basic"), nv));
+            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => Service.ReadV2.CollectBeavers("json", "full"), nv));
+            results.Add(BenchCall("CollectTrees", n, () => Service.ReadV2.CollectTrees(), nr));
+            results.Add(BenchCall("CollectCrops", n, () => Service.ReadV2.CollectCrops(), nr));
+            results.Add(BenchCall("CollectGatherables", n, () => Service.ReadV2.CollectGatherables()));
+            results.Add(BenchCall("CollectPowerNetworks", n, () => Service.ReadV2.CollectPowerNetworks()));
+            results.Add(BenchCall("CollectAlerts", n, () => Service.ReadV2.CollectAlerts()));
+            results.Add(BenchCall("CollectWellbeing", n, () => Service.ReadV2.CollectWellbeing(), nv));
+            results.Add(BenchCall("CollectScience", n, () => Service.ReadV2.CollectScience()));
+            results.Add(BenchCall("CollectResources", n, () => Service.ReadV2.CollectResources("json")));
+            results.Add(BenchCall("CollectPopulation", n, () => Service.ReadV2.CollectPopulation(), nv));
+            results.Add(BenchCall("CollectDistricts", n, () => Service.ReadV2.CollectDistricts("json")));
+            results.Add(BenchCall("CollectDistribution", n, () => Service.ReadV2.CollectDistribution()));
+            results.Add(BenchCall("CollectTime", n, () => Service.ReadV2.CollectTime()));
+            results.Add(BenchCall("CollectWeather", n, () => Service.ReadV2.CollectWeather()));
+            results.Add(BenchCall("CollectSpeed", n, () => Service.ReadV2.CollectSpeed()));
+            results.Add(BenchCall("CollectWorkHours", n, () => Service.ReadV2.CollectWorkHours()));
+            results.Add(BenchCall("CollectNotifications", n, () => Service.ReadV2.CollectNotifications()));
+            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.ReadV2.CollectTreeClusters()));
             results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.Placement.CollectPrefabs()));
-            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Read.CollectTiles("toon", 120, 130, 140, 150), 400));
+            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.ReadV2.CollectTiles("toon", 120, 130, 140, 150), 400));
             results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
 
             // --- Low issue micro-benchmarks (#12-20) ---
@@ -414,7 +414,7 @@ namespace Timberbot
 
             // #20: GetBeaverNeeds alloc check
             {
-                var fns = Service.Read._factionNeedService;
+                var fns = Service.ReadV2._factionNeedService;
                 if (fns != null)
                 {
                     for (int w = 0; w < 3; w++) { var _ = fns.GetBeaverNeeds(); }
@@ -431,12 +431,12 @@ namespace Timberbot
             }
 
             // toon variants: catch toon-specific allocs (interpolation, List<string>, string.Join)
-            results.Add(BenchCall("CollectSummary.toon", n, () => Service.Read.CollectSummary("toon")));
-            results.Add(BenchCall("CollectBuildings.toon", n, () => Service.Read.CollectBuildings("toon", "basic"), nb));
-            results.Add(BenchCall("CollectBuildings.full.toon", nHeavy, () => Service.Read.CollectBuildings("toon", "full"), nb));
-            results.Add(BenchCall("CollectBeavers.toon", n, () => Service.Read.CollectBeavers("toon", "basic"), nv));
-            results.Add(BenchCall("CollectAlerts.toon", n, () => Service.Read.CollectAlerts("toon")));
-            results.Add(BenchCall("CollectTiles.toon.20x20", nHeavy, () => Service.Read.CollectTiles("toon", 120, 130, 140, 150), 400));
+            results.Add(BenchCall("CollectSummary.toon", n, () => Service.ReadV2.CollectSummary("toon")));
+            results.Add(BenchCall("CollectBuildings.toon", n, () => Service.ReadV2.CollectBuildings("toon", "basic"), nb));
+            results.Add(BenchCall("CollectBuildings.full.toon", nHeavy, () => Service.ReadV2.CollectBuildings("toon", "full"), nb));
+            results.Add(BenchCall("CollectBeavers.toon", n, () => Service.ReadV2.CollectBeavers("toon", "basic"), nv));
+            results.Add(BenchCall("CollectAlerts.toon", n, () => Service.ReadV2.CollectAlerts("toon")));
+            results.Add(BenchCall("CollectTiles.toon.20x20", nHeavy, () => Service.ReadV2.CollectTiles("toon", 120, 130, 140, 150), 400));
 
             // metadata
             results.Insert(0, new
@@ -1064,7 +1064,7 @@ namespace Timberbot
         // ================================================================
         // VALIDATE -- data accuracy verification.
         //
-        // The double-buffer cache (TimberbotEntityCache) is refreshed every ~1 second.
+        // The old double-buffer cache was refreshed every ~1 second.
         // This validator reads the CACHED value from the Read buffer AND the LIVE value
         // directly from the Unity component, then compares them field by field.
         //
@@ -1138,7 +1138,7 @@ namespace Timberbot
                     Add("clutchEngaged", c.ClutchEngaged, c.Clutch.IsEngaged);
                 if (c.Wonder != null)
                     Add("wonderActive", c.WonderActive, c.Wonder.IsActive);
-                Add("name", c.Name, c.Entity != null ? TimberbotEntityCache.CleanName(c.Entity.GameObject.name) : "?");
+                Add("name", c.Name, c.Entity != null ? TimberbotEntityRegistry.CleanName(c.Entity.GameObject.name) : "?");
 
                 return Service.Cache.Jw.Result(("id", id), ("type", "building"), ("name", (c.Name)), ("fields", fields), ("mismatches", mismatches), ("total", total));
             }
@@ -1162,7 +1162,7 @@ namespace Timberbot
                     Add("z", c.Z, Mathf.FloorToInt(pos.y));
                 }
                 var wp = c.Worker?.Workplace;
-                Add("workplace", c.Workplace ?? "", wp != null ? TimberbotEntityCache.CleanName(wp.GameObject.name) : "");
+                Add("workplace", c.Workplace ?? "", wp != null ? TimberbotEntityRegistry.CleanName(wp.GameObject.name) : "");
 
                 return Service.Cache.Jw.Result(("id", id), ("type", "beaver"), ("name", (c.Name)), ("fields", fields), ("mismatches", mismatches), ("total", total));
             }

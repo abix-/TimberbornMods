@@ -90,6 +90,19 @@ class RawHttpClient:
             raise RuntimeError(f"{response.status_code}: {json.dumps(data, sort_keys=True)[:500]}")
         return HttpResult(data=data, status_code=response.status_code, elapsed_ms=elapsed_ms)
 
+    def get_text(self, path: str, params: dict[str, Any] | None = None, timeout: int = DEFAULT_TIMEOUT) -> tuple[str, int]:
+        response = self.session.get(f"{self.base_url}{path}", params=params or {}, timeout=timeout)
+        if response.status_code >= 400:
+            raise RuntimeError(f"{response.status_code}: {response.text[:500]}")
+        return response.text, response.status_code
+
+    def post_text(self, path: str, body: dict[str, Any] | None = None, timeout: int = DEFAULT_TIMEOUT) -> tuple[str, int]:
+        payload = body or {}
+        response = self.session.post(f"{self.base_url}{path}", json=payload, timeout=timeout)
+        if response.status_code >= 400:
+            raise RuntimeError(f"{response.status_code}: {response.text[:500]}")
+        return response.text, response.status_code
+
 
 class V2Runner:
     def __init__(self, log_writer=None, error_writer=None):
@@ -98,6 +111,7 @@ class V2Runner:
         self.discovery: DiscoveryState | None = None
         self.case_results: list[dict[str, Any]] = []
         self.perf_results: list[dict[str, Any]] = []
+        self.fixture_outputs: list[dict[str, Any]] = []
         self.sections: list[str] = []
         self.failed = 0
         self.passed = 0
@@ -377,21 +391,13 @@ class V2Runner:
             return cases
         return []
 
-    def _fetch_pair(self, spec: EndpointSpec, params: dict[str, Any]) -> tuple[Any, Any]:
-        left = self.raw.get(spec.legacy_path, params=params).data
-        right = self.raw.get(spec.v2_path, params=params).data
-        return left, right
-
     def _run_case(self, mode: str, spec: EndpointSpec, case: CaseSpec):
         try:
-            left, right = self._fetch_pair(spec, case.params)
+            result = self.raw.get(spec.path, params=case.params).data
         except Exception as ex:
             self._record("FAIL", mode, case.label, str(ex), spec.name, case.params)
             return
-        if left == right:
-            self._record("PASS", mode, case.label, endpoint=spec.name, params=case.params)
-        else:
-            self._record("FAIL", mode, case.label, self._compare_summary(left, right), spec.name, case.params)
+        self._record("PASS", mode, case.label, endpoint=spec.name, params=case.params)
 
     def run_smoke(self, specs: list[EndpointSpec]):
         self.sections.append("smoke")
@@ -406,22 +412,8 @@ class V2Runner:
                 continue
             self._run_case("smoke", spec, cases[0])
 
-    def run_parity(self, specs: list[EndpointSpec]):
-        self.sections.append("parity")
-        self._write_line("")
-        self._write_line("=== parity ===")
-        self._write_line("")
-        discovery = self.discover()
-        for spec in specs:
-            cases = self.build_cases(spec, discovery)
-            if not cases:
-                self._record("SKIP", "parity", f"{spec.name}:no_cases", "no generated cases", spec.name)
-                continue
-            for case in cases:
-                self._run_case("parity", spec, case)
-
     def _building_v2_detail(self, building_id: int) -> dict[str, Any]:
-        data = self.raw.get("/api/v2/buildings", {"format": "json", "detail": f"id:{building_id}"}).data
+        data = self.raw.get("/api/buildings", {"format": "json", "detail": f"id:{building_id}"}).data
         if isinstance(data, dict) and "id" in data:
             return data
         items = self._extract_items(data)
@@ -445,20 +437,25 @@ class V2Runner:
             return recipes[0]
         return None
 
-    def _run_freshness_scenario(self, scenario_name: str):
+    def _run_write_to_read_scenario(self, mode: str, scenario_name: str):
         discovery = self.discover()
         if scenario_name == "pause_toggle":
             building_id = discovery.building_targets.get("pause_target")
             if not building_id:
-                self._record("SKIP", "freshness", "pause_toggle", "no pause-capable building found", "buildings")
+                self._record("SKIP", mode, "pause_toggle", "no pause-capable building found", "buildings")
                 return
             before = self._building_v2_detail(building_id)
             original = bool(before.get("paused"))
             try:
                 self._restore_pause(building_id, not original)
                 after = self._building_v2_detail(building_id)
-                ok = bool(after.get("paused")) == (not original)
-                self._record("PASS" if ok else "FAIL", "freshness", "pause_toggle", "" if ok else json.dumps(after)[:180], "buildings", {"id": building_id})
+                changed = bool(after.get("paused")) == (not original)
+                self._restore_pause(building_id, original)
+                restored = self._building_v2_detail(building_id)
+                restored_ok = bool(restored.get("paused")) == original
+                ok = changed and restored_ok
+                detail = "" if ok else json.dumps({"after": after, "restored": restored})[:220]
+                self._record("PASS" if ok else "FAIL", mode, "pause_toggle", detail, "buildings", {"id": building_id})
             finally:
                 self._restore_pause(building_id, original)
             return
@@ -466,20 +463,25 @@ class V2Runner:
         if scenario_name == "workers_change":
             building_id = discovery.building_targets.get("workers_target")
             if not building_id:
-                self._record("SKIP", "freshness", "workers_change", "no worker-capable building found", "buildings")
+                self._record("SKIP", mode, "workers_change", "no worker-capable building found", "buildings")
                 return
             before = self._building_v2_detail(building_id)
             original = int(before.get("desiredWorkers", 0))
             max_workers = int(before.get("maxWorkers", 0))
             if max_workers <= 0:
-                self._record("SKIP", "freshness", "workers_change", "maxWorkers <= 0", "buildings", {"id": building_id})
+                self._record("SKIP", mode, "workers_change", "maxWorkers <= 0", "buildings", {"id": building_id})
                 return
             target = 0 if original > 0 else min(1, max_workers)
             try:
                 self.bot.set_workers(building_id, target)
                 after = self._building_v2_detail(building_id)
-                ok = int(after.get("desiredWorkers", -1)) == target
-                self._record("PASS" if ok else "FAIL", "freshness", "workers_change", "" if ok else json.dumps(after)[:180], "buildings", {"id": building_id, "target": target})
+                changed = int(after.get("desiredWorkers", -1)) == target
+                self.bot.set_workers(building_id, original)
+                restored = self._building_v2_detail(building_id)
+                restored_ok = int(restored.get("desiredWorkers", -1)) == original
+                ok = changed and restored_ok
+                detail = "" if ok else json.dumps({"after": after, "restored": restored})[:220]
+                self._record("PASS" if ok else "FAIL", mode, "workers_change", detail, "buildings", {"id": building_id, "target": target})
             finally:
                 self.bot.set_workers(building_id, original)
             return
@@ -487,20 +489,25 @@ class V2Runner:
         if scenario_name == "floodgate_change":
             building_id = discovery.building_targets.get("floodgate_target")
             if not building_id:
-                self._record("SKIP", "freshness", "floodgate_change", "no floodgate found", "buildings")
+                self._record("SKIP", mode, "floodgate_change", "no floodgate found", "buildings")
                 return
             before = self._building_v2_detail(building_id)
             original = float(before.get("floodgateHeight", 0.0))
             max_height = float(before.get("floodgateMaxHeight", 0.0) or 0.0)
             target = 0.0 if original > 0.0 else min(max_height, 1.0)
             if abs(target - original) < 0.001:
-                self._record("SKIP", "freshness", "floodgate_change", "no alternate floodgate height available", "buildings", {"id": building_id})
+                self._record("SKIP", mode, "floodgate_change", "no alternate floodgate height available", "buildings", {"id": building_id})
                 return
             try:
                 self.bot.set_floodgate(building_id, target)
                 after = self._building_v2_detail(building_id)
-                ok = abs(float(after.get("floodgateHeight", -999.0)) - target) < 0.01
-                self._record("PASS" if ok else "FAIL", "freshness", "floodgate_change", "" if ok else json.dumps(after)[:180], "buildings", {"id": building_id, "target": target})
+                changed = abs(float(after.get("floodgateHeight", -999.0)) - target) < 0.01
+                self.bot.set_floodgate(building_id, original)
+                restored = self._building_v2_detail(building_id)
+                restored_ok = abs(float(restored.get("floodgateHeight", -999.0)) - original) < 0.01
+                ok = changed and restored_ok
+                detail = "" if ok else json.dumps({"after": after, "restored": restored})[:220]
+                self._record("PASS" if ok else "FAIL", mode, "floodgate_change", detail, "buildings", {"id": building_id, "target": target})
             finally:
                 self.bot.set_floodgate(building_id, original)
             return
@@ -508,20 +515,26 @@ class V2Runner:
         if scenario_name == "recipe_change":
             building_id = discovery.building_targets.get("recipe_target")
             if not building_id:
-                self._record("SKIP", "freshness", "recipe_change", "no recipe-capable building found", "buildings")
+                self._record("SKIP", mode, "recipe_change", "no recipe-capable building found", "buildings")
                 return
             before = self._building_v2_detail(building_id)
             target = self._choose_alternate_recipe(before)
             original = str(before.get("currentRecipe", "") or "")
             if not target or target == original:
-                self._record("SKIP", "freshness", "recipe_change", "no alternate recipe available", "buildings", {"id": building_id})
+                self._record("SKIP", mode, "recipe_change", "no alternate recipe available", "buildings", {"id": building_id})
                 return
             try:
                 self.bot.set_recipe(building_id, target)
                 after = self._building_v2_detail(building_id)
                 expected = "" if target == "none" else target
-                ok = str(after.get("currentRecipe", "") or "") == expected
-                self._record("PASS" if ok else "FAIL", "freshness", "recipe_change", "" if ok else json.dumps(after)[:180], "buildings", {"id": building_id, "target": target})
+                changed = str(after.get("currentRecipe", "") or "") == expected
+                self.bot.set_recipe(building_id, original or "none")
+                restored = self._building_v2_detail(building_id)
+                restored_expected = original or ""
+                restored_ok = str(restored.get("currentRecipe", "") or "") == restored_expected
+                ok = changed and restored_ok
+                detail = "" if ok else json.dumps({"after": after, "restored": restored})[:220]
+                self._record("PASS" if ok else "FAIL", mode, "recipe_change", detail, "buildings", {"id": building_id, "target": target})
             finally:
                 self.bot.set_recipe(building_id, original or "none")
             return
@@ -529,15 +542,20 @@ class V2Runner:
         if scenario_name == "clutch_change":
             building_id = discovery.building_targets.get("clutch_target")
             if not building_id:
-                self._record("SKIP", "freshness", "clutch_change", "no clutch building found", "buildings")
+                self._record("SKIP", mode, "clutch_change", "no clutch building found", "buildings")
                 return
             before = self._building_v2_detail(building_id)
             original = bool(before.get("clutchEngaged"))
             try:
                 self.bot.set_clutch(building_id, not original)
                 after = self._building_v2_detail(building_id)
-                ok = bool(after.get("clutchEngaged")) == (not original)
-                self._record("PASS" if ok else "FAIL", "freshness", "clutch_change", "" if ok else json.dumps(after)[:180], "buildings", {"id": building_id})
+                changed = bool(after.get("clutchEngaged")) == (not original)
+                self.bot.set_clutch(building_id, original)
+                restored = self._building_v2_detail(building_id)
+                restored_ok = bool(restored.get("clutchEngaged")) == original
+                ok = changed and restored_ok
+                detail = "" if ok else json.dumps({"after": after, "restored": restored})[:220]
+                self._record("PASS" if ok else "FAIL", mode, "clutch_change", detail, "buildings", {"id": building_id})
             finally:
                 self.bot.set_clutch(building_id, original)
             return
@@ -547,33 +565,33 @@ class V2Runner:
             try:
                 found = self.bot.find_placement("Path", search["x1"], search["y1"], search["x2"], search["y2"])
             except Exception as ex:
-                self._record("FAIL", "freshness", "place_demolish", f"find_placement failed: {ex}", "buildings")
+                self._record("FAIL", mode, "place_demolish", f"find_placement failed: {ex}", "buildings")
                 return
             spots = found.get("placements", []) if isinstance(found, dict) else []
             spot = next((p for p in spots if p.get("reachable") and not p.get("flooded")), None) or (spots[0] if spots else None)
             if not spot:
-                self._record("SKIP", "freshness", "place_demolish", "no placement spot found", "buildings")
+                self._record("SKIP", mode, "place_demolish", "no placement spot found", "buildings")
                 return
             placed = None
             try:
-                before = self.raw.get("/api/v2/buildings", {"format": "json", "limit": 0}).data
+                before = self.raw.get("/api/buildings", {"format": "json", "limit": 0}).data
                 before_ids = {int(item["id"]) for item in self._extract_items(before) if isinstance(item, dict) and item.get("id") is not None}
                 placed = self.bot.place_building("Path", int(spot["x"]), int(spot["y"]), int(spot["z"]), spot.get("orientation", "south"))
                 placed_id = placed.get("id") if isinstance(placed, dict) else None
                 if not placed_id:
-                    self._record("FAIL", "freshness", "place_demolish", f"place failed: {json.dumps(placed)[:180]}", "buildings")
+                    self._record("FAIL", mode, "place_demolish", f"place failed: {json.dumps(placed)[:180]}", "buildings")
                     return
-                after_place = self.raw.get("/api/v2/buildings", {"format": "json", "limit": 0}).data
+                after_place = self.raw.get("/api/buildings", {"format": "json", "limit": 0}).data
                 after_ids = {int(item["id"]) for item in self._extract_items(after_place) if isinstance(item, dict) and item.get("id") is not None}
                 place_ok = int(placed_id) in after_ids and len(after_ids) == len(before_ids) + 1
                 if not place_ok:
-                    self._record("FAIL", "freshness", "place_demolish", "new building id not visible immediately after placement", "buildings", {"id": placed_id})
+                    self._record("FAIL", mode, "place_demolish", "new building id not visible immediately after placement", "buildings", {"id": placed_id})
                     return
                 self.bot.demolish_building(int(placed_id))
-                after_demolish = self.raw.get("/api/v2/buildings", {"format": "json", "limit": 0}).data
+                after_demolish = self.raw.get("/api/buildings", {"format": "json", "limit": 0}).data
                 final_ids = {int(item["id"]) for item in self._extract_items(after_demolish) if isinstance(item, dict) and item.get("id") is not None}
                 dem_ok = int(placed_id) not in final_ids and len(final_ids) == len(before_ids)
-                self._record("PASS" if dem_ok else "FAIL", "freshness", "place_demolish", "" if dem_ok else "placed id still visible after demolish", "buildings", {"id": placed_id})
+                self._record("PASS" if dem_ok else "FAIL", mode, "place_demolish", "" if dem_ok else "placed id still visible after demolish", "buildings", {"id": placed_id})
             finally:
                 if isinstance(placed, dict) and placed.get("id"):
                     try:
@@ -582,7 +600,7 @@ class V2Runner:
                         pass
             return
 
-        self._record("SKIP", "freshness", scenario_name, "unknown scenario", "buildings")
+        self._record("SKIP", mode, scenario_name, "unknown scenario", "buildings")
 
     def run_freshness(self):
         self.sections.append("freshness")
@@ -592,9 +610,21 @@ class V2Runner:
         self.discover()
         for scenario in FRESHNESS_SCENARIOS:
             try:
-                self._run_freshness_scenario(scenario.name)
+                self._run_write_to_read_scenario("freshness", scenario.name)
             except Exception as ex:
                 self._record("FAIL", "freshness", scenario.name, str(ex), "buildings")
+
+    def run_write_to_read(self):
+        self.sections.append("write_to_read")
+        self._write_line("")
+        self._write_line("=== write_to_read ===")
+        self._write_line("")
+        self.discover()
+        for scenario in FRESHNESS_SCENARIOS:
+            try:
+                self._run_write_to_read_scenario("write_to_read", scenario.name)
+            except Exception as ex:
+                self._record("FAIL", "write_to_read", scenario.name, str(ex), "buildings")
 
     def _percentile(self, values: list[float], pct: float) -> float:
         if not values:
@@ -634,21 +664,18 @@ class V2Runner:
         discovery = self.discover()
         for spec in specs:
             for case in self.representative_cases(spec, discovery):
-                legacy_times, legacy_errors = self._bench_path(spec.legacy_path, case.params, iterations)
-                v2_times, v2_errors = self._bench_path(spec.v2_path, case.params, iterations)
+                times, errors = self._bench_path(spec.path, case.params, iterations)
                 row = {
                     "endpoint": spec.name,
                     "case": case.label,
                     "params": case.params,
-                    "legacy": self._summarize_perf(legacy_times, legacy_errors, iterations),
-                    "v2": self._summarize_perf(v2_times, v2_errors, iterations),
+                    "current": self._summarize_perf(times, errors, iterations),
                 }
-                row["ratio"] = (row["v2"]["avg_ms"] / row["legacy"]["avg_ms"]) if row["legacy"]["avg_ms"] > 0 else None
                 self.perf_results.append(row)
-                failures = row["legacy"]["errors"] + row["v2"]["errors"]
+                failures = row["current"]["errors"]
                 detail = ""
                 if failures:
-                    detail = f"legacy_errors={row['legacy']['errors']} v2_errors={row['v2']['errors']}"
+                    detail = f"errors={row['current']['errors']}"
                 self._record("PASS" if not failures else "FAIL", "performance", case.label, detail, spec.name, case.params)
 
     def run_concurrency(self, specs: list[EndpointSpec], workers: int, iterations: int):
@@ -667,7 +694,7 @@ class V2Runner:
                 fingerprints: list[str] = []
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     futures = [
-                        pool.submit(self.raw.get, spec.v2_path, case.params, DEFAULT_TIMEOUT)
+                        pool.submit(self.raw.get, spec.path, case.params, DEFAULT_TIMEOUT)
                         for _ in range(workers * iterations)
                     ]
                     for future in as_completed(futures):
@@ -708,6 +735,7 @@ class V2Runner:
             "discovery": self.discovery.to_jsonable() if self.discovery else {},
             "cases": self.case_results,
             "performance": self.perf_results,
+            "fixtures": self.fixture_outputs,
         }
         json_path = base + ".json"
         md_path = base + ".md"
@@ -745,22 +773,22 @@ class V2Runner:
                 "",
                 "## Performance",
                 "",
-                "| Endpoint | Case | Legacy Avg | V2 Avg | Ratio | Legacy Errors | V2 Errors |",
+                "| Endpoint | Case | Avg | P50 | P95 | Max | Errors |",
                 "|---|---|---:|---:|---:|---:|---:|",
             ])
             for row in self.perf_results:
-                ratio = f"{row['ratio']:.2f}x" if row["ratio"] is not None else ""
                 lines.append(
-                    f"| {row['endpoint']} | {row['case']} | {row['legacy']['avg_ms']:.2f} | "
-                    f"{row['v2']['avg_ms']:.2f} | {ratio} | {row['legacy']['errors']} | {row['v2']['errors']} |"
+                    f"| {row['endpoint']} | {row['case']} | {row['current']['avg_ms']:.2f} | "
+                    f"{row['current']['p50_ms']:.2f} | {row['current']['p95_ms']:.2f} | "
+                    f"{row['current']['max_ms']:.2f} | {row['current']['errors']} |"
                 )
         lines.append("")
         return "\n".join(lines)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dedicated /api/v2 experiment harness")
-    parser.add_argument("mode", choices=["smoke", "parity", "freshness", "performance", "concurrency", "all", "list-endpoints", "list-cases"])
+    parser = argparse.ArgumentParser(description="Dedicated Timberbot API harness")
+    parser.add_argument("mode", choices=["smoke", "freshness", "write_to_read", "performance", "concurrency", "all", "list-endpoints", "list-cases"])
     parser.add_argument("--endpoint", action="append", default=[], help="limit to one or more endpoint names")
     parser.add_argument("--group", action="append", default=[], choices=GROUP_NAMES, help="limit to one or more endpoint groups")
     parser.add_argument("-n", "--iterations", type=int, default=DEFAULT_PERF_ITERATIONS, help="iterations for performance or concurrency")
@@ -799,10 +827,10 @@ def main():
             runner.list_cases(specs)
         elif args.mode == "smoke":
             runner.run_smoke(specs)
-        elif args.mode == "parity":
-            runner.run_parity(specs)
         elif args.mode == "freshness":
             runner.run_freshness()
+        elif args.mode == "write_to_read":
+            runner.run_write_to_read()
         elif args.mode == "performance":
             runner.run_performance(specs, args.iterations)
         elif args.mode == "concurrency":
@@ -810,8 +838,8 @@ def main():
             runner.run_concurrency(specs, args.workers, iterations)
         elif args.mode == "all":
             runner.run_smoke(specs)
-            runner.run_parity(specs)
             runner.run_freshness()
+            runner.run_write_to_read()
             runner.run_performance(specs, args.iterations)
             runner.run_concurrency(specs, args.workers, DEFAULT_CONCURRENCY_ITERATIONS)
 

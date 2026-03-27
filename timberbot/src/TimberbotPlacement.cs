@@ -94,7 +94,7 @@ namespace Timberbot
         private readonly PreviewFactory _previewFactory;
         private readonly ScienceService _scienceService;
         private readonly FactionService _factionService;
-        private readonly TimberbotEntityCache _cache;
+        private readonly TimberbotEntityRegistry _cache;
 
         public TimberbotPlacement(
             ITerrainService terrainService,
@@ -110,7 +110,7 @@ namespace Timberbot
             PreviewFactory previewFactory,
             ScienceService scienceService,
             FactionService factionService,
-            TimberbotEntityCache cache)
+            TimberbotEntityRegistry cache)
         {
             _terrainService = terrainService;
             _waterMap = waterMap;
@@ -128,9 +128,9 @@ namespace Timberbot
             _cache = cache;
         }
 
-        private static readonly string[] OrientNames = TimberbotEntityCache.OrientNames;
-        private static readonly string[] PriorityNames = TimberbotEntityCache.PriorityNames;
-        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
+        private static readonly string[] OrientNames = TimberbotEntityRegistry.OrientNames;
+        private static readonly string[] PriorityNames = TimberbotEntityRegistry.PriorityNames;
+        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityRegistry.GetPriorityName(p);
 
         // Faction suffix for prefab names (e.g. ".IronTeeth" or ".Folktails").
         // Detected once at startup via FactionService.Current.Id -- the same API
@@ -139,11 +139,11 @@ namespace Timberbot
 
         // Called once from TimberbotService.Load(), before BuildAllIndexes.
         // Sets both the local suffix (for RoutePath prefabs) and the static suffix
-        // on TimberbotEntityCache (for CleanName to strip faction from entity names).
+        // on TimberbotEntityRegistry (for CleanName to strip faction from entity names).
         public void DetectFaction()
         {
             _factionSuffix = "." + _factionService.Current.Id;
-            TimberbotEntityCache.FactionSuffix = _factionSuffix;
+            TimberbotEntityRegistry.FactionSuffix = _factionSuffix;
             TimberbotLog.Info($"faction: {_factionSuffix}");
         }
 
@@ -262,7 +262,7 @@ namespace Timberbot
             if (ec == null)
                 return Jw.Error("not_found", ("id", buildingId));
 
-            var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
+            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
             return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
@@ -1461,8 +1461,10 @@ namespace Timberbot
             string placedName = "";
             placer.Place(blockObjectSpec, placement, (entity) =>
             {
-                placedId = entity.GameObject.GetInstanceID();
-                placedName = TimberbotEntityCache.CleanName(entity.GameObject.name);
+                var ec = entity.GetComponent<EntityComponent>();
+                if (ec != null)
+                    placedId = _cache.GetLegacyId(ec);
+                placedName = TimberbotEntityRegistry.CleanName(entity.GameObject.name);
             });
 
             if (placedId == 0)

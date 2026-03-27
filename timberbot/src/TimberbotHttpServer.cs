@@ -130,12 +130,12 @@ namespace Timberbot
                 var path = ctx.Request.Url.AbsolutePath.TrimEnd('/').ToLowerInvariant();
                 var method = ctx.Request.HttpMethod.ToUpperInvariant();
 
-                if (path == "/api/ping" || path == "/api/v2/ping")
+                if (path == "/api/ping")
                 {
                     Respond(ctx, 200, "{\"status\":\"ok\",\"ready\":true}");
                     continue;
                 }
-                if (path == "/api/settlement" || path == "/api/v2/settlement")
+                if (path == "/api/settlement")
                 {
                     Respond(ctx, 200, "{\"name\":\"" + _service.ReadV2.GetSettlementName().Replace("\"", "\\\"") + "\"}");
                     continue;
@@ -155,10 +155,8 @@ namespace Timberbot
                 int.TryParse(ctx.Request.QueryString["x"], out int filterX);
                 int.TryParse(ctx.Request.QueryString["y"], out int filterY);
                 int.TryParse(ctx.Request.QueryString["radius"], out int filterRadius);
-                // GET requests: handled RIGHT HERE on the background listener thread.
-                // This is the key performance trick -- reads never block the game.
-                // All CollectX() methods read from double-buffered cached data, so they're
-                // thread-safe without locks. The game keeps running at full speed.
+                // GET requests: handled on the background listener thread and served from
+                // ReadV2's published snapshots or explicit thread-safe game services.
                 if (method == "GET")
                 {
                     try
@@ -226,7 +224,7 @@ namespace Timberbot
         }
 
         // Central routing table. Maps HTTP method + path to service method calls.
-        // GET endpoints return cached data (thread-safe, called from background thread).
+        // GET endpoints return ReadV2 snapshot data (thread-safe, called from background thread).
         // POST endpoints mutate game state (called from main thread via DrainRequests).
         //
         // Notable exceptions to the GET=read/POST=write convention:
@@ -236,100 +234,54 @@ namespace Timberbot
         // These are logically reads but use POST because GET has no request body.
         private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
-            // GET endpoints (read from double-buffered cache -- zero contention with game thread)
+            // GET endpoints (read from ReadV2 snapshots -- zero contention with game thread)
             if (method == "GET")
             {
                 switch (path)
                 {
                     case "/api/summary":
-                        return _service.Read.CollectSummary(format);
-                    case "/api/v2/summary":
                         return _service.ReadV2.CollectSummary(format);
                     case "/api/alerts":
-                        return _service.Read.CollectAlerts(format, limit, offset);
-                    case "/api/v2/alerts":
                         return _service.ReadV2.CollectAlerts(format, limit, offset);
                     case "/api/tree_clusters":
-                        return _service.Read.CollectTreeClusters(format);
-                    case "/api/v2/tree_clusters":
                         return _service.ReadV2.CollectTreeClusters(format);
                     case "/api/food_clusters":
-                        return _service.Read.CollectFoodClusters(format);
-                    case "/api/v2/food_clusters":
                         return _service.ReadV2.CollectFoodClusters(format);
                     case "/api/resources":
-                        return _service.Read.CollectResources(format);
-                    case "/api/v2/resources":
                         return _service.ReadV2.CollectResources(format);
                     case "/api/population":
-                        return _service.Read.CollectPopulation();
-                    case "/api/v2/population":
                         return _service.ReadV2.CollectPopulation();
                     case "/api/time":
-                        return _service.Read.CollectTime();
-                    case "/api/v2/time":
                         return _service.ReadV2.CollectTime();
                     case "/api/weather":
-                        return _service.Read.CollectWeather();
-                    case "/api/v2/weather":
                         return _service.ReadV2.CollectWeather();
                     case "/api/districts":
-                        return _service.Read.CollectDistricts(format);
-                    case "/api/v2/districts":
                         return _service.ReadV2.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.Read.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/buildings_v2":
-                    case "/api/v2/buildings":
                         return _service.ReadV2.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/trees":
-                        return _service.Read.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/v2/trees":
                         return _service.ReadV2.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/crops":
-                        return _service.Read.CollectCrops(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/v2/crops":
                         return _service.ReadV2.CollectCrops(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/gatherables":
-                        return _service.Read.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/v2/gatherables":
                         return _service.ReadV2.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/beavers":
-                        return _service.Read.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/v2/beavers":
                         return _service.ReadV2.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/distribution":
-                        return _service.Read.CollectDistribution(format);
-                    case "/api/v2/distribution":
                         return _service.ReadV2.CollectDistribution(format);
                     case "/api/science":
-                        return _service.Read.CollectScience(format);
-                    case "/api/v2/science":
                         return _service.ReadV2.CollectScience(format);
                     case "/api/wellbeing":
-                        return _service.Read.CollectWellbeing(format);
-                    case "/api/v2/wellbeing":
                         return _service.ReadV2.CollectWellbeing(format);
                     case "/api/notifications":
-                        return _service.Read.CollectNotifications(format, limit, offset);
-                    case "/api/v2/notifications":
                         return _service.ReadV2.CollectNotifications(format, limit, offset);
                     case "/api/workhours":
-                        return _service.Read.CollectWorkHours();
-                    case "/api/v2/workhours":
                         return _service.ReadV2.CollectWorkHours();
-
                     case "/api/power":
-                        return _service.Read.CollectPowerNetworks(format);
-                    case "/api/v2/power":
                         return _service.ReadV2.CollectPowerNetworks(format);
                     case "/api/speed":
-                        return _service.Read.CollectSpeed();
-                    case "/api/v2/speed":
                         return _service.ReadV2.CollectSpeed();
                     case "/api/prefabs":
-                        return _service.Placement.CollectPrefabs();
-                    case "/api/v2/prefabs":
                         return _service.Placement.CollectPrefabs();
                     case "/api/webhooks":
                         return _service.WebhookMgr.ListWebhooks();
@@ -441,7 +393,7 @@ namespace Timberbot
                             body?.Value<string>("import") ?? "",
                             body?.Value<int>("exportThreshold") ?? -1);
                     case "/api/tiles":
-                        return _service.Read.CollectTiles(
+                        return _service.ReadV2.CollectTiles(
                             format,
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
@@ -496,8 +448,8 @@ namespace Timberbot
             }
 
             return _jw.Error("unknown_endpoint", ("endpoints", new[] {
-                "GET /api/ping", "GET /api/v2/ping", "GET /api/summary", "GET /api/v2/summary",
-                "GET /api/buildings", "GET /api/v2/buildings", "GET /api/trees",
+                "GET /api/ping", "GET /api/summary",
+                "GET /api/buildings", "GET /api/trees",
                 "GET /api/beavers", "GET /api/resources", "GET /api/districts", "GET /api/weather",
                 "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power",
                 "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"

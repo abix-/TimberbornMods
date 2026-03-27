@@ -13,6 +13,7 @@ using Timberborn.GameFactionSystem;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
 using Timberborn.InventorySystem;
+using Timberborn.MapIndexSystem;
 using Timberborn.MechanicalSystem;
 using Timberborn.NeedSpecs;
 using Timberborn.NotificationSystem;
@@ -22,13 +23,18 @@ using Timberborn.RangedEffectSystem;
 using Timberborn.Reproduction;
 using Timberborn.ScienceSystem;
 using Timberborn.SingletonSystem;
+using Timberborn.SoilContaminationSystem;
+using Timberborn.SoilMoistureSystem;
 using Timberborn.StatusSystem;
+using Timberborn.TerrainSystem;
 using Timberborn.TimeSystem;
 using Timberborn.WaterBuildings;
+using Timberborn.WaterSystem;
 using Timberborn.WeatherSystem;
 using Timberborn.Wonders;
 using Timberborn.WorkSystem;
 using Timberborn.Workshops;
+using UnityEngine;
 
 namespace Timberbot
 {
@@ -43,15 +49,21 @@ namespace Timberbot
         private readonly IDayNightCycle _dayNightCycle;
         private readonly SpeedManager _speedManager;
         private readonly WorkingHoursManager _workingHoursManager;
-        private readonly TimberbotEntityCache _cache;
+        private readonly TimberbotEntityRegistry _cache;
         private readonly ScienceService _scienceService;
         private readonly BuildingService _buildingService;
         private readonly BuildingUnlockingService _buildingUnlockingService;
         private readonly DistrictCenterRegistry _districtCenterRegistry;
-        private readonly FactionNeedService _factionNeedService;
+        internal readonly FactionNeedService _factionNeedService;
         private readonly NotificationSaver _notificationSaver;
+        private readonly ITerrainService _terrainService;
+        private readonly IThreadSafeWaterMap _waterMap;
+        private readonly MapIndexService _mapIndexService;
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;
+        private readonly ISoilContaminationService _soilContaminationService;
+        private readonly ISoilMoistureService _soilMoistureService;
         private readonly List<TrackedBuildingRef> _tracked = new List<TrackedBuildingRef>();
-        private readonly Dictionary<int, TrackedBuildingRef> _trackedById = new Dictionary<int, TrackedBuildingRef>();
+        private readonly Dictionary<Guid, TrackedBuildingRef> _trackedById = new Dictionary<Guid, TrackedBuildingRef>();
         private readonly TimberbotJw _jw = new TimberbotJw(300000);
         private readonly StringBuilder _toonSb = new StringBuilder(256);
         private readonly TimberbotJw _scienceBuildJw = new TimberbotJw(4096);
@@ -89,8 +101,14 @@ namespace Timberbot
         private readonly Dictionary<long, int[]> _clusterCells = new Dictionary<long, int[]>();
         private readonly Dictionary<long, Dictionary<string, int>> _clusterSpecies = new Dictionary<long, Dictionary<string, int>>();
         private readonly List<long> _clusterSorted = new List<long>();
+        private readonly Dictionary<long, List<(string name, int z)>> _tileOccupants = new Dictionary<long, List<(string, int)>>();
+        private readonly HashSet<long> _tileEntrances = new HashSet<long>();
+        private readonly HashSet<long> _tileSeedlings = new HashSet<long>();
+        private readonly HashSet<long> _tileDeadTiles = new HashSet<long>();
+        private readonly StringBuilder _tileSb = new StringBuilder(256);
         private static readonly HashSet<string> _cropNames = new HashSet<string>
             { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
+        public static readonly int[] SpeedScale = { 0, 1, 3, 7 };
         private static readonly Dictionary<string, string[]> _roleMap = new Dictionary<string, string[]> {
             {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
             {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
@@ -111,7 +129,13 @@ namespace Timberbot
             IDayNightCycle dayNightCycle,
             SpeedManager speedManager,
             WorkingHoursManager workingHoursManager,
-            TimberbotEntityCache cache,
+            TimberbotEntityRegistry cache,
+            ITerrainService terrainService,
+            IThreadSafeWaterMap waterMap,
+            MapIndexService mapIndexService,
+            IThreadSafeColumnTerrainMap terrainMap,
+            ISoilContaminationService soilContaminationService,
+            ISoilMoistureService soilMoistureService,
             ScienceService scienceService,
             BuildingService buildingService,
             BuildingUnlockingService buildingUnlockingService,
@@ -127,6 +151,12 @@ namespace Timberbot
             _speedManager = speedManager;
             _workingHoursManager = workingHoursManager;
             _cache = cache;
+            _terrainService = terrainService;
+            _waterMap = waterMap;
+            _mapIndexService = mapIndexService;
+            _terrainMap = terrainMap;
+            _soilContaminationService = soilContaminationService;
+            _soilMoistureService = soilMoistureService;
             _scienceService = scienceService;
             _buildingService = buildingService;
             _buildingUnlockingService = buildingUnlockingService;
@@ -312,7 +342,7 @@ namespace Timberbot
                 if (!matched) roleCounts["other"] = roleCounts.GetValueOrDefault("other") + 1;
             }
 
-            string faction = TimberbotEntityCache.FactionSuffix == ".Folktails" ? "Folktails" : TimberbotEntityCache.FactionSuffix == ".IronTeeth" ? "IronTeeth" : "unknown";
+            string faction = TimberbotEntityRegistry.FactionSuffix == ".Folktails" ? "Folktails" : TimberbotEntityRegistry.FactionSuffix == ".IronTeeth" ? "IronTeeth" : "unknown";
             var beaverNeeds = _factionNeedService.GetBeaverNeeds();
             _needToGroup.Clear();
             _groupMaxPerBeaver.Clear();
@@ -349,12 +379,12 @@ namespace Timberbot
             int homeless = Math.Max(0, beaverCount - occupiedBeds);
             int unemployed = Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
-            int currentSpeed = Array.IndexOf(TimberbotRead.SpeedScale, _speedManager.CurrentSpeed);
+            int currentSpeed = Array.IndexOf(SpeedScale, _speedManager.CurrentSpeed);
             if (currentSpeed < 0) currentSpeed = 0;
 
             if (format == "json")
             {
-                var jj = _cache.Jw.BeginObj();
+                var jj = _jw.Reset().BeginObj();
                 jj.Prop("settlement", GetSettlementName());
                 jj.Prop("faction", faction);
                 jj.Obj("time").Prop("dayNumber", _dayNightCycle.DayNumber).Prop("dayProgress", (float)_dayNightCycle.DayProgress).Prop("partialDayNumber", (float)_dayNightCycle.PartialDayNumber).Prop("speed", currentSpeed).CloseObj();
@@ -409,11 +439,11 @@ namespace Timberbot
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
                 WriteClustersFiltered(jj, "treeClusters", _cache.NaturalResources.Read, null, dcX, dcY, dcZ, 40, 10, 5);
-                WriteClustersFiltered(jj, "foodClusters", _cache.NaturalResources.Read, TimberbotEntityCache.TreeSpecies, dcX, dcY, dcZ, 40, 10, 5);
+                WriteClustersFiltered(jj, "foodClusters", _cache.NaturalResources.Read, TimberbotEntityRegistry.TreeSpecies, dcX, dcY, dcZ, 40, 10, 5);
                 return jj.End();
             }
 
-            var jw = _cache.Jw.BeginObj();
+            var jw = _jw.Reset().BeginObj();
             jw.Prop("settlement", GetSettlementName());
             jw.Prop("faction", faction);
             jw.Prop("day", _dayNightCycle.DayNumber);
@@ -508,7 +538,7 @@ namespace Timberbot
             }
             _clusterSorted.Clear(); _clusterSorted.AddRange(cells.Keys);
             _clusterSorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
-            var jw = _cache.Jw.BeginArr();
+            var jw = _jw.Reset().BeginArr();
             for (int i = 0; i < Math.Min(top, _clusterSorted.Count); i++)
             {
                 var s = cells[_clusterSorted[i]];
@@ -528,7 +558,7 @@ namespace Timberbot
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 if (nr.Gatherable == null) continue;
-                if (TimberbotEntityCache.TreeSpecies.Contains(nr.Name)) continue;
+                if (TimberbotEntityRegistry.TreeSpecies.Contains(nr.Name)) continue;
                 if (nr.Alive == 0) continue;
                 int cx = nr.X / cellSize * cellSize + cellSize / 2;
                 int cy = nr.Y / cellSize * cellSize + cellSize / 2;
@@ -541,7 +571,7 @@ namespace Timberbot
             }
             _clusterSorted.Clear(); _clusterSorted.AddRange(cells.Keys);
             _clusterSorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
-            var jw = _cache.Jw.BeginArr();
+            var jw = _jw.Reset().BeginArr();
             for (int i = 0; i < Math.Min(top, _clusterSorted.Count); i++)
             {
                 var s = cells[_clusterSorted[i]];
@@ -555,7 +585,7 @@ namespace Timberbot
         }
         public object CollectResources(string format = "toon")
         {
-            var jw = _cache.Jw.Reset();
+            var jw = _jw.Reset();
             if (format == "toon")
             {
                 jw.OpenArr();
@@ -582,7 +612,7 @@ namespace Timberbot
         }
         public object CollectPopulation()
         {
-            var jw = _cache.Jw.BeginArr();
+            var jw = _jw.Reset().BeginArr();
             foreach (var dc in _cache.Districts)
             {
                 jw.OpenObj()
@@ -598,7 +628,7 @@ namespace Timberbot
         public object CollectWeather() => _weatherRoute.Collect();
         public object CollectDistricts(string format = "toon")
         {
-            var jw = _cache.Jw.BeginArr();
+            var jw = _jw.Reset().BeginArr();
             foreach (var dc in _cache.Districts)
             {
                 jw.OpenObj().Prop("name", dc.Name);
@@ -621,9 +651,9 @@ namespace Timberbot
             return jw.End();
         }
         public object CollectTrees(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
+            => CollectNaturalResourcesJw(_jw, TimberbotEntityRegistry.TreeSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectCrops(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
+            => CollectNaturalResourcesJw(_jw, TimberbotEntityRegistry.CropSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectGatherables(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             bool paginated = limit > 0;
@@ -633,7 +663,7 @@ namespace Timberbot
                 foreach (var c in _cache.NaturalResources.Read)
                     if (c.Gatherable != null && (!hasFilter || PassesFilter(c.Name, c.X, c.Y, filterName, filterX, filterY, filterRadius))) total++;
 
-            var jw = _cache.Jw.Reset();
+            var jw = _jw.Reset();
             if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.NaturalResources.Read)
@@ -674,7 +704,7 @@ namespace Timberbot
             }
             int skipped = 0, emitted = 0;
 
-            var jw = _cache.Jw.Reset();
+            var jw = _jw.Reset();
             if (paginated) jw.OpenObj().Prop("total", total).Prop("offset", offset).Prop("limit", limit).Key("items");
             jw.OpenArr();
             foreach (var c in _cache.Beavers.Read)
@@ -781,7 +811,7 @@ namespace Timberbot
                         groupMaxTotals[groupId] += groupMax;
                     }
                 }
-                var jw = _cache.Jw.BeginObj().Prop("beavers", beaverCount).Arr("categories");
+                var jw = _jw.Reset().BeginObj().Prop("beavers", beaverCount).Arr("categories");
                 foreach (var kvp in groupNeeds)
                 {
                     var groupId = kvp.Key;
@@ -796,13 +826,145 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
-            catch (Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Error("operation_failed: " + ex.Message); }
+            catch (Exception ex) { TimberbotLog.Error("wellbeing", ex); return _jw.Error("operation_failed: " + ex.Message); }
         }
         public object CollectNotifications(string format = "toon", int limit = 100, int offset = 0)
             => _notificationsRoute.Collect(format, limit, offset);
         public object CollectWorkHours() => _workHoursRoute.Collect();
         public object CollectPowerNetworks(string format = "toon") => _powerRoute.Collect(format);
         public object CollectSpeed() => _speedRoute.Collect();
+        public object CollectTiles(string format = "toon", int x1 = 0, int y1 = 0, int x2 = 0, int y2 = 0)
+        {
+            var size = _terrainService.Size;
+            var stride = _mapIndexService.VerticalStride;
+
+            if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)
+                return _jw.Reset().BeginObj().Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj().CloseObj().ToString();
+
+            x1 = Mathf.Clamp(x1, 0, size.x - 1);
+            y1 = Mathf.Clamp(y1, 0, size.y - 1);
+            x2 = Mathf.Clamp(x2, 0, size.x - 1);
+            y2 = Mathf.Clamp(y2, 0, size.y - 1);
+
+            _tileOccupants.Clear();
+            _tileEntrances.Clear();
+            _tileSeedlings.Clear();
+            _tileDeadTiles.Clear();
+            var occupants = _tileOccupants;
+            var entrances = _tileEntrances;
+            var seedlings = _tileSeedlings;
+            var deadTiles = _tileDeadTiles;
+
+            var buildings = _cache.Buildings.Read;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var c = buildings[i];
+                if (c.OccupiedTiles == null) continue;
+                foreach (var tile in c.OccupiedTiles)
+                {
+                    if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
+                    {
+                        long key = (long)tile.x * 100000 + tile.y;
+                        if (!occupants.ContainsKey(key))
+                            occupants[key] = new List<(string, int)>();
+                        occupants[key].Add((c.Name, tile.z));
+                    }
+                }
+                if (c.HasEntrance != 0 && c.EntranceX >= x1 && c.EntranceX <= x2 && c.EntranceY >= y1 && c.EntranceY <= y2)
+                    entrances.Add((long)c.EntranceX * 100000 + c.EntranceY);
+            }
+
+            var resources = _cache.NaturalResources.Read;
+            for (int i = 0; i < resources.Count; i++)
+            {
+                var c = resources[i];
+                if (c.X < x1 || c.X > x2 || c.Y < y1 || c.Y > y2) continue;
+                long key = (long)c.X * 100000 + c.Y;
+                if (c.Grown == 0 && c.Alive != 0) seedlings.Add(key);
+                if (c.Alive == 0) deadTiles.Add(key);
+                if (!occupants.ContainsKey(key))
+                    occupants[key] = new List<(string, int)>();
+                occupants[key].Add((c.Name, c.Z));
+            }
+
+            var jw = _jw.Reset().BeginObj();
+            jw.Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj();
+            jw.Obj("region").Prop("x1", x1).Prop("y1", y1).Prop("x2", x2).Prop("y2", y2).CloseObj();
+            jw.Arr("tiles");
+
+            for (int y = y1; y <= y2; y++)
+            {
+                for (int x = x1; x <= x2; x++)
+                {
+                    int terrainHeight = 0;
+                    float waterDepth = 0f;
+                    float waterContamination = 0f;
+
+                    var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                    var columnCount = _terrainMap.ColumnCounts[index2D];
+                    if (columnCount > 0)
+                    {
+                        var topIndex = (columnCount - 1) * stride + index2D;
+                        terrainHeight = _terrainMap.GetColumnCeiling(topIndex);
+                    }
+
+                    int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                    int wColCount = _waterMap.ColumnCount(wIdx2D);
+                    for (int ci = 0; ci < wColCount; ci++)
+                    {
+                        int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
+                        var col = _waterMap.WaterColumns[wIdx3D];
+                        if (col.Ceiling >= terrainHeight)
+                        {
+                            waterDepth = col.WaterDepth;
+                            waterContamination = _waterMap.ColumnContamination(new Vector3Int(x, y, col.Ceiling));
+                            break;
+                        }
+                    }
+
+                    long key = (long)x * 100000 + y;
+                    int contaminated = 0, moist = 0;
+                    try { contaminated = _soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (Exception ex) { TimberbotLog.Error("map.soil", ex); }
+                    try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)) ? 1 : 0; } catch (Exception ex) { TimberbotLog.Error("map.moisture", ex); }
+
+                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight);
+                    jw.Prop("water", waterDepth, "F1");
+                    jw.Prop("badwater", (float)Math.Round(waterContamination, 2));
+                    jw.Prop("entrance", entrances.Contains(key) ? 1 : 0);
+                    jw.Prop("seedling", seedlings.Contains(key) ? 1 : 0);
+                    jw.Prop("dead", deadTiles.Contains(key) ? 1 : 0);
+                    jw.Prop("contaminated", contaminated);
+                    jw.Prop("moist", moist);
+
+                    if (format == "toon")
+                    {
+                        _tileSb.Clear();
+                        var occList = occupants.ContainsKey(key) ? occupants[key] : null;
+                        if (occList != null)
+                        {
+                            for (int oi = 0; oi < occList.Count; oi++)
+                            {
+                                if (oi > 0) _tileSb.Append('+');
+                                _tileSb.Append(occList[oi].name);
+                                _tileSb.Append('@');
+                                _tileSb.Append(occList[oi].z);
+                            }
+                        }
+                        jw.Prop("occupants", _tileSb.ToString());
+                    }
+                    else
+                    {
+                        jw.Arr("occupants");
+                        var occList = occupants.ContainsKey(key) ? occupants[key] : null;
+                        if (occList != null) foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
+                        jw.CloseArr();
+                    }
+                    jw.CloseObj();
+                }
+            }
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
+        }
         public string GetSettlementName()
         {
             try
@@ -846,7 +1008,7 @@ namespace Timberbot
         private SpeedSnapshot BuildSpeedSnapshot()
         {
             var raw = _speedManager.CurrentSpeed;
-            int level = Array.IndexOf(TimberbotRead.SpeedScale, raw);
+            int level = Array.IndexOf(SpeedScale, raw);
             if (level < 0) level = 0;
             return new SpeedSnapshot { Speed = level };
         }
@@ -1044,8 +1206,8 @@ namespace Timberbot
             }
             else { s.Dwellers = 0; s.MaxDwellers = 0; }
             s.FloodgateHeight = t.Floodgate != null ? t.Floodgate.Height : 0f;
-            s.ConstructionPriority = t.BuilderPrio != null ? TimberbotEntityCache.GetPriorityName(t.BuilderPrio.Priority) : null;
-            s.WorkplacePriorityStr = t.WorkplacePrio != null ? TimberbotEntityCache.GetPriorityName(t.WorkplacePrio.Priority) : null;
+            s.ConstructionPriority = t.BuilderPrio != null ? TimberbotEntityRegistry.GetPriorityName(t.BuilderPrio.Priority) : null;
+            s.WorkplacePriorityStr = t.WorkplacePrio != null ? TimberbotEntityRegistry.GetPriorityName(t.WorkplacePrio.Priority) : null;
             if (t.Site != null)
             {
                 s.BuildProgress = t.Site.BuildTimeProgress;
@@ -1208,7 +1370,7 @@ namespace Timberbot
         }
 
         private void WriteClustersFiltered(TimberbotJw jw, string key,
-            List<TimberbotEntityCache.CachedNaturalResource> resources,
+            List<TimberbotEntityRegistry.CachedNaturalResource> resources,
             HashSet<string> excludeSpecies,
             int dcX, int dcY, int dcZ, int maxDist, int cellSize, int top)
         {
@@ -1246,13 +1408,16 @@ namespace Timberbot
         private void TryAddTracked(EntityComponent ec)
         {
             if (ec.GetComponent<Building>() == null) return;
-            int id = ec.GameObject.GetInstanceID();
-            if (_trackedById.ContainsKey(id)) return;
+            var entityId = ec.EntityId;
+            if (entityId == Guid.Empty) return;
+            if (_trackedById.ContainsKey(entityId)) return;
+            int id = _cache.GetLegacyId(ec);
 
             var t = new TrackedBuildingRef
             {
+                EntityId = entityId,
                 Id = id,
-                Name = TimberbotEntityCache.CleanName(ec.GameObject.name),
+                Name = TimberbotEntityRegistry.CleanName(ec.GameObject.name),
                 BlockObject = ec.GetComponent<BlockObject>(),
                 Pausable = ec.GetComponent<PausableBuilding>(),
                 Floodgate = ec.GetComponent<Floodgate>(),
@@ -1296,7 +1461,7 @@ namespace Timberbot
                 def.X = coords.x;
                 def.Y = coords.y;
                 def.Z = coords.z;
-                def.Orientation = TimberbotEntityCache.OrientNames[(int)bo.Orientation];
+                def.Orientation = TimberbotEntityRegistry.OrientNames[(int)bo.Orientation];
                 var occupied = new List<(int, int, int)>();
                 try
                 {
@@ -1323,15 +1488,16 @@ namespace Timberbot
 
             t.Definition = def;
             _tracked.Add(t);
-            _trackedById[id] = t;
+            _trackedById[entityId] = t;
             _snapshot.MarkDirty();
         }
 
         private void RemoveTracked(EntityComponent ec)
         {
-            int id = ec.GameObject.GetInstanceID();
-            if (!_trackedById.TryGetValue(id, out var tracked)) return;
-            _trackedById.Remove(id);
+            var entityId = ec.EntityId;
+            if (entityId == Guid.Empty) return;
+            if (!_trackedById.TryGetValue(entityId, out var tracked)) return;
+            _trackedById.Remove(entityId);
             _tracked.Remove(tracked);
             _snapshot.MarkDirty();
         }
@@ -1350,6 +1516,7 @@ namespace Timberbot
 
         private sealed class TrackedBuildingRef
         {
+            public Guid EntityId;
             public int Id;
             public string Name;
             public BlockObject BlockObject;
@@ -1916,7 +2083,7 @@ namespace Timberbot
 
                 bool paginated = limit > 0;
                 int skipped = 0, emitted = 0;
-                var jw = _jw.BeginArr();
+                var jw = _jw.Reset().BeginArr();
                 for (int i = 0; i < items.Length; i++)
                 {
                     if (offset > 0 && skipped < offset) { skipped++; continue; }

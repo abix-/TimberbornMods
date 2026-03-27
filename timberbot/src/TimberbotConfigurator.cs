@@ -19,10 +19,9 @@ namespace Timberbot
         // The other classes are plain singletons injected into TimberbotService.
         public override void Configure()
         {
-            Bind<TimberbotEntityCache>().AsSingleton();
+            Bind<TimberbotEntityRegistry>().AsSingleton();
             Bind<TimberbotReadV2>().AsSingleton();
             Bind<TimberbotWebhook>().AsSingleton();
-            Bind<TimberbotRead>().AsSingleton();
             Bind<TimberbotWrite>().AsSingleton();
             Bind<TimberbotPlacement>().AsSingleton();
             Bind<TimberbotDebug>().AsSingleton();
