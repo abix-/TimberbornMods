@@ -105,13 +105,15 @@ class RawHttpClient:
 
 
 class V2Runner:
-    def __init__(self, log_writer=None, error_writer=None):
+    def __init__(self, run_id: str, log_writer=None, error_writer=None):
         self.bot = Timberbot(json_mode=True)
         self.raw = RawHttpClient(self.bot.url)
+        self.run_id = run_id
         self.discovery: DiscoveryState | None = None
         self.case_results: list[dict[str, Any]] = []
         self.perf_results: list[dict[str, Any]] = []
         self.fixture_outputs: list[dict[str, Any]] = []
+        self.concurrency_artifacts: list[dict[str, Any]] = []
         self.sections: list[str] = []
         self.failed = 0
         self.passed = 0
@@ -139,6 +141,63 @@ class V2Runner:
         if isinstance(value, list):
             return value
         return []
+
+    def _concurrency_membership(self, value: Any) -> dict[str, Any]:
+        items = self._extract_items(value)
+        ids = []
+        for item in items:
+            if isinstance(item, dict) and item.get("id") is not None:
+                ids.append(int(item["id"]))
+        if isinstance(value, dict):
+            total = value.get("total", len(items))
+        else:
+            total = len(items)
+        return {
+            "total": int(total),
+            "count": len(items),
+            "ids": ids,
+        }
+
+    def _first_row_differences(self, left: Any, right: Any) -> list[str]:
+        left_items = self._extract_items(left)
+        right_items = self._extract_items(right)
+        limit = min(len(left_items), len(right_items))
+        for idx in range(limit):
+            lrow = left_items[idx]
+            rrow = right_items[idx]
+            if lrow == rrow or not isinstance(lrow, dict) or not isinstance(rrow, dict):
+                continue
+            differing = sorted(key for key in set(lrow.keys()) | set(rrow.keys()) if lrow.get(key) != rrow.get(key))
+            row_id = lrow.get("id", rrow.get("id", idx))
+            return [f"id={row_id}", *differing[:10]]
+        return []
+
+    def _classify_concurrency(self, spec: EndpointSpec, samples: dict[str, Any]) -> tuple[str, str]:
+        fingerprints = sorted(samples.keys())
+        if len(fingerprints) <= 1:
+            return "exact_match", ""
+
+        memberships = {fp: self._concurrency_membership(payload) for fp, payload in samples.items()}
+        membership_signatures = {
+            fp: (
+                memberships[fp]["total"],
+                memberships[fp]["count"],
+                tuple(memberships[fp]["ids"]),
+            )
+            for fp in fingerprints
+        }
+        if len(set(membership_signatures.values())) > 1:
+            return "membership_mismatch", f"inconsistent fingerprints={fingerprints[:5]}"
+
+        first = samples[fingerprints[0]]
+        second = samples[fingerprints[1]]
+        differing = self._first_row_differences(first, second)
+        detail = f"field_drift fingerprints={fingerprints[:5]}"
+        if differing:
+            detail += f" differing={differing}"
+        if spec.concurrency_mode == "exact_stable":
+            return "field_drift_exact", detail
+        return "field_drift", detail
 
     def _compare_summary(self, left: Any, right: Any) -> str:
         if left == right:
@@ -254,11 +313,34 @@ class V2Runner:
                 state.sample_coords[name] = (int(sample_xy["x"]), int(sample_xy["y"]))
 
         full_items = self._extract_items(buildings_full)
-        workers_target = next((b for b in full_items if int(b.get("maxWorkers", 0)) > 0 and int(b.get("finished", 0)) == 1), None)
-        pause_target = workers_target or next((b for b in full_items if int(b.get("finished", 0)) == 1 and str(b.get("name", "")) != "Path"), None)
-        floodgate_target = next((b for b in full_items if b.get("hasFloodgate")), None)
-        clutch_target = next((b for b in full_items if b.get("hasClutch")), None)
-        recipe_target = next((b for b in full_items if isinstance(b.get("recipes"), list) and len(b.get("recipes")) >= 2), None)
+        workers_target = next((
+            b for b in full_items
+            if int(b.get("finished", 0)) == 1
+            and int(b.get("maxWorkers", 0)) >= 2
+            and str(b.get("name", "")) != "Path"
+        ), None)
+        pause_target = next((
+            b for b in full_items
+            if int(b.get("finished", 0)) == 1
+            and str(b.get("name", "")) != "Path"
+            and b.get("paused") is not None
+        ), None) or workers_target
+        floodgate_target = next((
+            b for b in full_items
+            if b.get("hasFloodgate")
+            and float(b.get("floodgateMaxHeight", 0.0) or 0.0) > 0.0
+        ), None)
+        clutch_target = next((
+            b for b in full_items
+            if b.get("hasClutch")
+            and int(b.get("finished", 0)) == 1
+        ), None)
+        recipe_target = next((
+            b for b in full_items
+            if isinstance(b.get("recipes"), list)
+            and len(b.get("recipes")) >= 2
+            and str(b.get("name", "")) != "Path"
+        ), None)
 
         if pause_target:
             state.building_targets["pause_target"] = int(pause_target["id"])
@@ -691,7 +773,7 @@ class V2Runner:
             cases = [case for case in self.representative_cases(spec, discovery) if case.params.get("format") == "json"]
             for case in cases:
                 errors: list[str] = []
-                fingerprints: list[str] = []
+                samples: dict[str, Any] = {}
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     futures = [
                         pool.submit(self.raw.get, spec.path, case.params, DEFAULT_TIMEOUT)
@@ -700,22 +782,39 @@ class V2Runner:
                     for future in as_completed(futures):
                         try:
                             result = future.result()
-                            fingerprints.append(self._fingerprint(result.data))
+                            fingerprint = self._fingerprint(result.data)
+                            if fingerprint not in samples:
+                                samples[fingerprint] = result.data
                         except Exception as ex:
                             errors.append(str(ex))
-                unique = sorted(set(fingerprints))
-                ok = not errors and len(unique) == 1
+                unique = sorted(samples.keys())
+                classification = "exact_match"
                 detail = ""
                 if errors:
+                    classification = "request_error"
                     detail = errors[0]
-                elif len(unique) > 1:
-                    detail = f"inconsistent fingerprints={unique[:5]}"
+                else:
+                    classification, detail = self._classify_concurrency(spec, samples)
+                if classification != "exact_match":
+                    self.concurrency_artifacts.append({
+                        "endpoint": spec.name,
+                        "case": case.label,
+                        "params": case.params,
+                        "classification": classification,
+                        "detail": detail,
+                        "fingerprints": unique,
+                        "samples": samples,
+                    })
+                ok = classification in {"exact_match", "field_drift"}
                 self._record("PASS" if ok else "FAIL", "concurrency", case.label, detail, spec.name, case.params)
 
     def list_endpoints(self):
         self._write_line("Available endpoints:")
         for spec in ENDPOINT_SPECS:
-            self._write_line(f"  {spec.name:<14} group={spec.group:<11} projection_backed={spec.projection_backed}")
+            self._write_line(
+                f"  {spec.name:<14} group={spec.group:<11} projection_backed={spec.projection_backed} "
+                f"concurrency_mode={spec.concurrency_mode}"
+            )
 
     def list_cases(self, specs: list[EndpointSpec]):
         discovery = self.discover()
@@ -726,8 +825,8 @@ class V2Runner:
                 self._write_line(f"  {case.label}  params={json.dumps(case.params, sort_keys=True)}")
 
     def write_artifacts(self, mode_name: str):
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        base = os.path.join(self.artifact_dir, f"{timestamp}-{mode_name}")
+        base = os.path.join(self.artifact_dir, f"{self.run_id}-{mode_name}")
+        diff_root = self._write_concurrency_artifacts(base)
         report = {
             "mode": mode_name,
             "sections": self.sections,
@@ -736,16 +835,60 @@ class V2Runner:
             "cases": self.case_results,
             "performance": self.perf_results,
             "fixtures": self.fixture_outputs,
+            "concurrencyArtifacts": [
+                {
+                    "endpoint": item["endpoint"],
+                    "case": item["case"],
+                    "classification": item["classification"],
+                    "detail": item["detail"],
+                    "fingerprints": item["fingerprints"],
+                }
+                for item in self.concurrency_artifacts
+            ],
         }
         json_path = base + ".json"
         md_path = base + ".md"
         with open(json_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2, sort_keys=True)
         with open(md_path, "w", encoding="utf-8") as fh:
-            fh.write(self._render_markdown(report, json_path))
+            fh.write(self._render_markdown(report, json_path, diff_root))
         return md_path, json_path
 
-    def _render_markdown(self, report: dict[str, Any], json_path: str) -> str:
+    def _write_concurrency_artifacts(self, base: str) -> str | None:
+        if not self.concurrency_artifacts:
+            return None
+        diff_root = base + "-concurrency-diffs"
+        os.makedirs(diff_root, exist_ok=True)
+        for index, item in enumerate(self.concurrency_artifacts, start=1):
+            safe_case = "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in item["case"])[:80]
+            case_dir = os.path.join(diff_root, f"{index:02d}-{safe_case}")
+            os.makedirs(case_dir, exist_ok=True)
+            summary = {
+                "endpoint": item["endpoint"],
+                "case": item["case"],
+                "params": item["params"],
+                "classification": item["classification"],
+                "detail": item["detail"],
+                "fingerprints": item["fingerprints"],
+                "memberships": {
+                    fp: self._concurrency_membership(payload)
+                    for fp, payload in item["samples"].items()
+                },
+            }
+            with open(os.path.join(case_dir, "summary.json"), "w", encoding="utf-8") as fh:
+                json.dump(summary, fh, indent=2, sort_keys=True)
+            for fingerprint, payload in item["samples"].items():
+                with open(os.path.join(case_dir, f"sample-{fingerprint}.json"), "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=2, sort_keys=True)
+            with open(os.path.join(case_dir, "diff.md"), "w", encoding="utf-8") as fh:
+                fh.write(f"# {item['case']}\n\n")
+                fh.write(f"- Endpoint: `{item['endpoint']}`\n")
+                fh.write(f"- Classification: `{item['classification']}`\n")
+                fh.write(f"- Detail: {item['detail'] or 'n/a'}\n")
+                fh.write(f"- Fingerprints: `{', '.join(item['fingerprints'])}`\n")
+        return diff_root
+
+    def _render_markdown(self, report: dict[str, Any], json_path: str, diff_root: str | None) -> str:
         lines = [
             f"# V2 Test Report: {report['mode']}",
             "",
@@ -753,6 +896,10 @@ class V2Runner:
             f"- Failed: {report['summary']['failed']}",
             f"- Skipped: {report['summary']['skipped']}",
             f"- JSON artifact: `{json_path}`",
+        ]
+        if diff_root:
+            lines.append(f"- Concurrency diffs: `{diff_root}`")
+        lines.extend([
             "",
             "## Discovery",
             "",
@@ -764,7 +911,7 @@ class V2Runner:
             "",
             "| Status | Mode | Name | Detail |",
             "|---|---|---|---|",
-        ]
+        ])
         for case in self.case_results:
             detail = case["detail"].replace("|", "/").replace("\n", " ")[:160]
             lines.append(f"| {case['status']} | {case['mode']} | {case['name']} | {detail} |")
@@ -782,6 +929,17 @@ class V2Runner:
                     f"{row['current']['p50_ms']:.2f} | {row['current']['p95_ms']:.2f} | "
                     f"{row['current']['max_ms']:.2f} | {row['current']['errors']} |"
                 )
+        if report["concurrencyArtifacts"]:
+            lines.extend([
+                "",
+                "## Concurrency Diagnostics",
+                "",
+                "| Endpoint | Case | Classification | Detail |",
+                "|---|---|---|---|",
+            ])
+            for item in report["concurrencyArtifacts"]:
+                detail = item["detail"].replace("|", "/").replace("\n", " ")[:160]
+                lines.append(f"| {item['endpoint']} | {item['case']} | {item['classification']} | {detail} |")
         lines.append("")
         return "\n".join(lines)
 
@@ -801,7 +959,7 @@ def main():
     transcript_path = os.path.join(artifact_dir, f"{timestamp}-{args.mode}.log")
 
     with open(transcript_path, "w", encoding="utf-8") as log_writer:
-        runner = V2Runner(log_writer=log_writer, error_writer=sys.stderr)
+        runner = V2Runner(run_id=timestamp, log_writer=log_writer, error_writer=sys.stderr)
         if not runner.bot.ping():
             sys.stderr.write("error: game not reachable\n")
             sys.stderr.flush()

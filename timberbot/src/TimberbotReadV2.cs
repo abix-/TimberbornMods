@@ -248,6 +248,15 @@ namespace Timberbot
         public int PublishSequence => _snapshot.Sequence;
         public int LastPublishedCount => _snapshot.Count;
         public float LastPublishedAt => _snapshot.PublishedAt;
+        public int BeaverPublishSequence => _beaverSnapshot.Sequence;
+        public int BeaverLastPublishedCount => _beaverSnapshot.Count;
+        public float BeaverLastPublishedAt => _beaverSnapshot.PublishedAt;
+        public int NaturalResourcePublishSequence => _naturalResourceSnapshot.Sequence;
+        public int NaturalResourceLastPublishedCount => _naturalResourceSnapshot.Count;
+        public float NaturalResourceLastPublishedAt => _naturalResourceSnapshot.PublishedAt;
+        public int DistrictPublishSequence => _districtStore.Sequence;
+        public int DistrictLastPublishedCount => _districtStore.Count;
+        public float DistrictLastPublishedAt => _districtStore.PublishedAt;
         internal ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Snapshot CurrentBuildingSnapshot => _snapshot.Current;
         internal ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState>.Snapshot CurrentBeaverSnapshot => _beaverSnapshot.Current;
         internal ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot CurrentNaturalResourceSnapshot => _naturalResourceSnapshot.Current;
@@ -2429,7 +2438,20 @@ namespace Timberbot
             private readonly List<Waiter> _waiters = new List<Waiter>();
             private readonly List<Waiter> _wakeBatch = new List<Waiter>();
             private TSnapshot _published;
+            private int _sequence;
+            private float _publishedAt;
             public TSnapshot Current => _published;
+            public int Sequence => _sequence;
+            public float PublishedAt => _publishedAt;
+            public int Count
+            {
+                get
+                {
+                    if (_published == null) return 0;
+                    if (_published is Array arr) return arr.Length;
+                    return 1;
+                }
+            }
 
             public void ProcessPending(float now, BuildSnapshot build)
             {
@@ -2442,7 +2464,12 @@ namespace Timberbot
                     _waiters.Clear();
                 }
 
-                try { _published = build(); }
+                try
+                {
+                    _published = build();
+                    _publishedAt = now;
+                    _sequence++;
+                }
                 finally
                 {
                     for (int i = 0; i < _wakeBatch.Count; i++)
@@ -2469,6 +2496,8 @@ namespace Timberbot
             public TSnapshot PublishNow(float now, BuildSnapshot build)
             {
                 _published = build();
+                _publishedAt = now;
+                _sequence++;
                 return _published;
             }
 
