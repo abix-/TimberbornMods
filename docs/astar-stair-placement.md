@@ -4,6 +4,8 @@
 
 `place_path` routes a path from (x1,y1) to (x2,y2) across a Timberborn map. The path crosses multiple elevation levels. At each z-change, stairs must be placed. The goal is the SHORTEST path with LOWEST cost -- one A* pass, no wasted tiles.
 
+If we want true A* optimality, every traversable edge must have a positive minimum cost that matches the heuristic's lower bound. Existing path reuse therefore needs to cost `1`, not `0`.
+
 ## How stairs work in Timberborn
 
 - Stairs are 1x1 buildings placed on the LOWER tile of a z-change edge
@@ -24,7 +26,7 @@ Look back 5 waypoints to find "dominant" direction. Problem: the dominant direct
 ### Failed fix 2: Destination-based direction
 Orient stairs toward the destination (dominant cardinal axis from z-change to goal). Problem: the stair tile ended up on the wrong terrain. E.g., z-change is between x=168 (z=8) and x=169 (z=9). Destination says go +Y. Stair tile computed at (169,166) which has z=9, but baseZ=8. Terrain conflict.
 
-### Current approach: Pre-computed stair edges in A* graph (partially working)
+### Current approach: Pre-computed stair edges in A* graph
 
 Based on standard game dev approach (Unity forums, Red Blob Games): model stairs as directed portal edges IN the A* graph, not computed post-hoc.
 
@@ -40,12 +42,100 @@ Based on standard game dev approach (Unity forums, Red Blob Games): model stairs
 - A* finds routes through z-change edges (the cost=20 edges are traversable)
 - First stair crossing places correctly (section 1 works)
 - Stair orientation is inherently correct (determined by the edge direction)
+- The abstraction is correct for 3D Timberborn path building: stairs are directed graph connections, not something to guess after a 2D route is chosen
 
 **What's broken:**
+- Existing path cost `0` breaks true A* if the heuristic assumes a positive minimum per-step cost
 - `stoppedAt` reports the entrance tile, not the exit tile. The next section starts from the entrance (z=2 side) instead of the exit (z=3 side), so it can't find a route forward
-- The A* heuristic was changed from greedy (f = h*4) to proper A* (f = g + h*2) to handle cost=20 edges, but this may need tuning
+- The heuristic must be updated to match the new minimum edge cost once paths become `1`
 - Multi-level stairs (levels > 1 requiring platforms) are marked impassable -- not handled yet
 - The `sections` param counts stair crossings and stops, but the stopped position needs to be the EXIT tile of the last stair
+
+## Pathfinding foundation
+
+Pathfinding minimizes total movement cost, not just number of tiles.
+
+- A node = one tile we can stand on
+- An edge = one allowed move from one tile to another
+- Edge cost = the price of taking that move
+
+The route cost is the sum of all edge costs along the path.
+
+In this system:
+
+- Existing path should cost `1`
+- Open ground should cost `2`
+- Shallow water should cost `8`
+- Deep water should cost `50`
+- Single-level stair edge should cost `20`
+- Impassable should be `255`
+
+That preserves the gameplay preference:
+
+- prefer reusing existing paths
+- still allow building fresh path
+- strongly discourage stairs and water unless they are worth it
+
+## Dijkstra vs real A*
+
+### Dijkstra
+
+Dijkstra uses only the real cost already spent from the start.
+
+- Priority = `g`
+- `g` = cheapest known cost from start to this node
+
+Dijkstra is always correct for non-negative edge costs, including `0`-cost roads. It is usually slower because it does not try to aim at the goal; it expands the cheapest frontier in every direction.
+
+### Real A*
+
+A* uses:
+
+- `g` = real cost spent so far
+- `h` = estimated remaining cost to the goal
+- `f = g + h`
+
+Real A* is guaranteed optimal only when `h` never overestimates the true cheapest remaining cost.
+
+That means:
+
+- `h(node) <= actual cheapest remaining cost from node to goal`
+
+### Why `path = 0` breaks A*
+
+The current search uses Manhattan distance as a heuristic. A Manhattan heuristic only works as a true lower bound if each remaining step costs at least some positive minimum amount.
+
+If existing paths cost `0`, that condition fails.
+
+Example:
+
+- Goal is 5 tiles away
+- Those 5 tiles are already existing path
+- True remaining cost can be `0`
+- Any positive Manhattan-based heuristic says `> 0`
+
+That is an overestimate. Once `h` overestimates, the search is no longer guaranteed to return the cheapest path. At that point it is not "real A*" in the optimality sense.
+
+### Why `path = 1` fixes it
+
+If the minimum traversable edge cost is `1`, then Manhattan distance times `1` is a valid lower bound:
+
+- every remaining move to the goal costs at least `1`
+- therefore `h = Manhattan * 1` can never overestimate
+
+That restores true A* optimality while still making existing paths cheaper than fresh ground.
+
+### Design decision
+
+We want real A*, not Dijkstra.
+
+Therefore:
+
+- existing path reuse should cost `1`, not `0`
+- the heuristic should use the true minimum edge cost: `h = Manhattan * 1`
+- any style bias should remain only a tie-breaker and must not outweigh real `g + h`
+
+With that change, the stair-edge graph design remains sound.
 
 ## Key files
 
@@ -76,6 +166,15 @@ The neighbor offset arrays `ndx/ndy` point to where the neighbor IS (not the tra
 
 A* reads `grid[nidx * 4 + opposite[d]]` when stepping in direction d to tile nidx. `opposite = {1,0,3,2}`.
 
+Recommended entry costs:
+
+- existing path/platform/stairs entry: `1`
+- open ground entry: `2`
+- shallow water entry: `8`
+- deep water entry: `50`
+- valid single-level stair edge: `20`
+- blocked edge: `255`
+
 ## Stair edge computation
 
 For each tile (lx,ly) and each neighbor direction d:
@@ -90,13 +189,15 @@ For each tile (lx,ly) and each neighbor direction d:
 
 ## What needs fixing
 
-1. **stoppedAt position**: When `sections > 0` and we stop after N stair crossings, `stoppedAt` must report the stair EXIT tile (higher z), not the entrance. The next invocation starts from stoppedAt.
+1. **Change existing path cost from `0` to `1`**: true A* needs a positive minimum edge cost so Manhattan can be an admissible heuristic.
 
-2. **Multi-level stairs**: Currently marked impassable. Need to check if platforms are unlocked, then model multi-level ramps as a sequence of stair+platform placements with higher cost.
+2. **Set the heuristic to `Manhattan * 1`**: once existing path cost is `1`, the minimum traversable edge cost is `1`, so this becomes a valid lower bound.
 
-3. **A* heuristic tuning**: Changed from greedy to proper A* to handle cost=20 stair edges. May need adjustment for performance on large grids.
+3. **stoppedAt position**: When `sections > 0` and we stop after N stair crossings, `stoppedAt` must report the stair EXIT tile (higher z), not the entrance. The next invocation starts from stoppedAt.
 
-4. **Edge direction consistency**: The ndx/ndy (neighbor offset) vs ddx/ddy (travel direction) confusion caused multiple bugs. The grid uses ndx/ndy convention. The A* uses ddx/ddy. The `opposite` array bridges them. This mapping is fragile and needs careful documentation or unification.
+4. **Multi-level stairs**: Currently marked impassable. Need to check if platforms are unlocked, then model multi-level ramps as a sequence of stair+platform placements with higher cost.
+
+5. **Edge direction consistency**: The ndx/ndy (neighbor offset) vs ddx/ddy (travel direction) confusion caused multiple bugs. The grid uses ndx/ndy convention. The A* uses ddx/ddy. The `opposite` array bridges them. This mapping is fragile and needs careful documentation or unification.
 
 ## Commits so far
 
@@ -108,5 +209,6 @@ For each tile (lx,ly) and each neighbor direction d:
 
 - [Unity multi-level pathfinding](https://forum.unity.com/threads/multi-level-height-pathfinding.373728/) -- model level connections as portal edges
 - [Red Blob Games grid algorithms](https://www.redblobgames.com/pathfinding/grids/algorithms.html) -- edge-based costs, heuristic admissibility
+- [Red Blob Games A* introduction](https://www.redblobgames.com/pathfinding/a-star/introduction.html) -- `g`, `h`, `f`, and lower-bound heuristics
 - [Staircase mod](https://timberborn.thunderstore.io/package/KnatteAnka_And_Tobbert/Staircase/) -- alternative stair orientations
 - [A* 3D grid pathfinding](https://answers.unity.com/questions/1096235/using-stairs-in-3d-grid-based-pathfinding-a.html) -- stairs as graph edges
