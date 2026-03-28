@@ -36,7 +36,6 @@ namespace Timberbot
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
-        private float _refreshInterval = 1.0f;   // retained for settings compatibility
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
         // webhook settings applied to WebhookMgr in Load()
@@ -83,7 +82,7 @@ namespace Timberbot
             WebhookMgr.Enabled = _webhooksEnabled;
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
-            TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
+            TimberbotLog.Info($"v0.7.0 port={_httpPort} debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
             Registry.WebhookMgr = WebhookMgr;  // registry pushes webhook events on entity lifecycle
             DebugTool.Service = this;         // debug needs Service reference for endpoint benchmarks
             _eventBus.Register(this);
@@ -108,8 +107,6 @@ namespace Timberbot
                 if (System.IO.File.Exists(path))
                 {
                     var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(path));
-                    _refreshInterval = json.Value<float>("refreshIntervalSeconds");
-                    if (_refreshInterval <= 0) _refreshInterval = 1.0f;
                     _debugEnabled = json.Value<bool>("debugEndpointEnabled");
                     _httpPort = json.Value<int>("httpPort");
                     if (_httpPort <= 0) _httpPort = 8085;

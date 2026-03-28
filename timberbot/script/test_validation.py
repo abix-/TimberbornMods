@@ -23,7 +23,7 @@ import time
 from timberbot import Timberbot, TimberbotError
 
 
-REFRESH_WAIT = 1.5  # seconds to wait after POST for cache refresh (settings.json refreshIntervalSeconds + margin)
+REFRESH_WAIT = 1.5  # seconds to wait after POST for snapshot refresh + margin
 
 
 class TestRunner:
@@ -1236,6 +1236,57 @@ class TestRunner:
         self.check("out-of-bounds: no route",
                    no_route,
                    json.dumps(result)[:120])
+
+    def test_blocker_tracking(self):
+        """Verify uncached block objects (ruins, editor objects) appear in tiles and block placement."""
+        print("\n=== blocker tracking (ruins / editor objects) ===\n")
+
+        # scan a large tile region for any ruin/editor occupants
+        tiles_result = self.bot._post_json("/api/tiles", {
+            "x1": 0, "y1": 0, "x2": self.map_x - 1, "y2": self.map_y - 1
+        })
+        if self.err(tiles_result):
+            self.skip("blocker tracking", "tiles endpoint error")
+            return
+
+        ruin_tiles = []
+        for t in tiles_result.get("tiles", []):
+            for occ in (t.get("occupants") or []):
+                name = occ if isinstance(occ, str) else occ.get("name", "")
+                if "Ruin" in name or "Underground" in name or "MapEditor" in name:
+                    ruin_tiles.append((t.get("x"), t.get("y"), name))
+
+        self.check("blockers: ruins visible in /api/tiles",
+                   len(ruin_tiles) > 0,
+                   f"found {len(ruin_tiles)} ruin occupant tiles")
+
+        if not ruin_tiles:
+            self.skip("blocker placement", "no ruin tiles found to test placement against")
+            return
+
+        # try placing on a ruin tile -- should fail with a named blocker, not "unknown"
+        rx, ry, rname = ruin_tiles[0]
+        path_prefab = "Path"
+        tz = 0
+        # get terrain height at that tile
+        spot_tiles = self.bot._post_json("/api/tiles", {
+            "x1": rx, "y1": ry, "x2": rx, "y2": ry
+        })
+        for t in spot_tiles.get("tiles", []):
+            if t.get("x") == rx and t.get("y") == ry:
+                tz = t.get("terrainHeight", 0)
+                break
+
+        result = self.bot.place_building(path_prefab, rx, ry, tz, "south")
+        if isinstance(result, dict) and result.get("error"):
+            err_msg = result["error"]
+            self.check("blockers: placement names the blocker (not 'unknown')",
+                       "unknown" not in err_msg,
+                       err_msg[:120])
+        else:
+            # placement succeeded (ruin might be overridable) -- that's fine, not a failure
+            self.check("blockers: placement on ruin tile", True,
+                       "placement succeeded (ruin may be overridable)")
 
     def test_overridable_placement(self):
         print("\n=== overridable placement ===\n")

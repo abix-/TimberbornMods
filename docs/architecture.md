@@ -388,7 +388,6 @@ Settings:
 
 ```json
 {
-  "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": true,
   "httpPort": 8085,
   "webhooksEnabled": true,
@@ -397,11 +396,6 @@ Settings:
   "writeBudgetMs": 2.0
 }
 ```
-
-Current meaning:
-
-- `refreshIntervalSeconds` is retained for settings compatibility
-- it no longer affects public read freshness or any live read refresh loop
 
 ## Test posture
 

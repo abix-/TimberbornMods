@@ -77,7 +77,6 @@ def main():
         zf.write(SKILL, "skill/timberbot.md")
         # include settings.json with debug disabled
         release_settings = json.dumps({
-            "refreshIntervalSeconds": 1.0,
             "debugEndpointEnabled": False,
             "httpPort": 8085
         }, indent=2)

@@ -76,7 +76,6 @@ Works with ChatGPT too. Paste docs/timberbot.md as the prompt and keep docs/api-
 Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [code]
 {
-  "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": true,
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
