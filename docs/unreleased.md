@@ -1,52 +1,9 @@
-- [breaking] ReadV2 cutover: all GET endpoints now served by TimberbotReadV2 with fresh-on-request projection snapshots
-- [breaking] removed TimberbotRead, TimberbotDoubleBuffer, TimberbotEntityCache -- replaced by TimberbotReadV2 + TimberbotEntityRegistry
-- [breaking] entity-targeting standardized on `id`: single-entity reads now use `id=<id>`, entity POST bodies/docs/CLI use `id` instead of `building_id`/`crop_id`/`webhook_id`
-- [breaking] buildable-entity `name` fields are now canonical faction-qualified names (for example `FarmHouse.IronTeeth`) instead of cleaned display names
-- [feature] A* pathfinding for place_path: edge-based cost grid, pre-computed stair edges, auto-stairs across z-levels, obstacle/water avoidance, existing path reuse, style and sections params
-- [feature] A* stair orientation toward destination, overhang avoidance
-- [feature] map: show topmost occupant (highest z) for correct top-down view
-- [feature] auto-load: timberbot.py launch settlement:<name> via autoload.json + steam:// protocol
-- [feature] debug endpoint: generic reflection inspector (get, fields, call with $ chaining, validate, validate_all)
-- [feature] debug endpoint: assertion targets (eq, ne, null, contains, gt, gte, lt, lte, assert, compare, describe, roots)
-- [feature] benchmark endpoint: /api/benchmark with GC0 tracking and internal micro-benchmarks, now stepped incrementally across frames
-- [feature] summary: added speed field
-- [feature] science/distribution endpoints pre-built on main thread via RefreshMainThreadData
-- [feature] ReadV2: staged capture with per-frame budget, background finalize/publish, concurrent reader coalescing
-- [feature] off-thread finalize: expensive snapshot publish work runs on ReadV2's internal background worker
-- [feature] write job system: ITimberbotWriteJob + ProcessWriteJobs for budgeted main-thread write execution
-- [feature] writeBudgetMs setting (default 1ms) for per-frame write budget
-- [feature] place_path timings param: detailed timing breakdown (snapshot, graph, astar, placement)
-- [feature] blocker tracking: ruins, MapEditorObjects, MapEditorWater, Wood now visible in /api/tiles and block pathing/placement
-- [feature] blocker name resolution: placement errors name the blocking entity instead of "unknown"
-- [feature] /api/crop/demolish endpoint: remove planted crop entities
-- [perf] thread-unsafe reads fixed: CollectTreeClusters/CollectFoodClusters use cached primitives
-- [perf] CollectSummary json: eliminated Newtonsoft DeserializeObject, inline WriteClustersFiltered
-- [perf] CollectSummary: ~20 temp collections hoisted to field-level, static roleMap/cropNames
-- [perf] CollectBuildings full toon: reusable field-level StringBuilders
-- [perf] CollectTreeClusters/FoodClusters/Tiles: reusable field-level collections
-- [perf] CollectScience/CollectDistribution: main-thread cache, no GetSpec/GetComponent on background thread
-- [perf] district refresh: reuses existing CachedDistrict objects, zero alloc steady state
-- [perf] RefreshCachedState: confirmed 0 GC0 across all hot paths (10K iteration benchmarks)
-- [perf] Math.Round boxing claim disproved: 0 GC0 across 11.4M calls
-- [perf] no cadence-driven refresh -- snapshots published only when readers need them
-- [fix] A* path cost=0 for existing paths broke admissibility; changed to cost=1
-- [fix] remove zombie refreshIntervalSeconds setting (no longer affects any behavior)
-- [fix] inner-value alloc in derived read endpoints: reuse containers in summary/alerts/power/clusters
-- [test] test_v2.py: new primary test harness (smoke, freshness, write_to_read, performance, concurrency)
-- [test] 3 new A* path tests: diagonal, obstacle, no-route
-- [test] 77 total tests in 11 groups (read, write, placement, path, crops, buildings, beavers, webhooks, cli, perf, wipe)
-- [test] test groups: run by group name, --exclude flag, --list shows groups
-- [test] new tests: blocker_tracking, path_sections, demolish_crop
-- [docs] architecture.md rewritten for native ReadV2 stack, removed all double-buffer references
-- [docs] architecture.md: thread model table, reusable collections, main-thread cached endpoints
-- [docs] api-reference.md updated for canonical `name` contract and `id` entity-targeting contract
-- [docs] performance.md: full audit (3 high, 8 medium, 11 low), all high+medium fixed
-- [docs] developing.md: owns file structure, testing, build instructions
-- [docs] webhooks.md: authoritative for events/setup
-- [docs] thread-safe-surfaces.md: new -- Timberborn thread-safety guidance
-- [docs] astar-stair-placement.md: A* design doc with cost model and connector rules
-- [docs] each doc authoritative for its domain, no cross-doc duplication
-- [internal] debug endpoint enabled by default
-- [internal] TimberbotAutoLoad + TimberbotAutoLoadConfigurator for auto-load
-- [internal] TimberbotDebug expanded to full reflection inspector + validation + assertions
-- [refactor] RoutePath delegates to PlanRoute, single BuildSurfaceGraph authority
+- [fix] listener thread crash when POST body contains non-integer `id` (e.g. webhook string ids like `"wh_1"`); replaced all `body.Value<int>()` with safe `TryReadBodyInt` helper
+- [fix] webhook delivery pileup: added per-webhook `InFlight` guard to prevent concurrent deliveries to the same endpoint
+- [fix] webhook timeout backoff: skip delivery for 5s after a timed-out request instead of retrying every 200ms
+- [feature] per-webhook pending event queues with thread-safe locking (`_webhooksLock` + per-registration `Sync`)
+- [feature] debug-gated listener thread diagnostics: `listen.waiting`, `listen.accepted`, `listen.body.read`, `listen.body.done` (requires `debugEndpointEnabled: true`)
+- [feature] webhook delivery logs now include HTTP status code
+- [feature] request lifecycle logging for webhook debugging (`req.admit` through `resp.done`)
+- [test] new webhook tests: slow endpoint concurrency, circuit breaker (non-2xx disables after 30 failures), event filtering
+- [docs] readme: features section, settings reference, auto-launch docs, fix place_path example
