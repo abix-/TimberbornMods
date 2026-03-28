@@ -1148,6 +1148,32 @@ Remove a building from the world.
 
 ---
 
+### POST /api/crop/demolish
+
+Remove a planted crop entity from the world.
+
+**CLI:** `timberbot.py demolish_crop crop_id:12340`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | int | yes | Crop instance ID |
+
+#### Response (success)
+
+```json
+{"id": 12340, "name": "Kohlrabi", "demolished": true}
+```
+
+#### Response (error)
+
+```json
+{"error": "not_found", "id": 99999}
+```
+
+---
+
 ### POST /api/building/place
 
 Place a building in the world. Validates all tiles before placing: occupancy, terrain height, water, unlock status, underground clipping. Coordinates refer to the bottom-left corner regardless of orientation.
