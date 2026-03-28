@@ -49,7 +49,7 @@ timberbot.py power                                # power networks with supply v
 timberbot.py map x1:110 y1:130 x2:130 y2:150 name:base  # ANSI map saved to memory
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 timberbot.py place_path x1:0 y1:0 x2:200 y2:180    # A* path with auto-stairs
-timberbot.py launch settlement:"Potato Tomato" save:bot  # auto-load a save
+timberbot.py launch settlement:Potato save:Tomato       # auto-load a save
 timberbot.py crops                                  # crops in the ground with growth status
 timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
 [/code]

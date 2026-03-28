@@ -1935,7 +1935,7 @@ timberbot.py place_path x1:120 y1:130 x2:150 y2:160 sections:1 timings:true
 Launch Timberborn and auto-load a save. Writes `autoload.json` for the mod, then opens the game via Steam.
 
 ```bash
-timberbot.py launch settlement:"Potato Tomato" save:bot
+timberbot.py launch settlement:Potato save:Tomato
 ```
 
 ### top (CLI-only)
