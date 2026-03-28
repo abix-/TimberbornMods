@@ -2,8 +2,6 @@
 
 Single source of truth for Timberbot API performance. All optimization decisions reference here.
 
-Historical note: sections that still discuss `TimberbotRead`, `TimberbotDoubleBuffer`, or cadence-refreshed cached DTOs describe the removed legacy architecture and are preserved for migration history only. The live read path is now `TimberbotReadV2` with published snapshots.
-
 ## Open issues
 
 | # | Severity | Issue | Cost | Location |

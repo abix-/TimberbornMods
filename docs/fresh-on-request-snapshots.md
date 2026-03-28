@@ -1,14 +1,12 @@
 # Fresh-on-Request Snapshots
 
-Implementation design for migrating Timberbot reads away from the current cadence-driven double buffer toward demand-driven published snapshots.
+Historical design document for the migration from cadence-driven double buffer to demand-driven published snapshots. This migration is complete -- the fresh-on-request architecture is now the live implementation. See [`architecture.md`](architecture.md) for the current design.
 
-This document is intended to be detailed enough that the work can be implemented later without reconstructing the design from chat history.
+Related:
 
-Related background:
-
-- [`architecture.md`](architecture.md) -- current double-buffer design
+- [`architecture.md`](architecture.md) -- current architecture
 - [`thread-safe-surfaces.md`](thread-safe-surfaces.md) -- what Timberborn exposes as actually thread-safe
-- [`performance.md`](performance.md) -- current benchmark baseline
+- [`performance.md`](performance.md) -- benchmark baseline
 
 ## Current status
 
