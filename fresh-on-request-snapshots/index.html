@@ -1,0 +1,2184 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Full read/write HTTP API for controlling Timberborn with AI">
+      
+      
+      
+        <link rel="canonical" href="https://abix-.github.io/TimberbornMods/fresh-on-request-snapshots/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Fresh-on-Request Snapshots - Timberbot API</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#fresh-on-request-snapshots" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Timberbot API" class="md-header__button md-logo" aria-label="Timberbot API" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Timberbot API
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Fresh-on-Request Snapshots
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/abix-/TimberbornMods" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    abix-/TimberbornMods
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Timberbot API" class="md-nav__button md-logo" aria-label="Timberbot API" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Timberbot API
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/abix-/TimberbornMods" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    abix-/TimberbornMods
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../timberbot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Timberbot AI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../features/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#current-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-idea" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core idea
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endstate-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endstate behavior
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endstate behavior">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#freshness-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freshness contract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#idle-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Idle behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throughput-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Throughput behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architectural-split" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architectural split
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architectural split">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-trackedref" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Tracked*Ref
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. *Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. *State
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-detailstate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. *DetailState
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#published-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Published snapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#first-migration-spike" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First migration spike
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="First migration spike">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#buildings_v2-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        buildings_v2 requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-projection-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building projection design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Building projection design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trackedbuildingref" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TrackedBuildingRef
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildingdefinition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BuildingDefinition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildingstate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BuildingState
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildingdetailstate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BuildingDetailState
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#not-part-of-the-published-read-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not part of the published read model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fresh-read-coordination" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fresh-read coordination
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fresh-read coordination">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current-staged-coordination-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current staged coordination model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#coalescing-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coalescing rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timeout-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timeout rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-thread-frame-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main-thread frame order
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#listener-thread-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Listener-thread rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debug-and-benchmark-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debug and benchmark support
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acceptance criteria
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Acceptance criteria">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#functional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functional
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freshness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#thread-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thread safety
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v2-validation-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        V2 Validation Requirements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="V2 Validation Requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#freshness_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Freshness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#concurrency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concurrency
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-spike-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current spike results
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Current spike results">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#functional-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functional status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#earlier-unstable-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Earlier unstable run
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generic-v2-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generic V2 Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dry-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DRY Boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-v2-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core V2 Types
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core V2 Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#projectionsnapshottdef-tstate-tdetail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ProjectionSnapshot&lt;TDef, TState, TDetail&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collectionquery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CollectionQuery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collectionroutetdef-tstate-tdetail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CollectionRoute&lt;TDef, TState, TDetail&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icollectionschematdef-tstate-tdetail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ICollectionSchema&lt;TDef, TState, TDetail&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#valuestoretcapture-tsnapshot-and-valueroutetsnapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ValueStore&lt;TCapture, TSnapshot&gt; and ValueRoute&lt;TSnapshot&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flatarrayroutetitem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlatArrayRoute&lt;TItem&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timberbotreadv2-composition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimberbotReadV2 Composition
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apiv2-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        /api/v2/* Coverage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="/api/v2/* Coverage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#native-timberbotreadv2-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native TimberbotReadV2 endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#direct-route-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct route exceptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-sequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Sequence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remaining-follow-on-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remaining follow-on work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explicit-non-goals-for-the-spike" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit non-goals for the spike
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="fresh-on-request-snapshots">Fresh-on-Request Snapshots<a class="headerlink" href="#fresh-on-request-snapshots" title="Permanent link">&para;</a></h1>
+<p>Historical design document for the migration from cadence-driven double buffer to demand-driven published snapshots. This migration is complete -- the fresh-on-request architecture is now the live implementation. See <a href="../architecture/"><code>architecture.md</code></a> for the current design.</p>
+<p>Related:</p>
+<ul>
+<li><a href="../architecture/"><code>architecture.md</code></a> -- current architecture</li>
+<li><a href="../thread-safe-surfaces/"><code>thread-safe-surfaces.md</code></a> -- what Timberborn exposes as actually thread-safe</li>
+<li><a href="../performance/"><code>performance.md</code></a> -- benchmark baseline</li>
+</ul>
+<h2 id="current-status">Current status<a class="headerlink" href="#current-status" title="Permanent link">&para;</a></h2>
+<p>The fresh-on-request read path is no longer just a design spike. It is now the native implementation behind the canonical <code>/api/*</code> surface.</p>
+<p>Implemented:</p>
+<ul>
+<li>canonical <code>/api/*</code> GET routing</li>
+<li><code>TimberbotReadV2</code> as the single v2 read service</li>
+<li>generic collection, value, paging, and snapshot helpers folded into <a href="../timberbot/src/TimberbotReadV2.cs"><code>TimberbotReadV2.cs</code></a></li>
+<li>removal of the temporary top-level helper files:</li>
+<li><code>TimberbotCollectionEndpoint.cs</code></li>
+<li><code>TimberbotCollectionQuery.cs</code></li>
+<li><code>TimberbotSnapshot.cs</code></li>
+<li><code>TimberbotValueStore.cs</code></li>
+<li><code>TimberbotValueEndpoint.cs</code></li>
+<li><code>TimberbotPagedEndpoint.cs</code></li>
+<li>fresh-on-request projection-backed reads for buildings, beavers, and natural-resource entity collections</li>
+<li>native v2 value and derived endpoints for summary, districts, resources, population, alerts, power, wellbeing, notifications, science, distribution, time, weather, speed, workhours, tree clusters, and food clusters</li>
+<li>staged refresh inside <code>TimberbotReadV2</code>: main-thread capture plus background finalize/publish</li>
+<li>a dedicated v2 experiment harness at <a href="../timberbot/script/test_v2.py"><code>timberbot/script/test_v2.py</code></a></li>
+</ul>
+<p>Important implementation note:</p>
+<ul>
+<li><code>TimberbotReadV2</code> no longer calls <code>_legacyRead.*</code></li>
+<li><code>/api/*</code> is now the only live read surface</li>
+<li><code>TimberbotRead</code> and <code>/api/v1/*</code> were removed after parity + fixture capture</li>
+</ul>
+<p>The new harness is intentionally separate from <code>test_validation.py</code> and covers:</p>
+<ul>
+<li><code>smoke</code></li>
+<li><code>parity</code></li>
+<li><code>freshness</code></li>
+<li><code>performance</code></li>
+<li><code>concurrency</code></li>
+<li><code>all</code></li>
+</ul>
+<p>It writes three artifacts per run under <code>timberbot/test-results/v2/</code>:</p>
+<ul>
+<li>full transcript <code>.log</code></li>
+<li>human-readable summary <code>.md</code></li>
+<li>machine-readable <code>.json</code></li>
+</ul>
+<p>Console behavior is quiet-by-default:</p>
+<ul>
+<li>passing runs print nothing</li>
+<li>failing runs print only the failures and artifact paths</li>
+</ul>
+<h2 id="current-validation">Current validation<a class="headerlink" href="#current-validation" title="Permanent link">&para;</a></h2>
+<p>Current live status after build, reload, and retest:</p>
+<ul>
+<li>final <code>/api/v1/*</code> vs <code>/api/*</code> parity run before removal: <code>318 passed, 0 failed</code></li>
+<li>post-cut <code>/api/*</code> full suite: <code>64 passed, 0 failed, 33 skipped</code></li>
+<li>post-staged-refresh full suite: <code>72 passed, 0 failed, 29 skipped</code></li>
+</ul>
+<p>Important concrete progress:</p>
+<ul>
+<li>the stale legacy building-row bug was fixed</li>
+<li><code>GET /api/buildings</code> matched legacy across the full supported matrix before <code>v1</code> removal</li>
+<li><code>TimberbotReadV2</code> no longer contains any <code>_legacyRead.*</code> calls</li>
+<li><code>TimberbotRead</code> has been deleted from the mod</li>
+<li>the generic v2 helpers are now internal to <code>TimberbotReadV2</code>, not separate top-level classes</li>
+</ul>
+<p>Latest verified artifact files:</p>
+<ul>
+<li><a href="/C:/code/timberborn/timberbot/test-results/v2/20260327-144244-smoke.md">20260327-144244-smoke.md</a></li>
+<li><a href="/C:/code/timberborn/timberbot/test-results/v2/20260327-144247-parity.md">20260327-144247-parity.md</a></li>
+</ul>
+<p>The stale-row bug mattered because the old cache was returning ghost <code>CachedBuilding</code> entries that no longer resolved through <code>Cache.FindEntity(id)</code>. The fix was to prune stale IDs from the legacy cache during refresh so parity is against live state instead of dead cached rows.</p>
+<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
+<p>Preserve the important property of the current design:</p>
+<ul>
+<li>normal GET endpoints do not read live Timberborn objects on the listener thread</li>
+</ul>
+<p>while removing the part that feels wrong:</p>
+<ul>
+<li>continuous periodic cache refresh even when nobody is reading</li>
+</ul>
+<p>Target behavior:</p>
+<ul>
+<li>a normal read request asks for fresh data</li>
+<li>the request waits for the next main-thread refresh for that entity type</li>
+<li>the refreshed data is published as an immutable/read-only snapshot</li>
+<li>the request then responds from that snapshot off-thread</li>
+<li>no migrated entity type performs continuous refresh work while idle</li>
+</ul>
+<p>Current implementation note:</p>
+<ul>
+<li>the system no longer treats fresh-on-request as a single main-thread publish step</li>
+<li><code>ReadV2.ProcessPendingRefresh()</code> now advances bounded main-thread capture work</li>
+<li>completed captures are finalized and published on an internal background worker</li>
+<li>requests can wait across multiple frames if capture spills under budget</li>
+</ul>
+<h2 id="core-idea">Core idea<a class="headerlink" href="#core-idea" title="Permanent link">&para;</a></h2>
+<p>Replace:</p>
+<ul>
+<li>one long-lived mirrored cache object graph that is refreshed on cadence</li>
+</ul>
+<p>with:</p>
+<ul>
+<li>main-thread-only live trackers</li>
+<li>immutable/read-only published snapshots</li>
+<li>per-entity-type fresh-read coordination</li>
+</ul>
+<p>This is a better fit for what Timberborn appears to do internally:</p>
+<ul>
+<li>use explicit thread-safe game surfaces where available</li>
+<li>use narrow thread-safe projections where needed</li>
+<li>keep normal live gameplay state on the main thread</li>
+</ul>
+<h2 id="endstate-behavior">Endstate behavior<a class="headerlink" href="#endstate-behavior" title="Permanent link">&para;</a></h2>
+<h3 id="freshness-contract">Freshness contract<a class="headerlink" href="#freshness-contract" title="Permanent link">&para;</a></h3>
+<p>For projection-backed endpoints, a response is fresh <strong>as of the main-thread frame that serviced the request</strong>.</p>
+<p>That means:</p>
+<ul>
+<li>requests do not return stale data just because the system was idle</li>
+<li>requests may wait up to one frame for the next publish</li>
+<li>multiple requests arriving before that publish share the same refresh result</li>
+</ul>
+<p>This is intentionally not the old “return whatever was last published” behavior.</p>
+<h3 id="idle-behavior">Idle behavior<a class="headerlink" href="#idle-behavior" title="Permanent link">&para;</a></h3>
+<p>While there is no read demand for a migrated entity type:</p>
+<ul>
+<li>no periodic mutable-state refresh runs for that entity type</li>
+</ul>
+<p>Structural tracking still remains event-driven:</p>
+<ul>
+<li>entity create/delete</li>
+<li>any index maintenance required to keep the tracker set valid</li>
+</ul>
+<h3 id="throughput-behavior">Throughput behavior<a class="headerlink" href="#throughput-behavior" title="Permanent link">&para;</a></h3>
+<p>The main thread performs <strong>at most one refresh per frame per migrated entity type</strong>.</p>
+<p>This bounds worst-case gameplay cost under polling:</p>
+<ul>
+<li>many requests in one frame share one refresh</li>
+<li>the system does not refresh once per request</li>
+</ul>
+<p>In the current staged implementation, a "refresh" is split into:</p>
+<ul>
+<li>main-thread capture from live Timberborn objects</li>
+<li>background finalize/publish from captured DTO buffers</li>
+</ul>
+<p>That means the bound that matters is now:</p>
+<ul>
+<li>at most one active capture per migrated domain at a time</li>
+<li>publish work no longer has to finish on the same main-thread frame</li>
+</ul>
+<h2 id="architectural-split">Architectural split<a class="headerlink" href="#architectural-split" title="Permanent link">&para;</a></h2>
+<p>Every migrated entity type should have four layers.</p>
+<h3 id="1-trackedref">1. <code>Tracked*Ref</code><a class="headerlink" href="#1-trackedref" title="Permanent link">&para;</a></h3>
+<p>Main-thread-only live data used to gather state.</p>
+<p>Responsibilities:</p>
+<ul>
+<li>hold component refs</li>
+<li>resolve refs once at add time</li>
+<li>participate in create/delete event handling</li>
+<li>never leave the main thread</li>
+</ul>
+<p>These are not published to readers.</p>
+<h3 id="2-definition">2. <code>*Definition</code><a class="headerlink" href="#2-definition" title="Permanent link">&para;</a></h3>
+<p>Static or event-driven data.</p>
+<p>Updated:</p>
+<ul>
+<li>when the entity is created</li>
+<li>when structural facts change</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>ID, name</li>
+<li>stable coordinates</li>
+<li>orientation</li>
+<li>type flags</li>
+<li>cached geometry/footprints</li>
+</ul>
+<h3 id="3-state">3. <code>*State</code><a class="headerlink" href="#3-state" title="Permanent link">&para;</a></h3>
+<p>Flat mutable runtime state.</p>
+<p>Updated:</p>
+<ul>
+<li>only when fresh readers are waiting</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>paused/powered/workers for buildings</li>
+<li>wellbeing/position/carrying for beavers</li>
+<li>alive/grown/marked for natural resources</li>
+</ul>
+<h3 id="4-detailstate">4. <code>*DetailState</code><a class="headerlink" href="#4-detailstate" title="Permanent link">&para;</a></h3>
+<p>Heavy nested payloads needed only for full-detail reads.</p>
+<p>Updated:</p>
+<ul>
+<li>only when a waiting request requires that detail level</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>building inventory/recipes/nutrients</li>
+<li>beaver needs</li>
+</ul>
+<h3 id="published-snapshot">Published snapshot<a class="headerlink" href="#published-snapshot" title="Permanent link">&para;</a></h3>
+<p>Each entity type gets one published snapshot object, for example:</p>
+<ul>
+<li><code>PublishedBuildingsSnapshot</code></li>
+<li><code>PublishedBeaversSnapshot</code></li>
+<li><code>PublishedNaturalResourcesSnapshot</code></li>
+</ul>
+<p>Properties:</p>
+<ul>
+<li>immutable/read-only after publish</li>
+<li>contains only DTO data</li>
+<li>no live Timberborn refs</li>
+<li>atomically swapped by reference</li>
+</ul>
+<h2 id="first-migration-spike">First migration spike<a class="headerlink" href="#first-migration-spike" title="Permanent link">&para;</a></h2>
+<p>The first spike should be:</p>
+<ul>
+<li><code>GET /api/buildings_v2</code></li>
+</ul>
+<p>Reason:</p>
+<ul>
+<li>it is the most complex current read model</li>
+<li>it carries the most nested data</li>
+<li>if the projection split works here, the beaver and natural-resource cases should be easier</li>
+</ul>
+<h3 id="buildings_v2-requirements"><code>buildings_v2</code> requirements<a class="headerlink" href="#buildings_v2-requirements" title="Permanent link">&para;</a></h3>
+<p>The new endpoint should match current <code>GET /api/buildings</code> behavior for:</p>
+<ul>
+<li><code>format</code></li>
+<li><code>detail</code></li>
+<li><code>limit</code></li>
+<li><code>offset</code></li>
+<li><code>name</code></li>
+<li><code>x</code>, <code>y</code>, <code>radius</code></li>
+</ul>
+<p>Supported detail levels:</p>
+<ul>
+<li><code>basic</code></li>
+<li><code>full</code></li>
+<li><code>id=&lt;id&gt;</code></li>
+</ul>
+<p>Schema compatibility requirement:</p>
+<ul>
+<li>same schema as current <code>buildings</code> output in both <code>toon</code> and <code>json</code></li>
+</ul>
+<p>The current <code>GET /api/buildings</code> remains in place during the spike.</p>
+<h2 id="building-projection-design">Building projection design<a class="headerlink" href="#building-projection-design" title="Permanent link">&para;</a></h2>
+<h3 id="trackedbuildingref"><code>TrackedBuildingRef</code><a class="headerlink" href="#trackedbuildingref" title="Permanent link">&para;</a></h3>
+<p>Main-thread-only live refs:</p>
+<ul>
+<li>entity/component refs used to gather mutable building state</li>
+<li>any refs needed for event-driven structural maintenance</li>
+</ul>
+<p>This is the only place where building live refs should remain once the v2 path is implemented.</p>
+<h3 id="buildingdefinition"><code>BuildingDefinition</code><a class="headerlink" href="#buildingdefinition" title="Permanent link">&para;</a></h3>
+<p>Static or event-driven data:</p>
+<ul>
+<li><code>Id</code>, <code>Name</code></li>
+<li><code>X</code>, <code>Y</code>, <code>Z</code></li>
+<li><code>Orientation</code></li>
+<li><code>HasFloodgate</code>, <code>FloodgateMaxHeight</code></li>
+<li><code>HasClutch</code>, <code>HasWonder</code></li>
+<li><code>IsGenerator</code>, <code>IsConsumer</code></li>
+<li><code>NominalPowerInput</code>, <code>NominalPowerOutput</code></li>
+<li><code>EffectRadius</code></li>
+<li><code>OccupiedTiles</code></li>
+<li><code>HasEntrance</code>, <code>EntranceX</code>, <code>EntranceY</code></li>
+</ul>
+<h3 id="buildingstate"><code>BuildingState</code><a class="headerlink" href="#buildingstate" title="Permanent link">&para;</a></h3>
+<p>Mutable flat snapshot data:</p>
+<ul>
+<li><code>Finished</code>, <code>Paused</code>, <code>Unreachable</code>, <code>Powered</code></li>
+<li><code>District</code></li>
+<li><code>AssignedWorkers</code>, <code>DesiredWorkers</code>, <code>MaxWorkers</code></li>
+<li><code>Dwellers</code>, <code>MaxDwellers</code></li>
+<li><code>FloodgateHeight</code></li>
+<li><code>ConstructionPriority</code>, <code>WorkplacePriorityStr</code></li>
+<li><code>BuildProgress</code>, <code>MaterialProgress</code>, <code>HasMaterials</code></li>
+<li><code>ClutchEngaged</code>, <code>WonderActive</code></li>
+<li><code>PowerDemand</code>, <code>PowerSupply</code>, <code>PowerNetworkId</code></li>
+<li><code>CurrentRecipe</code>, <code>ProductionProgress</code>, <code>ReadyToProduce</code></li>
+<li><code>NeedsNutrients</code></li>
+<li><code>Stock</code>, <code>Capacity</code></li>
+</ul>
+<h3 id="buildingdetailstate"><code>BuildingDetailState</code><a class="headerlink" href="#buildingdetailstate" title="Permanent link">&para;</a></h3>
+<p>Nested full-detail data only:</p>
+<ul>
+<li><code>Inventory</code></li>
+<li><code>Recipes</code></li>
+<li><code>NutrientStock</code></li>
+</ul>
+<h3 id="not-part-of-the-published-read-model">Not part of the published read model<a class="headerlink" href="#not-part-of-the-published-read-model" title="Permanent link">&para;</a></h3>
+<p>Do not publish these off-thread:</p>
+<ul>
+<li><code>Entity</code></li>
+<li><code>BlockObject</code></li>
+<li><code>Pausable</code></li>
+<li><code>Floodgate</code></li>
+<li><code>BuilderPrio</code></li>
+<li><code>Workplace</code></li>
+<li><code>WorkplacePriority</code></li>
+<li><code>Reachability</code></li>
+<li><code>Mechanical</code></li>
+<li><code>Status</code></li>
+<li><code>PowerNode</code></li>
+<li><code>Site</code></li>
+<li><code>Inventories</code></li>
+<li><code>Wonder</code></li>
+<li><code>Dwelling</code></li>
+<li><code>Clutch</code></li>
+<li><code>Manufactory</code></li>
+<li><code>BreedingPod</code></li>
+<li><code>RangedEffect</code></li>
+<li><code>DistrictBuilding</code></li>
+<li><code>LastDistrictRef</code></li>
+</ul>
+<h2 id="fresh-read-coordination">Fresh-read coordination<a class="headerlink" href="#fresh-read-coordination" title="Permanent link">&para;</a></h2>
+<p>Each migrated entity type should have a small coordination object.</p>
+<p>For buildings, responsibilities are:</p>
+<ul>
+<li>accept fresh-read requests from listener-thread GETs</li>
+<li>record the highest required detail level among waiting requests</li>
+<li>indicate to the main thread that a refresh is pending</li>
+<li>wake waiting requests after publish</li>
+</ul>
+<h3 id="request-flow">Request flow<a class="headerlink" href="#request-flow" title="Permanent link">&para;</a></h3>
+<p>For <code>GET /api/buildings_v2</code>:</p>
+<ol>
+<li>Listener thread parses request</li>
+<li>Listener thread registers a fresh-read request with the building coordinator</li>
+<li>Listener thread waits</li>
+<li>Main thread refreshes buildings on next frame</li>
+<li>Main thread publishes new <code>PublishedBuildingsSnapshot</code></li>
+<li>Waiting requests wake</li>
+<li>Listener thread filters/paginates/serializes from the published snapshot</li>
+</ol>
+<h3 id="current-staged-coordination-model">Current staged coordination model<a class="headerlink" href="#current-staged-coordination-model" title="Permanent link">&para;</a></h3>
+<p>The original single-phase design has now been replaced with a staged generic implementation inside <code>TimberbotReadV2</code>:</p>
+<ol>
+<li>listener-thread request registers as a waiter</li>
+<li>main thread marks capture pending for the required domain</li>
+<li><code>ProcessPendingRefresh(now)</code> advances capture up to the configured frame budget</li>
+<li>when capture completes, <code>ReadV2</code> queues finalize work to its private background worker</li>
+<li>finalize builds any thread-safe derived strings/JSON and publishes the immutable snapshot</li>
+<li>only the waiters attached to that in-flight publish are released</li>
+</ol>
+<p>Important correctness rule:</p>
+<ul>
+<li>waiters that arrive after capture has started are held for the next publish, not incorrectly released by the current one</li>
+</ul>
+<h3 id="coalescing-rule">Coalescing rule<a class="headerlink" href="#coalescing-rule" title="Permanent link">&para;</a></h3>
+<ul>
+<li>one refresh per frame max</li>
+<li>all requests waiting during that frame share the same publish</li>
+<li>if any waiting request asks for <code>detail=full</code>, build detail data for that publish</li>
+</ul>
+<h3 id="timeout-rule">Timeout rule<a class="headerlink" href="#timeout-rule" title="Permanent link">&para;</a></h3>
+<p>If a request cannot be satisfied because the game is not advancing frames:</p>
+<ul>
+<li>wait up to 2 seconds</li>
+<li>respond <code>503 refresh_timeout</code></li>
+</ul>
+<p>Do not block forever.</p>
+<h2 id="main-thread-frame-order">Main-thread frame order<a class="headerlink" href="#main-thread-frame-order" title="Permanent link">&para;</a></h2>
+<p>For migrated fresh-read endpoints, <code>UpdateSingleton()</code> should conceptually run in this order:</p>
+<ol>
+<li>Drain queued writes</li>
+<li>Apply structural entity changes already captured by event handlers</li>
+<li>Process pending fresh-read refreshes</li>
+<li>Publish snapshots and release waiters</li>
+<li>Flush webhooks</li>
+</ol>
+<p>Current implementation detail:</p>
+<ul>
+<li>step 3 is now bounded capture scheduling</li>
+<li>step 4 may finish on the <code>ReadV2</code> finalize worker after capture completes</li>
+<li>the freshness contract is preserved by waiting for publish completion, not by forcing all work into one frame</li>
+</ul>
+<p>This order matters because:</p>
+<ul>
+<li>a fresh read after a write should see the newest state</li>
+<li>snapshot publish should happen after write-side mutations for that frame</li>
+</ul>
+<h2 id="listener-thread-rules">Listener-thread rules<a class="headerlink" href="#listener-thread-rules" title="Permanent link">&para;</a></h2>
+<p>For migrated endpoints, the listener thread may:</p>
+<ul>
+<li>read the published snapshot</li>
+<li>filter</li>
+<li>paginate</li>
+<li>serialize</li>
+</ul>
+<p>The listener thread may not:</p>
+<ul>
+<li>call Timberborn services</li>
+<li>touch live component refs</li>
+<li>read tracker objects</li>
+<li>call <code>GetComponent&lt;T&gt;()</code></li>
+<li>traverse live entity graphs</li>
+</ul>
+<h2 id="debug-and-benchmark-support">Debug and benchmark support<a class="headerlink" href="#debug-and-benchmark-support" title="Permanent link">&para;</a></h2>
+<p>The spike should include enough observability to answer whether the design is working.</p>
+<p>Expose or record:</p>
+<ul>
+<li>latest publish timestamp or sequence for each migrated entity type</li>
+<li>number of refreshes performed</li>
+<li>number of structural republishes</li>
+<li>whether detail payload was built for a publish</li>
+<li>item counts in the current published snapshot</li>
+</ul>
+<p>This should go through existing debug/benchmark surfaces rather than inventing a second diagnostics system.</p>
+<h2 id="acceptance-criteria">Acceptance criteria<a class="headerlink" href="#acceptance-criteria" title="Permanent link">&para;</a></h2>
+<h3 id="functional">Functional<a class="headerlink" href="#functional" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>buildings_v2 basic</code> matches <code>buildings basic</code></li>
+<li><code>buildings_v2 full</code> matches <code>buildings full</code></li>
+<li><code>id=&lt;id&gt;</code> behavior matches current endpoint</li>
+<li>pagination and filtering semantics match</li>
+<li>toon/json schema matches current endpoint exactly</li>
+</ul>
+<h3 id="freshness">Freshness<a class="headerlink" href="#freshness" title="Permanent link">&para;</a></h3>
+<ul>
+<li>after a write or player action that changes building state, <code>buildings_v2</code> returns data refreshed on the servicing frame</li>
+<li>requests arriving in the same frame share one refresh</li>
+</ul>
+<h3 id="thread-safety">Thread safety<a class="headerlink" href="#thread-safety" title="Permanent link">&para;</a></h3>
+<ul>
+<li>no live building data is read on the listener thread for <code>buildings_v2</code></li>
+<li>published snapshots contain DTOs only</li>
+</ul>
+<h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
+<p>Compared to current <code>buildings full</code>:</p>
+<ul>
+<li>no periodic idle refresh cost for buildings-v2</li>
+<li>no more than one building refresh per frame under active demand</li>
+<li>no material latency regression in the endpoint</li>
+<li>code complexity is reduced by removing published live refs and clone-driven buffer semantics from the read path</li>
+</ul>
+<h2 id="v2-validation-requirements">V2 Validation Requirements<a class="headerlink" href="#v2-validation-requirements" title="Permanent link">&para;</a></h2>
+<p>For every <code>/api/v2/*</code> endpoint, validation should happen in three layers.</p>
+<h3 id="parity">Parity<a class="headerlink" href="#parity" title="Permanent link">&para;</a></h3>
+<ul>
+<li>compare v1 vs v2 JSON output</li>
+<li>compare v1 vs v2 TOON output</li>
+<li>compare filtered and paginated responses</li>
+<li>compare <code>detail=basic</code>, <code>detail=full</code>, and <code>id=&lt;id&gt;</code> where supported</li>
+</ul>
+<p>For entity endpoints:</p>
+<ul>
+<li>full-list equality</li>
+<li>single-id sampled equality</li>
+<li>stable fingerprint logging on mismatch instead of dumping large payloads</li>
+</ul>
+<h3 id="freshness_1">Freshness<a class="headerlink" href="#freshness_1" title="Permanent link">&para;</a></h3>
+<p>For projection-backed endpoints:</p>
+<ul>
+<li>issue a write</li>
+<li>request the corresponding <code>/api/v2/*</code> endpoint immediately</li>
+<li>verify the response reflects the servicing frame</li>
+</ul>
+<p>Required building scenarios:</p>
+<ul>
+<li>pause/unpause</li>
+<li>worker count change</li>
+<li>floodgate change</li>
+<li>placement/demolition</li>
+<li>recipe change</li>
+<li>clutch change</li>
+</ul>
+<h3 id="performance_1">Performance<a class="headerlink" href="#performance_1" title="Permanent link">&para;</a></h3>
+<p>Keep two benchmark layers:</p>
+<ul>
+<li>broad suite: <code>performance</code></li>
+<li>focused suites per migrated entity group:</li>
+<li><code>building_endpoint_perf</code></li>
+<li>later <code>beaver_endpoint_perf</code></li>
+<li>later <code>natural_resource_endpoint_perf</code></li>
+</ul>
+<p>Acceptance target for a migrated entity group:</p>
+<ul>
+<li>0 failed responses in a 200-iteration focused perf run</li>
+<li>average latency within 10% of legacy</li>
+<li>no persistent instability across repeated focused runs</li>
+</ul>
+<h3 id="concurrency">Concurrency<a class="headerlink" href="#concurrency" title="Permanent link">&para;</a></h3>
+<ul>
+<li>burst concurrent requests to the same <code>/api/v2/*</code> endpoint should share publishes correctly</li>
+<li>no <code>refresh_timeout</code> should occur under normal frame progression</li>
+<li>detail and basic requests arriving in the same frame should share one publish, with detail included if any waiter requires it</li>
+</ul>
+<h2 id="current-spike-results">Current spike results<a class="headerlink" href="#current-spike-results" title="Permanent link">&para;</a></h2>
+<p>The buildings spike has been implemented and measured against the live game.</p>
+<h3 id="functional-status">Functional status<a class="headerlink" href="#functional-status" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>GET /api/buildings_v2</code> exists and is live</li>
+<li><code>buildings_v2</code> basic matches legacy <code>buildings</code></li>
+<li><code>buildings_v2</code> full matches legacy <code>buildings</code></li>
+<li>sampled <code>id=&lt;id&gt;</code> parity checks passed</li>
+</ul>
+<p>Dedicated parity test:</p>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">python</span> <span class="n">timberbot</span><span class="p">/</span><span class="n">script</span><span class="p">/</span><span class="n">test_validation</span><span class="p">.</span><span class="n">py</span> <span class="n">buildings_v2_parity</span>
+</span></code></pre></div>
+<p>Latest passing parity result file:</p>
+<ul>
+<li><a href="/C:/code/timberborn/timberbot/test-results/20260327-093637-buildings_v2_parity.txt">20260327-093637-buildings_v2_parity.txt</a></li>
+</ul>
+<h3 id="performance-status">Performance status<a class="headerlink" href="#performance-status" title="Permanent link">&para;</a></h3>
+<p>There are now two relevant perf entry points:</p>
+<ul>
+<li>broad perf suite: <code>performance</code></li>
+<li>building-only benchmark: <code>building_endpoint_perf</code></li>
+</ul>
+<p>Recommended command for this spike:</p>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">python</span> <span class="n">timberbot</span><span class="p">/</span><span class="n">script</span><span class="p">/</span><span class="n">test_validation</span><span class="p">.</span><span class="n">py</span> <span class="n">building_endpoint_perf</span> <span class="n">-n</span> <span class="n">200</span>
+</span></code></pre></div>
+<p>Latest stable 200-iteration result:</p>
+<ul>
+<li><a href="/C:/code/timberborn/timberbot/test-results/20260327-095537-building_endpoint_perf.txt">20260327-095537-building_endpoint_perf.txt</a></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th style="text-align: right;">Avg</th>
+<th style="text-align: right;">Min</th>
+<th style="text-align: right;">Max</th>
+<th style="text-align: right;">Success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>buildings</code></td>
+<td style="text-align: right;">274 ms</td>
+<td style="text-align: right;">237 ms</td>
+<td style="text-align: right;">1267 ms</td>
+<td style="text-align: right;">200 / 200</td>
+</tr>
+<tr>
+<td><code>buildings full</code></td>
+<td style="text-align: right;">298 ms</td>
+<td style="text-align: right;">257 ms</td>
+<td style="text-align: right;">1269 ms</td>
+<td style="text-align: right;">200 / 200</td>
+</tr>
+<tr>
+<td><code>buildings_v2</code></td>
+<td style="text-align: right;">284 ms</td>
+<td style="text-align: right;">238 ms</td>
+<td style="text-align: right;">1291 ms</td>
+<td style="text-align: right;">200 / 200</td>
+</tr>
+<tr>
+<td><code>buildings_v2 full</code></td>
+<td style="text-align: right;">299 ms</td>
+<td style="text-align: right;">260 ms</td>
+<td style="text-align: right;">1248 ms</td>
+<td style="text-align: right;">200 / 200</td>
+</tr>
+</tbody>
+</table>
+<p>Legacy vs v2 from that run:</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th style="text-align: right;">Legacy</th>
+<th style="text-align: right;">V2</th>
+<th style="text-align: right;">Delta</th>
+<th style="text-align: right;">Ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>basic</td>
+<td style="text-align: right;">274 ms</td>
+<td style="text-align: right;">284 ms</td>
+<td style="text-align: right;">+10 ms</td>
+<td style="text-align: right;">1.04x</td>
+</tr>
+<tr>
+<td>full</td>
+<td style="text-align: right;">298 ms</td>
+<td style="text-align: right;">299 ms</td>
+<td style="text-align: right;">+1 ms</td>
+<td style="text-align: right;">1.00x</td>
+</tr>
+</tbody>
+</table>
+<p>Interpretation:</p>
+<ul>
+<li>request latency is effectively at parity</li>
+<li>the fresh-on-request model is not showing a meaningful regression for buildings</li>
+<li>the main architectural advantage is now freshness and idle-cost reduction, not raw speedup</li>
+</ul>
+<h3 id="earlier-unstable-run">Earlier unstable run<a class="headerlink" href="#earlier-unstable-run" title="Permanent link">&para;</a></h3>
+<p>One earlier 50-iteration run showed transient instability in <code>buildings_v2</code> basic:</p>
+<ul>
+<li><a href="/C:/code/timberborn/timberbot/test-results/20260327-094047-buildings_v2_performance.txt">20260327-094047-buildings_v2_performance.txt</a></li>
+</ul>
+<p>That run reported:</p>
+<ul>
+<li><code>buildings_v2</code>: 42 / 50 successful, 635 ms avg, 3771 ms max</li>
+<li><code>buildings_v2 full</code>: 50 / 50 successful, 252 ms avg</li>
+</ul>
+<p>That specific failure mode has not reproduced in later isolated <code>building_endpoint_perf</code> runs:</p>
+<ul>
+<li>50 iterations: <a href="/C:/code/timberborn/timberbot/test-results/20260327-094915-building_endpoint_perf.txt">20260327-094915-building_endpoint_perf.txt</a></li>
+<li>200 iterations: <a href="/C:/code/timberborn/timberbot/test-results/20260327-095537-building_endpoint_perf.txt">20260327-095537-building_endpoint_perf.txt</a></li>
+</ul>
+<p>Current conclusion:</p>
+<ul>
+<li>the spike currently looks viable</li>
+<li>there was at least one transient bad run, so burst/concurrency behavior still deserves investigation before declaring the architecture finished</li>
+</ul>
+<h2 id="generic-v2-architecture">Generic V2 Architecture<a class="headerlink" href="#generic-v2-architecture" title="Permanent link">&para;</a></h2>
+<p>The current implementation keeps the v2 architecture centered in <code>TimberbotReadV2</code>. The goal is not to spread v2 behavior across a growing set of top-level helper services. The goal is:</p>
+<ul>
+<li>keep <code>TimberbotRead</code> untouched while v2 is being proved</li>
+<li>move all new work to <code>/api/v2/*</code></li>
+<li>keep one generic typed v2 read stack inside <code>TimberbotReadV2</code></li>
+<li>migrate endpoint groups onto that stack without duplicating route mechanics</li>
+<li>delete the old stack only after v2 reaches full coverage and proven parity</li>
+</ul>
+<p>Fixed migration rules:</p>
+<ul>
+<li>canonical new routes live under <code>/api/v2/*</code></li>
+<li>ad-hoc routes like <code>/api/buildings_v2</code> are transitional only</li>
+<li><code>TimberbotReadV2</code> owns the v2 implementation directly</li>
+<li>generic reuse happens through internal nested helpers and typed schemas, not extra public service classes</li>
+<li>old <code>/api/*</code> routes stay in place until <code>/api/v2/*</code> is complete and proven</li>
+</ul>
+<h2 id="dry-boundary">DRY Boundary<a class="headerlink" href="#dry-boundary" title="Permanent link">&para;</a></h2>
+<p>The generic boundary for v2 should be:</p>
+<ul>
+<li>snapshot lifecycle and waiter coordination</li>
+<li>entity tracking and structural dirtiness</li>
+<li>query parsing</li>
+<li>filtering and pagination</li>
+<li>list response assembly</li>
+<li>typed row serialization hooks</li>
+</ul>
+<p>The generic boundary should not be:</p>
+<ul>
+<li>reflection-based schema discovery</li>
+<li>auto-generated serializers</li>
+<li>a giant magic endpoint framework that hides field-level behavior</li>
+</ul>
+<p>V2 should stay typed and explicit, but the repeated mechanics should exist only once.</p>
+<h2 id="core-v2-types">Core V2 Types<a class="headerlink" href="#core-v2-types" title="Permanent link">&para;</a></h2>
+<h3 id="projectionsnapshottdef-tstate-tdetail"><code>ProjectionSnapshot&lt;TDef, TState, TDetail&gt;</code><a class="headerlink" href="#projectionsnapshottdef-tstate-tdetail" title="Permanent link">&para;</a></h3>
+<p>This is the generic fresh-on-request snapshot primitive used inside <code>TimberbotReadV2</code> for projection-backed entity domains.</p>
+<p>Responsibilities:</p>
+<ul>
+<li>expose fresh-read waiting and published snapshot access</li>
+<li>expose publish metrics</li>
+<li>keep published DTO arrays for definitions, state, and detail</li>
+<li>coordinate staged capture vs finalize state</li>
+<li>keep waiter ownership correct across in-flight publishes</li>
+</ul>
+<p>Required typed hooks:</p>
+<ul>
+<li><code>GetDefinition(int index)</code></li>
+<li><code>RefreshState(TState state, int index)</code></li>
+<li><code>RefreshDetail(TDetail detail, int index)</code></li>
+</ul>
+<p>Rules:</p>
+<ul>
+<li>published snapshots contain only DTO data</li>
+<li>no reflection in hot paths</li>
+<li>no live Timberborn refs in published state</li>
+<li>any background finalize step may only touch captured DTO buffers, not live tracked refs</li>
+</ul>
+<h3 id="collectionquery"><code>CollectionQuery</code><a class="headerlink" href="#collectionquery" title="Permanent link">&para;</a></h3>
+<p>Shared query model for all collection-style endpoints.</p>
+<p>Fields:</p>
+<ul>
+<li><code>Format</code></li>
+<li><code>Detail</code></li>
+<li><code>SingleId</code></li>
+<li><code>Limit</code></li>
+<li><code>Offset</code></li>
+<li><code>FilterName</code></li>
+<li><code>FilterX</code></li>
+<li><code>FilterY</code></li>
+<li><code>FilterRadius</code></li>
+<li><code>HasFilter</code></li>
+<li><code>Paginated</code></li>
+<li><code>NeedsFullDetail</code></li>
+</ul>
+<p>Required parser behavior:</p>
+<ul>
+<li><code>id=&lt;id&gt;</code> implies full detail and disables the pagination wrapper</li>
+<li><code>limit=0</code> means unlimited and returns a flat array</li>
+<li>name/radius filters apply before pagination</li>
+<li>paginated responses use <code>{total, offset, limit, items}</code></li>
+</ul>
+<h3 id="collectionroutetdef-tstate-tdetail"><code>CollectionRoute&lt;TDef, TState, TDetail&gt;</code><a class="headerlink" href="#collectionroutetdef-tstate-tdetail" title="Permanent link">&para;</a></h3>
+<p>Generic responder for entity-list endpoints.</p>
+<p>Responsibilities:</p>
+<ul>
+<li>parse <code>CollectionQuery</code></li>
+<li>request fresh or current snapshot from the store</li>
+<li>compute filtered totals</li>
+<li>paginate</li>
+<li>serialize rows</li>
+<li>return the same response shape as the legacy endpoint</li>
+</ul>
+<p>This shared responder should own the list mechanics once so entity endpoints do not each re-implement:</p>
+<ul>
+<li><code>singleId</code></li>
+<li><code>fullDetail</code></li>
+<li><code>hasFilter</code></li>
+<li><code>paginated</code></li>
+<li><code>total</code></li>
+<li><code>skipped</code></li>
+<li><code>emitted</code></li>
+<li>wrapper handling</li>
+</ul>
+<h3 id="icollectionschematdef-tstate-tdetail"><code>ICollectionSchema&lt;TDef, TState, TDetail&gt;</code><a class="headerlink" href="#icollectionschematdef-tstate-tdetail" title="Permanent link">&para;</a></h3>
+<p>Typed serialization contract for one endpoint.</p>
+<p>Required members:</p>
+<ul>
+<li><code>int GetId(TDef def)</code></li>
+<li><code>string GetName(TDef def)</code></li>
+<li><code>int GetX(TDef def, TState state)</code></li>
+<li><code>int GetY(TDef def, TState state)</code></li>
+<li><code>bool IncludeRow(TDef def, TState state)</code></li>
+<li><code>void WriteRow(TimberbotJw jw, string format, bool fullDetail, TDef def, TState state, TDetail detail)</code></li>
+</ul>
+<p>Rules:</p>
+<ul>
+<li>row writing stays explicit and typed</li>
+<li>the generic layer handles collection mechanics</li>
+<li>schemas handle only row content</li>
+<li>per-schema scratch buffers are allowed because serialization stays on the listener thread</li>
+</ul>
+<h3 id="valuestoretcapture-tsnapshot-and-valueroutetsnapshot"><code>ValueStore&lt;TCapture, TSnapshot&gt;</code> and <code>ValueRoute&lt;TSnapshot&gt;</code><a class="headerlink" href="#valuestoretcapture-tsnapshot-and-valueroutetsnapshot" title="Permanent link">&para;</a></h3>
+<p>These are the matching native-v2 primitives for singleton or aggregate snapshots that do not need collection filtering.</p>
+<p>In the current implementation they also support staged refresh:</p>
+<ul>
+<li>main-thread capture returns <code>TCapture</code></li>
+<li>background finalize turns that into the published <code>TSnapshot</code></li>
+<li>trivial endpoints may use the same type for both capture and published snapshot</li>
+</ul>
+<p>They are used for endpoints such as:</p>
+<ul>
+<li><code>settlement</code></li>
+<li><code>time</code></li>
+<li><code>weather</code></li>
+<li><code>speed</code></li>
+<li><code>workhours</code></li>
+<li><code>science</code></li>
+<li><code>distribution</code></li>
+<li><code>summary</code></li>
+</ul>
+<h3 id="flatarrayroutetitem"><code>FlatArrayRoute&lt;TItem&gt;</code><a class="headerlink" href="#flatarrayroutetitem" title="Permanent link">&para;</a></h3>
+<p>This is the matching route shape for endpoints that paginate a flat list without entity-style name/radius/detail handling.</p>
+<p>It is used for endpoints such as:</p>
+<ul>
+<li><code>alerts</code></li>
+<li><code>notifications</code></li>
+<li><code>districts</code></li>
+<li><code>resources</code></li>
+<li><code>population</code></li>
+<li><code>tree_clusters</code></li>
+<li><code>food_clusters</code></li>
+</ul>
+<h2 id="timberbotreadv2-composition"><code>TimberbotReadV2</code> Composition<a class="headerlink" href="#timberbotreadv2-composition" title="Permanent link">&para;</a></h2>
+<p><code>TimberbotReadV2</code> is now the only public v2 read service.</p>
+<p>It owns:</p>
+<ul>
+<li>entity tracking and publish coordination</li>
+<li>generic route helpers as nested/private types</li>
+<li>typed schemas for each route shape</li>
+<li>endpoint methods that stay thin and map onto those shared helpers</li>
+</ul>
+<p>It does not:</p>
+<ul>
+<li>call <code>_legacyRead</code></li>
+<li>depend on extra top-level v2 helper services</li>
+<li>duplicate list parsing, paging, or response-wrapper mechanics per endpoint</li>
+</ul>
+<p>Current native v2 endpoint ownership inside <code>TimberbotReadV2</code>:</p>
+<ul>
+<li>collection routes:</li>
+<li><code>buildings</code></li>
+<li><code>beavers</code></li>
+<li><code>trees</code></li>
+<li><code>crops</code></li>
+<li><code>gatherables</code></li>
+<li>value routes:</li>
+<li><code>settlement</code></li>
+<li><code>time</code></li>
+<li><code>weather</code></li>
+<li><code>speed</code></li>
+<li><code>workhours</code></li>
+<li><code>science</code></li>
+<li><code>distribution</code></li>
+<li><code>summary</code></li>
+<li><code>wellbeing</code></li>
+<li><code>power</code></li>
+<li>flat-array routes:</li>
+<li><code>alerts</code></li>
+<li><code>notifications</code></li>
+<li><code>districts</code></li>
+<li><code>resources</code></li>
+<li><code>population</code></li>
+<li><code>tree_clusters</code></li>
+<li><code>food_clusters</code></li>
+</ul>
+<h2 id="apiv2-coverage"><code>/api/v2/*</code> Coverage<a class="headerlink" href="#apiv2-coverage" title="Permanent link">&para;</a></h2>
+<h3 id="native-timberbotreadv2-endpoints">Native <code>TimberbotReadV2</code> endpoints<a class="headerlink" href="#native-timberbotreadv2-endpoints" title="Permanent link">&para;</a></h3>
+<p>These are implemented natively inside <code>TimberbotReadV2</code> and validated through the v2 harness:</p>
+<ul>
+<li><code>/api/v2/buildings</code></li>
+<li><code>/api/v2/beavers</code></li>
+<li><code>/api/v2/trees</code></li>
+<li><code>/api/v2/crops</code></li>
+<li><code>/api/v2/gatherables</code></li>
+<li><code>/api/v2/summary</code></li>
+<li><code>/api/v2/alerts</code></li>
+<li><code>/api/v2/power</code></li>
+<li><code>/api/v2/population</code></li>
+<li><code>/api/v2/wellbeing</code></li>
+<li><code>/api/v2/time</code></li>
+<li><code>/api/v2/weather</code></li>
+<li><code>/api/v2/speed</code></li>
+<li><code>/api/v2/workhours</code></li>
+<li><code>/api/v2/settlement</code></li>
+<li><code>/api/v2/science</code></li>
+<li><code>/api/v2/distribution</code></li>
+<li><code>/api/v2/notifications</code></li>
+<li><code>/api/v2/resources</code></li>
+<li><code>/api/v2/districts</code></li>
+<li><code>/api/v2/tree_clusters</code></li>
+<li><code>/api/v2/food_clusters</code></li>
+</ul>
+<h3 id="direct-route-exceptions">Direct route exceptions<a class="headerlink" href="#direct-route-exceptions" title="Permanent link">&para;</a></h3>
+<p>These remain outside <code>TimberbotReadV2</code> for now:</p>
+<ul>
+<li><code>/api/v2/ping</code></li>
+<li><code>/api/v2/prefabs</code></li>
+</ul>
+<h2 id="implementation-sequence">Implementation Sequence<a class="headerlink" href="#implementation-sequence" title="Permanent link">&para;</a></h2>
+<p>Completed implementation sequence:</p>
+<ol>
+<li>Introduced canonical <code>/api/v2/*</code> routing.</li>
+<li>Kept legacy <code>/api/*</code> routes unchanged for parity.</li>
+<li>Proved the fresh-on-request model on buildings.</li>
+<li>Folded generic collection, value, paging, and snapshot helpers into <code>TimberbotReadV2</code>.</li>
+<li>Migrated beavers and natural resources onto the same internal route patterns.</li>
+<li>Rebuilt summary, alerts, power, wellbeing, districts, resources, population, and cluster endpoints as native v2 reads.</li>
+<li>Removed <code>_legacyRead.*</code> usage from <code>TimberbotReadV2</code>.</li>
+<li>Revalidated smoke and full parity after reload.</li>
+<li>Split <code>ReadV2.ProcessPendingRefresh()</code> into bounded main-thread capture plus background finalize/publish.</li>
+<li>Revalidated the full live suite after the staged refresh cutover.</li>
+</ol>
+<h2 id="remaining-follow-on-work">Remaining follow-on work<a class="headerlink" href="#remaining-follow-on-work" title="Permanent link">&para;</a></h2>
+<p>The remaining migration work is mostly outside the core v2 GET stack:</p>
+<ol>
+<li>decide when <code>/api/*</code> should switch to the native v2 implementations</li>
+<li>retire obsolete legacy-only code once the team is comfortable removing the old parity oracle</li>
+<li>keep expanding freshness, performance, and concurrency coverage as write-path scenarios are hardened</li>
+<li>tune capture budgeting and publish metrics now that the staged pipeline is live</li>
+</ol>
+<h2 id="explicit-non-goals-for-the-spike">Explicit non-goals for the spike<a class="headerlink" href="#explicit-non-goals-for-the-spike" title="Permanent link">&para;</a></h2>
+<p>The first spike should not:</p>
+<ul>
+<li>remove the old building endpoint</li>
+<li>migrate all entity types at once</li>
+<li>redesign water/terrain reads that are already backed by Timberborn <code>ThreadSafe*</code> services</li>
+<li>attempt a single giant world snapshot</li>
+</ul>
+<p>The spike is only meant to prove that fresh-on-request published snapshots are the right replacement for cadence-driven mirrored caches.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Timberbot API &mdash; Play Timberborn with an AI
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/abix-/TimberbornMods" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3689670088" target="_blank" rel="noopener" title="steamcommunity.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M504 256c0 137-111.2 248-248.4 248-113.8 0-209.6-76.3-239-180.4l95.2 39.3c6.4 32.1 34.9 56.4 68.9 56.4 39.2 0 71.9-32.4 70.2-73.5l84.5-60.2c52.1 1.3 95.8-40.9 95.8-93.5 0-51.6-42-93.5-93.7-93.5s-93.7 42-93.7 93.5v1.2L184.6 279c-15.5-.9-30.7 3.4-43.5 12.1L8 236.1C18.2 108.4 125.1 8 255.6 8 392.8 8 504 119 504 256M163.7 384.3l-30.5-12.6c5.6 11.6 15.3 20.8 27.2 25.8 26.9 11.2 57.8-1.6 69-28.4 5.4-13 5.5-27.3.1-40.3S214 305.6 201 300.2c-12.9-5.4-26.7-5.2-38.9-.6l31.5 13c19.8 8.2 29.2 30.9 20.9 50.7-8.3 19.9-31 29.2-50.8 21m173.8-254.5a62.3 62.3 0 1 1 0 124.6 62.3 62.3 0 1 1 0-124.6m.1 109a46.8 46.8 0 1 0 0-93.6 46.8 46.8 0 1 0 0 93.6"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.instant", "navigation.instant.progress", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

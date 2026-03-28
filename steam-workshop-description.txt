@@ -1,0 +1,99 @@
+Play Timberborn with an AI partner. Timberbot API adds external read/write HTTP access to game systems that Timberborn's built-in automation (levers, sensors, adapters) doesn't cover. Colony-wide decisions, building placement, worker management, map analysis, and AI-driven strategy on top of the game's own logic circuits.
+
+[code]
+/loop 1m /timberbot keep my beavers alive and get to 77 wellbeing
+[/code]
+
+The AI checks your colony every minute, makes decisions based on what it sees, and takes action. It works alongside the game's native automation. Use levers and sensors for in-game logic. Use Timberbot for the big-picture decisions that need external intelligence.
+
+Works with Claude Code, OpenAI Codex, or any AI agent that can make HTTP calls. Or use it as a scripting API for your own tools, dashboards, and external automation.
+
+[h1]What can the AI see and do?[/h1]
+[b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
+
+[b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation. Smart placement finder returns entrance coordinates, path connectivity, power adjacency, flooding status, and water depth for pumps.
+
+[b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII map with height shading.
+
+[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed.
+
+[b]A* pathfinding:[/b] place_path builds roads between any two points. Routes around buildings, ruins, water, and terrain obstacles. Auto-places stairs and platforms across elevation changes. Handles diagonal routes, multi-level jumps, and reuses existing paths and stairs. Optional sections param for incremental building across cliffs.
+
+[b]Power networks:[/b] which buildings share a power grid, supply vs demand per network, generator output.
+
+[b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
+
+[b]Brain:[/b] One command gives the AI everything: live colony summary (faction, DC per district, resources, building counts by role, nearby tree and food clusters) plus persistent state (goal, tasks, named maps). Summary is always fresh; goal, tasks, and maps survive between sessions in compact toon format.
+
+[b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
+
+[b]Server-side pagination & filtering:[/b] list endpoints default to 100 items per page. Filter by name or proximity without downloading everything. Works with any faction automatically.
+
+[b]Structured error codes:[/b] machine-readable "code: detail" format with context (which building is blocking placement, science costs). Separate crops and trees endpoints for targeted queries.
+
+[b]Output formats:[/b] all endpoints support toon (compact, AI-friendly) and json (full nested objects) via format parameter.
+
+[h1]Live dashboard[/h1]
+[code]
+timberbot.py top
+[/code]
+Real-time colony overview in your terminal. Population, resources, weather, drought countdown, wellbeing breakdown, alerts -- all updating live. No browser needed.
+
+[h1]How it works[/h1]
+Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
+[code]
+timberbot.py brain                                # full colony picture: DC, faction, resources, clusters, maps, tasks
+timberbot.py top                                  # live colony dashboard
+timberbot.py beavers detail:full                  # every need on every beaver
+timberbot.py power                                # power networks with supply vs demand
+timberbot.py map x1:110 y1:130 x2:130 y2:150 name:base  # ANSI map saved to memory
+timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+timberbot.py place_path x1:0 y1:0 x2:200 y2:180    # A* path with auto-stairs
+timberbot.py launch settlement:Potato save:Tomato       # auto-load a save
+timberbot.py crops                                  # crops in the ground with growth status
+timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
+[/code]
+Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
+
+[h1]AI setup[/h1]
+[b]Claude Code:[/b]
+[code]
+cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
+# run Claude from Documents/Timberborn/Mods/Timberbot so ./docs is available
+/loop 1m /timberbot
+[/code]
+
+[b]OpenAI Codex:[/b]
+Point Codex at the mod folder and give it the docs. It can call the HTTP API directly.
+
+The mod ships with docs that any AI agent can use. The local docs live in Documents/Timberborn/Mods/Timberbot/docs. The AI reads the single guide first, then uses the API reference only when it needs exact command or error details. The AI decides its own strategy and works alongside whatever in-game automation you've already set up.
+
+Works with ChatGPT too. Paste docs/timberbot.md as the prompt and keep docs/api-reference.md nearby for exact command details. If someone cannot access the workshop copy, the GitHub repo contains the same docs.
+
+[h1]Getting started[/h1]
+1. Subscribe and enable in Mod Manager
+2. Start a game. The API starts automatically on port 8085
+3. pip install requests toons
+4. Run: timberbot.py ping
+
+[h1]Configuration[/h1]
+Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
+[code]
+{
+  "debugEndpointEnabled": true,
+  "webhooksEnabled": true,
+  "webhookBatchMs": 200,
+  "webhookCircuitBreaker": 30,
+  "httpPort": 8085,
+  "writeBudgetMs": 1.0
+}
+[/code]
+
+[h1]Docs[/h1]
+[url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
+[url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] All endpoints with request/response examples
+[url=https://abix-.github.io/TimberbornMods/timberbot/]Timberbot AI[/url] Single authoritative AI guide for Claude or ChatGPT
+[url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full compatibility matrix (40 game systems)
+[url=https://abix-.github.io/TimberbornMods/webhooks/]Webhooks[/url] 68 push notification events for game automation
+[url=https://github.com/abix-/TimberbornMods]Source Code[/url]
+
