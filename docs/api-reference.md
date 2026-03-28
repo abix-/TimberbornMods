@@ -912,13 +912,13 @@ Settlement name for the current save game. Answered on listener thread (works ev
 
 ## Map & Terrain
 
-### POST /api/tiles
+### GET /api/tiles
 
 Terrain, water, occupants, and contamination for a rectangular region.
 
 **CLI:** `timberbot.py tiles x1:100 y1:100 x2:110 y2:110`
 
-#### Request Body
+#### Query Parameters
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -1660,36 +1660,52 @@ Get the work range tiles for a building. Same green circle the player sees when 
 
 ### POST /api/path/place
 
-Route a straight-line path from point A to point B, auto-placing stairs at z-level changes. Path must be axis-aligned (x1==x2 or y1==y2). Checks science unlocks: stairs must be unlocked for any z-change, platforms must be unlocked for multi-level jumps (2+ z-levels). Skips z-changes with an error if the required building isn't unlocked.
+Route a path from point A to point B using A* pathfinding over a 3D surface graph. Routes around buildings, natural resources, ruins, water, and terrain obstacles. Handles diagonal routes, multi-z transitions with auto-stairs/platforms, and reuses existing paths/stairs/platforms.
 
-**CLI:** `timberbot.py place_path x1:120 y1:130 x2:120 y2:145`
+**CLI:** `timberbot.py place_path x1:120 y1:130 x2:150 y2:160`
 
 #### Request Body
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| x1 | int | yes | Start X |
-| y1 | int | yes | Start Y |
-| x2 | int | yes | End X |
-| y2 | int | yes | End Y |
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| x1 | int | yes | | Start X |
+| y1 | int | yes | | Start Y |
+| x2 | int | yes | | End X |
+| y2 | int | yes | | End Y |
+| style | string | no | "direct" | "direct" (shortest path) or "straight" (prefers straight lines) |
+| sections | int | no | 0 | Stop after N stair/ramp crossings (0 = unlimited) |
+| timings | bool | no | false | Include timing breakdown in response |
 
 #### Response (success)
 
 ```json
-{"placed": {"paths": 12, "stairs": 1}, "skipped": 0}
+{"placed": {"paths": 12, "stairs": 1}, "skipped": 0, "connectorEdgesInGrid": 4}
 ```
 
-#### Response (partial -- with errors)
+#### Response (partial -- stopped by sections or error)
 
 ```json
-{"placed": {"paths": 8}, "skipped": 2, "errors": [{"prefab": "Path", "error": "occupied by LumberjackFlag at (120,130,2)"}, {"error": "z-change at (120,135): stairs not unlocked (need Stairs.IronTeeth)"}]}
+{"placed": {"paths": 8, "stairs": 1}, "skipped": 0, "connectorEdgesInGrid": 4, "stoppedAt": "130,142", "errors": [{"error": "stair failed at (130,142,3)"}]}
 ```
 
-#### Response (error -- not straight)
+#### Response (no route)
 
 ```json
-{"error": "invalid_param: path must be a straight line (x1==x2 or y1==y2)"}
+{"placed": {"paths": 0}, "skipped": 0, "connectorEdgesInGrid": 0, "errors": [{"error": "A* found no route from (0,0) to (255,255) -- 0 connectors in graph"}]}
 ```
+
+#### Response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| placed.paths | int | Number of path tiles placed |
+| placed.stairs | int | Number of stairs placed (omitted if 0) |
+| placed.platforms | int | Number of platforms placed (omitted if 0) |
+| skipped | int | Tiles that failed to place |
+| connectorEdgesInGrid | int | Total stair/ramp edges found in the graph |
+| stoppedAt | string | "x,y" where routing stopped (sections limit or error) |
+| errors | array | Error objects with `error` or `prefab`+`error` fields |
+| timings | object | When `timings:true`: totalMs, snapshotMs, graphMs, astarMs, placementMs, placementsAttempted, graphNodes, pathNodes, pathEdges |
 
 ---
 
@@ -1906,10 +1922,20 @@ timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
 
 ### place_path (CLI-only)
 
-Route a straight-line path with auto-stairs. Wraps `POST /api/path/place`.
+A* path routing with auto-stairs/platforms. Wraps `POST /api/path/place`.
 
 ```bash
-timberbot.py place_path x1:120 y1:130 x2:120 y2:145
+timberbot.py place_path x1:120 y1:130 x2:150 y2:160
+timberbot.py place_path x1:0 y1:0 x2:255 y2:255 style:straight
+timberbot.py place_path x1:120 y1:130 x2:150 y2:160 sections:1 timings:true
+```
+
+### launch (CLI-only)
+
+Launch Timberborn and auto-load a save. Writes `autoload.json` for the mod, then opens the game via Steam.
+
+```bash
+timberbot.py launch settlement:"Potato Tomato" save:bot
 ```
 
 ### top (CLI-only)

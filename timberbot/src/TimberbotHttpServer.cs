@@ -38,11 +38,19 @@ namespace Timberbot
         private readonly Queue<PendingRequest> _writeQueue = new Queue<PendingRequest>();
         private PendingRequest _activeWriteRequest;
         private ITimberbotWriteJob _activeWriteJob;
+        private readonly Dictionary<string, PostRouteDescriptor> _postRoutes;
         // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
         private readonly bool _debugEnabled;
         // separate JW for HTTP-layer errors (thread-safe: not shared with read/write paths)
         private readonly TimberbotJw _jw = new TimberbotJw(512);
+
+        class PostRouteDescriptor
+        {
+            public string Path;
+            public bool Queued;
+            public Func<PendingRequest, ITimberbotWriteJob> JobFactory;
+        }
 
         // Captures everything needed to process a POST request on the main thread.
         // The JSON body is parsed on the listener thread (cheap) so the main thread
@@ -61,12 +69,14 @@ namespace Timberbot
             public int FilterX, FilterY, FilterRadius; // proximity filter (Manhattan distance)
             public long QueuedAtTicks;           // listener-thread enqueue timestamp
             public int QueuedAtFrame;            // main-thread queue admission frame
+            public PostRouteDescriptor PostRoute;
         }
 
         public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
         {
             _service = service;
             _debugEnabled = debugEnabled;
+            _postRoutes = BuildPostRoutes();
             _listener = new HttpListener();
 
             // Try wildcard binding first (http://+:port/) which accepts connections
@@ -107,15 +117,14 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    if (ShouldQueueWrite(req.Route, req.Method))
+                    if (req.PostRoute == null)
                     {
-                        req.QueuedAtFrame = UnityEngine.Time.frameCount;
-                        _writeQueue.Enqueue(req);
+                        RespondAsync(req.Context, 200, UnknownEndpoint());
                     }
                     else
                     {
-                        var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius);
-                        RespondAsync(req.Context, 200, data);
+                        req.QueuedAtFrame = UnityEngine.Time.frameCount;
+                        _writeQueue.Enqueue(req);
                     }
                 }
                 catch (Exception ex)
@@ -138,7 +147,12 @@ namespace Timberbot
                 _activeWriteRequest = _writeQueue.Dequeue();
                 try
                 {
-                    _activeWriteJob = CreateWriteJob(_activeWriteRequest);
+                    _activeWriteJob = _activeWriteRequest.PostRoute?.JobFactory?.Invoke(_activeWriteRequest);
+                    if (_activeWriteJob == null)
+                    {
+                        RespondAsync(_activeWriteRequest.Context, 200, UnknownEndpoint());
+                        _activeWriteRequest = null;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -213,13 +227,19 @@ namespace Timberbot
                 int.TryParse(ctx.Request.QueryString["x"], out int filterX);
                 int.TryParse(ctx.Request.QueryString["y"], out int filterY);
                 int.TryParse(ctx.Request.QueryString["radius"], out int filterRadius);
+                int.TryParse(ctx.Request.QueryString["x1"], out int tileX1);
+                int.TryParse(ctx.Request.QueryString["y1"], out int tileY1);
+                int.TryParse(ctx.Request.QueryString["x2"], out int tileX2);
+                int.TryParse(ctx.Request.QueryString["y2"], out int tileY2);
                 // GET requests: handled on the background listener thread and served from
                 // ReadV2's published snapshots or explicit thread-safe game services.
                 if (method == "GET")
                 {
                     try
                     {
-                        var data = RouteRequest(path, method, null, format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                        var data = path == "/api/tiles"
+                            ? _service.ReadV2.CollectTiles(format, tileX1, tileY1, tileX2, tileY2)
+                            : RouteReadRequest(path, format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -277,339 +297,140 @@ namespace Timberbot
                     FilterX = filterX,
                     FilterY = filterY,
                     FilterRadius = filterRadius,
-                    QueuedAtTicks = System.Diagnostics.Stopwatch.GetTimestamp()
+                    QueuedAtTicks = System.Diagnostics.Stopwatch.GetTimestamp(),
+                    PostRoute = ResolvePostRoute(path)
                 });
             }
         }
 
-        // Central routing table. Maps HTTP method + path to service method calls.
-        // GET endpoints return ReadV2 snapshot data (thread-safe, called from background thread).
-        // POST endpoints mutate game state (called from main thread via DrainRequests).
-        //
-        // Notable exceptions to the GET=read/POST=write convention:
-        //   /api/tiles (POST): reads terrain data but needs body params for the region
-        //   /api/building/range (POST): reads work radius but needs body param for building ID
-        //   /api/placement/find (POST): reads valid spots but needs body params for search area
-        // These are logically reads but use POST because GET has no request body.
-        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+        // GET routing table. All POST routing is descriptor-driven via BuildPostRoutes().
+        private object RouteReadRequest(string path, string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
-            // GET endpoints (read from ReadV2 snapshots -- zero contention with game thread)
-            if (method == "GET")
+            switch (path)
             {
-                switch (path)
-                {
-                    case "/api/summary":
-                        return _service.ReadV2.CollectSummary(format);
-                    case "/api/alerts":
-                        return _service.ReadV2.CollectAlerts(format, limit, offset);
-                    case "/api/tree_clusters":
-                        return _service.ReadV2.CollectTreeClusters(format);
-                    case "/api/food_clusters":
-                        return _service.ReadV2.CollectFoodClusters(format);
-                    case "/api/resources":
-                        return _service.ReadV2.CollectResources(format);
-                    case "/api/population":
-                        return _service.ReadV2.CollectPopulation();
-                    case "/api/time":
-                        return _service.ReadV2.CollectTime();
-                    case "/api/weather":
-                        return _service.ReadV2.CollectWeather();
-                    case "/api/districts":
-                        return _service.ReadV2.CollectDistricts(format);
-                    case "/api/buildings":
-                        return _service.ReadV2.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/trees":
-                        return _service.ReadV2.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/crops":
-                        return _service.ReadV2.CollectCrops(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/gatherables":
-                        return _service.ReadV2.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/beavers":
-                        return _service.ReadV2.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
-                    case "/api/distribution":
-                        return _service.ReadV2.CollectDistribution(format);
-                    case "/api/science":
-                        return _service.ReadV2.CollectScience(format);
-                    case "/api/wellbeing":
-                        return _service.ReadV2.CollectWellbeing(format);
-                    case "/api/notifications":
-                        return _service.ReadV2.CollectNotifications(format, limit, offset);
-                    case "/api/workhours":
-                        return _service.ReadV2.CollectWorkHours();
-                    case "/api/power":
-                        return _service.ReadV2.CollectPowerNetworks(format);
-                    case "/api/speed":
-                        return _service.ReadV2.CollectSpeed();
-                    case "/api/prefabs":
-                        return _service.Placement.CollectPrefabs();
-                    case "/api/webhooks":
-                        return _service.WebhookMgr.ListWebhooks();
-                }
+                case "/api/summary":
+                    return _service.ReadV2.CollectSummary(format);
+                case "/api/alerts":
+                    return _service.ReadV2.CollectAlerts(format, limit, offset);
+                case "/api/tree_clusters":
+                    return _service.ReadV2.CollectTreeClusters(format);
+                case "/api/food_clusters":
+                    return _service.ReadV2.CollectFoodClusters(format);
+                case "/api/resources":
+                    return _service.ReadV2.CollectResources(format);
+                case "/api/population":
+                    return _service.ReadV2.CollectPopulation();
+                case "/api/time":
+                    return _service.ReadV2.CollectTime();
+                case "/api/weather":
+                    return _service.ReadV2.CollectWeather();
+                case "/api/districts":
+                    return _service.ReadV2.CollectDistricts(format);
+                case "/api/buildings":
+                    return _service.ReadV2.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                case "/api/trees":
+                    return _service.ReadV2.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
+                case "/api/crops":
+                    return _service.ReadV2.CollectCrops(format, limit, offset, filterName, filterX, filterY, filterRadius);
+                case "/api/gatherables":
+                    return _service.ReadV2.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
+                case "/api/beavers":
+                    return _service.ReadV2.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                case "/api/distribution":
+                    return _service.ReadV2.CollectDistribution(format);
+                case "/api/science":
+                    return _service.ReadV2.CollectScience(format);
+                case "/api/wellbeing":
+                    return _service.ReadV2.CollectWellbeing(format);
+                case "/api/notifications":
+                    return _service.ReadV2.CollectNotifications(format, limit, offset);
+                case "/api/workhours":
+                    return _service.ReadV2.CollectWorkHours();
+                case "/api/power":
+                    return _service.ReadV2.CollectPowerNetworks(format);
+                case "/api/speed":
+                    return _service.ReadV2.CollectSpeed();
+                case "/api/prefabs":
+                    return _service.Placement.CollectPrefabs();
+                case "/api/webhooks":
+                    return _service.WebhookMgr.ListWebhooks();
             }
 
-            // POST endpoints (write -- executed on Unity main thread via queue)
-            if (method == "POST")
-            {
-                switch (path)
-                {
-                    case "/api/speed":
-                        return _service.Write.SetSpeed(body?.Value<int>("speed") ?? 0);
-                    case "/api/building/pause":
-                        return _service.Write.PauseBuilding(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<bool>("paused") ?? false);
-                    case "/api/building/clutch":
-                        return _service.Write.SetClutch(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<bool>("engaged") ?? true);
-                    case "/api/building/floodgate":
-                        return _service.Write.SetFloodgateHeight(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<float>("height") ?? 0f);
-                    case "/api/building/priority":
-                        return _service.Write.SetBuildingPriority(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("priority") ?? "Normal",
-                            body?.Value<string>("type") ?? "");
-                    case "/api/building/hauling":
-                        return _service.Write.SetHaulPriority(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<bool>("prioritized") ?? true);
-                    case "/api/building/recipe":
-                        return _service.Write.SetRecipe(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("recipe") ?? "");
-                    case "/api/building/farmhouse":
-                        return _service.Write.SetFarmhouseAction(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("action") ?? "");
-                    case "/api/building/plantable":
-                        return _service.Write.SetPlantablePriority(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("plantable") ?? "");
-                    case "/api/building/workers":
-                        return _service.Write.SetWorkers(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<int>("count") ?? 0);
-                    case "/api/planting/mark":
-                        return _service.Write.MarkPlanting(
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0,
-                            body?.Value<int>("z") ?? 0,
-                            body?.Value<string>("crop") ?? "");
-                    case "/api/planting/find":
-                        return _service.Write.FindPlantingSpots(
-                            body?.Value<string>("crop") ?? "",
-                            body?.Value<int>("building_id") ?? 0,
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0,
-                            body?.Value<int>("z") ?? 0);
-                    case "/api/building/range":
-                        return _service.Write.CollectBuildingRange(
-                            body?.Value<int>("id") ?? 0);
-                    case "/api/planting/clear":
-                        return _service.Write.UnmarkPlanting(
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0,
-                            body?.Value<int>("z") ?? 0);
-                    case "/api/cutting/area":
-                        return _service.Write.MarkCuttingArea(
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0,
-                            body?.Value<int>("z") ?? 0,
-                            body?.Value<bool>("marked") ?? true);
-                    case "/api/stockpile/capacity":
-                        return _service.Write.SetStockpileCapacity(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<int>("capacity") ?? 0);
-                    case "/api/stockpile/good":
-                        return _service.Write.SetStockpileGood(
-                            body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("good") ?? "");
-                    case "/api/workhours":
-                        return _service.Write.SetWorkHours(
-                            body?.Value<int>("endHours") ?? 16);
-                    case "/api/district/migrate":
-                        return _service.Write.MigratePopulation(
-                            body?.Value<string>("from") ?? "",
-                            body?.Value<string>("to") ?? "",
-                            body?.Value<int>("count") ?? 1);
-                    case "/api/science/unlock":
-                        return _service.Write.UnlockBuilding(
-                            body?.Value<string>("building") ?? "");
-                    case "/api/distribution":
-                        return _service.Write.SetDistribution(
-                            body?.Value<string>("district") ?? "",
-                            body?.Value<string>("good") ?? "",
-                            body?.Value<string>("import") ?? "",
-                            body?.Value<int>("exportThreshold") ?? -1);
-                    case "/api/tiles":
-                        return _service.ReadV2.CollectTiles(
-                            format,
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0);
-                    case "/api/building/demolish":
-                        return _service.Placement.DemolishBuilding(
-                            body?.Value<int>("id") ?? 0);
-                    case "/api/crop/demolish":
-                        return _service.Placement.DemolishCrop(
-                            body?.Value<int>("id") ?? 0);
-                    case "/api/webhooks":
-                        return _service.WebhookMgr.RegisterWebhook(
-                            body?.Value<string>("url") ?? "",
-                            body?["events"]?.ToObject<System.Collections.Generic.List<string>>());
-                    case "/api/webhooks/delete":
-                        return _service.WebhookMgr.UnregisterWebhook(
-                            body?.Value<string>("id") ?? "");
-                    case "/api/debug":
-                        if (!_debugEnabled) return _jw.Error("disabled: debug endpoint");
-                        var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
-                        if (body != null)
-                            foreach (var prop in body.Properties())
-                                debugArgs[prop.Name] = prop.Value?.ToString() ?? "";
-                        return _service.DebugTool.DebugInspect(
-                            body?.Value<string>("target") ?? "help", debugArgs);
-                    case "/api/benchmark":
-                        if (!_debugEnabled) return _jw.Error("disabled: benchmark endpoint");
-                        return _service.DebugTool.RunBenchmark(
-                            body?.Value<int>("iterations") ?? 100);
-                    case "/api/path/place":
-                        return _service.Placement.RoutePath(
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0,
-                            body?.Value<string>("style") ?? "direct",
-                            body?.Value<int>("sections") ?? 0,
-                            body?.Value<bool?>("timings") ?? false);
-                    case "/api/placement/find":
-                        return _service.Placement.FindPlacement(
-                            body?.Value<string>("prefab") ?? "",
-                            body?.Value<int>("x1") ?? 0,
-                            body?.Value<int>("y1") ?? 0,
-                            body?.Value<int>("x2") ?? 0,
-                            body?.Value<int>("y2") ?? 0);
-                    case "/api/building/place":
-                        return _service.Placement.PlaceBuilding(
-                            body?.Value<string>("prefab") ?? "",
-                            body?.Value<int>("x") ?? 0,
-                            body?.Value<int>("y") ?? 0,
-                            body?.Value<int>("z") ?? 0,
-                            body?.Value<string>("orientation") ?? "south")
-                            .ToJson(_service.Placement.Jw);
-                }
-            }
+            return UnknownEndpoint();
+        }
 
+        private PostRouteDescriptor ResolvePostRoute(string path)
+        {
+            _postRoutes.TryGetValue(path, out var route);
+            return route;
+        }
+
+        private object UnknownEndpoint()
+        {
             return _jw.Error("unknown_endpoint", ("endpoints", new[] {
                 "GET /api/ping", "GET /api/summary",
                 "GET /api/buildings", "GET /api/trees",
                 "GET /api/beavers", "GET /api/resources", "GET /api/districts", "GET /api/weather",
-                "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power",
+                "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power", "GET /api/tiles",
                 "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"
             }));
         }
 
-        private bool ShouldQueueWrite(string path, string method)
+        private Dictionary<string, PostRouteDescriptor> BuildPostRoutes()
         {
-            if (method != "POST") return false;
-            switch (path)
-            {
-                case "/api/tiles":
-                case "/api/building/range":
-                case "/api/placement/find":
-                case "/api/planting/find":
-                case "/api/debug":
-                case "/api/benchmark":
-                    return false;
-                default:
-                    return true;
-            }
-        }
+            PostRouteDescriptor Queued(string path, Func<PendingRequest, ITimberbotWriteJob> jobFactory)
+                => new PostRouteDescriptor { Path = path, Queued = true, JobFactory = jobFactory };
 
-        private ITimberbotWriteJob CreateWriteJob(PendingRequest req)
-        {
-            var body = req.Body;
-            switch (req.Route)
+            var routes = new[]
             {
-                case "/api/path/place":
-                    return _service.Placement.CreateRoutePathJob(
-                        body?.Value<int>("x1") ?? 0,
-                        body?.Value<int>("y1") ?? 0,
-                        body?.Value<int>("x2") ?? 0,
-                        body?.Value<int>("y2") ?? 0,
-                        body?.Value<string>("style") ?? "direct",
-                        body?.Value<int>("sections") ?? 0,
-                        body?.Value<bool?>("timings") ?? false,
-                        req.QueuedAtTicks,
-                        req.QueuedAtFrame);
-                case "/api/building/place":
-                    return new LambdaWriteJob(req.Route, () =>
-                        _service.Placement.PlaceBuilding(
-                            body?.Value<string>("prefab") ?? "",
-                            body?.Value<int>("x") ?? 0,
-                            body?.Value<int>("y") ?? 0,
-                            body?.Value<int>("z") ?? 0,
-                            body?.Value<string>("orientation") ?? "south")
-                        .ToJson(_service.Placement.Jw));
-                case "/api/building/demolish":
-                    return new LambdaWriteJob(req.Route, () => _service.Placement.DemolishBuilding(body?.Value<int>("id") ?? 0));
-                case "/api/crop/demolish":
-                    return new LambdaWriteJob(req.Route, () => _service.Placement.DemolishCrop(body?.Value<int>("id") ?? 0));
-                case "/api/speed":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetSpeed(body?.Value<int>("speed") ?? 0));
-                case "/api/building/pause":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.PauseBuilding(body?.Value<int>("id") ?? 0, body?.Value<bool>("paused") ?? false));
-                case "/api/building/clutch":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetClutch(body?.Value<int>("id") ?? 0, body?.Value<bool>("engaged") ?? true));
-                case "/api/building/floodgate":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetFloodgateHeight(body?.Value<int>("id") ?? 0, body?.Value<float>("height") ?? 0f));
-                case "/api/building/priority":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetBuildingPriority(body?.Value<int>("id") ?? 0, body?.Value<string>("priority") ?? "Normal", body?.Value<string>("type") ?? ""));
-                case "/api/building/hauling":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetHaulPriority(body?.Value<int>("id") ?? 0, body?.Value<bool>("prioritized") ?? true));
-                case "/api/building/recipe":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetRecipe(body?.Value<int>("id") ?? 0, body?.Value<string>("recipe") ?? ""));
-                case "/api/building/farmhouse":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetFarmhouseAction(body?.Value<int>("id") ?? 0, body?.Value<string>("action") ?? ""));
-                case "/api/building/plantable":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetPlantablePriority(body?.Value<int>("id") ?? 0, body?.Value<string>("plantable") ?? ""));
-                case "/api/building/workers":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetWorkers(body?.Value<int>("id") ?? 0, body?.Value<int>("count") ?? 0));
-                case "/api/planting/mark":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.MarkPlanting(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0, body?.Value<string>("crop") ?? ""));
-                case "/api/planting/clear":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.UnmarkPlanting(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0));
-                case "/api/cutting/area":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.MarkCuttingArea(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0, body?.Value<bool>("marked") ?? true));
-                case "/api/stockpile/capacity":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileCapacity(body?.Value<int>("id") ?? 0, body?.Value<int>("capacity") ?? 0));
-                case "/api/stockpile/good":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileGood(body?.Value<int>("id") ?? 0, body?.Value<string>("good") ?? ""));
-                case "/api/workhours":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetWorkHours(body?.Value<int>("endHours") ?? 16));
-                case "/api/district/migrate":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.MigratePopulation(body?.Value<string>("from") ?? "", body?.Value<string>("to") ?? "", body?.Value<int>("count") ?? 1));
-                case "/api/science/unlock":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.UnlockBuilding(body?.Value<string>("building") ?? ""));
-                case "/api/distribution":
-                    return new LambdaWriteJob(req.Route, () => _service.Write.SetDistribution(body?.Value<string>("district") ?? "", body?.Value<string>("good") ?? "", body?.Value<string>("import") ?? "", body?.Value<int>("exportThreshold") ?? -1));
-                case "/api/webhooks":
-                    return new LambdaWriteJob(req.Route, () => _service.WebhookMgr.RegisterWebhook(body?.Value<string>("url") ?? "", body?["events"]?.ToObject<List<string>>()));
-                case "/api/webhooks/delete":
-                    return new LambdaWriteJob(req.Route, () => _service.WebhookMgr.UnregisterWebhook(body?.Value<string>("id") ?? ""));
-                default:
-                    return new LambdaWriteJob(req.Route, () => RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius));
-            }
+                Queued("/api/speed", req => new LambdaWriteJob(req.Route, () => _service.Write.SetSpeed(req.Body?.Value<int>("speed") ?? 0))),
+                Queued("/api/building/pause", req => new LambdaWriteJob(req.Route, () => _service.Write.PauseBuilding(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<bool>("paused") ?? false))),
+                Queued("/api/building/clutch", req => new LambdaWriteJob(req.Route, () => _service.Write.SetClutch(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<bool>("engaged") ?? true))),
+                Queued("/api/building/floodgate", req => new LambdaWriteJob(req.Route, () => _service.Write.SetFloodgateHeight(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<float>("height") ?? 0f))),
+                Queued("/api/building/priority", req => new LambdaWriteJob(req.Route, () => _service.Write.SetBuildingPriority(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("priority") ?? "Normal", req.Body?.Value<string>("type") ?? ""))),
+                Queued("/api/building/hauling", req => new LambdaWriteJob(req.Route, () => _service.Write.SetHaulPriority(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<bool>("prioritized") ?? true))),
+                Queued("/api/building/recipe", req => new LambdaWriteJob(req.Route, () => _service.Write.SetRecipe(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("recipe") ?? ""))),
+                Queued("/api/building/farmhouse", req => new LambdaWriteJob(req.Route, () => _service.Write.SetFarmhouseAction(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("action") ?? ""))),
+                Queued("/api/building/plantable", req => new LambdaWriteJob(req.Route, () => _service.Write.SetPlantablePriority(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("plantable") ?? ""))),
+                Queued("/api/building/workers", req => new LambdaWriteJob(req.Route, () => _service.Write.SetWorkers(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<int>("count") ?? 0))),
+                Queued("/api/planting/mark", req => new LambdaWriteJob(req.Route, () => _service.Write.MarkPlanting(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("crop") ?? ""))),
+                Queued("/api/planting/find", req => _service.Write.CreateFindPlantingSpotsJob(req.Body?.Value<string>("crop") ?? "", req.Body?.Value<int>("building_id") ?? 0, req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0)),
+                Queued("/api/building/range", req => _service.Write.CreateCollectBuildingRangeJob(req.Body?.Value<int>("id") ?? 0)),
+                Queued("/api/planting/clear", req => new LambdaWriteJob(req.Route, () => _service.Write.UnmarkPlanting(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0))),
+                Queued("/api/cutting/area", req => new LambdaWriteJob(req.Route, () => _service.Write.MarkCuttingArea(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<bool>("marked") ?? true))),
+                Queued("/api/stockpile/capacity", req => new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileCapacity(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<int>("capacity") ?? 0))),
+                Queued("/api/stockpile/good", req => new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileGood(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("good") ?? ""))),
+                Queued("/api/workhours", req => new LambdaWriteJob(req.Route, () => _service.Write.SetWorkHours(req.Body?.Value<int>("endHours") ?? 16))),
+                Queued("/api/district/migrate", req => new LambdaWriteJob(req.Route, () => _service.Write.MigratePopulation(req.Body?.Value<string>("from") ?? "", req.Body?.Value<string>("to") ?? "", req.Body?.Value<int>("count") ?? 1))),
+                Queued("/api/science/unlock", req => new LambdaWriteJob(req.Route, () => _service.Write.UnlockBuilding(req.Body?.Value<string>("building") ?? ""))),
+                Queued("/api/distribution", req => new LambdaWriteJob(req.Route, () => _service.Write.SetDistribution(req.Body?.Value<string>("district") ?? "", req.Body?.Value<string>("good") ?? "", req.Body?.Value<string>("import") ?? "", req.Body?.Value<int>("exportThreshold") ?? -1))),
+                Queued("/api/building/demolish", req => new LambdaWriteJob(req.Route, () => _service.Placement.DemolishBuilding(req.Body?.Value<int>("id") ?? 0))),
+                Queued("/api/crop/demolish", req => new LambdaWriteJob(req.Route, () => _service.Placement.DemolishCrop(req.Body?.Value<int>("id") ?? 0))),
+                Queued("/api/webhooks", req => new LambdaWriteJob(req.Route, () => _service.WebhookMgr.RegisterWebhook(req.Body?.Value<string>("url") ?? "", req.Body?["events"]?.ToObject<List<string>>()))),
+                Queued("/api/webhooks/delete", req => new LambdaWriteJob(req.Route, () => _service.WebhookMgr.UnregisterWebhook(req.Body?.Value<string>("id") ?? ""))),
+                Queued("/api/debug", req => new LambdaWriteJob(req.Route, () =>
+                {
+                    if (!_debugEnabled) return _jw.Error("disabled: debug endpoint");
+                    var debugArgs = new Dictionary<string, string>();
+                    if (req.Body != null)
+                        foreach (var prop in req.Body.Properties())
+                            debugArgs[prop.Name] = prop.Value?.ToString() ?? "";
+                    return _service.DebugTool.DebugInspect(req.Body?.Value<string>("target") ?? "help", debugArgs);
+                }, 0)),
+                Queued("/api/benchmark", req => new LambdaWriteJob(req.Route, () =>
+                {
+                    if (!_debugEnabled) return _jw.Error("disabled: benchmark endpoint");
+                    return _service.DebugTool.RunBenchmark(req.Body?.Value<int>("iterations") ?? 100);
+                }, 0)),
+                Queued("/api/path/place", req => _service.Placement.CreateRoutePathJob(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<string>("style") ?? "direct", req.Body?.Value<int>("sections") ?? 0, req.Body?.Value<bool?>("timings") ?? false, req.QueuedAtTicks, req.QueuedAtFrame)),
+                Queued("/api/placement/find", req => _service.Placement.CreateFindPlacementJob(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0)),
+                Queued("/api/building/place", req => new LambdaWriteJob(req.Route, () => _service.Placement.PlaceBuilding(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x") ?? 0, req.Body?.Value<int>("y") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("orientation") ?? "south").ToJson(_service.Placement.Jw))),
+            };
+
+            var result = new Dictionary<string, PostRouteDescriptor>(System.StringComparer.Ordinal);
+            for (int i = 0; i < routes.Length; i++)
+                result[routes[i].Path] = routes[i];
+            return result;
         }
 
         private void FailOutstanding(string error)

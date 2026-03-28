@@ -1,7 +1,5 @@
-- [breaking] map: x/y/radius -> x1/y1/x2/y2
-- [breaking] booleans: true/false -> 0/1 everywhere
-- [breaking] uniform schema: all list endpoints always emit all fields (enables toon CSV)
-- [breaking] tiles occupants: z-range format (DistrictCenter:z2-6), moved to last column
+- [breaking] ReadV2 cutover: all GET endpoints now served by TimberbotReadV2 with fresh-on-request projection snapshots
+- [breaking] removed TimberbotRead, TimberbotDoubleBuffer, TimberbotEntityCache -- replaced by TimberbotReadV2 + TimberbotEntityRegistry
 - [feature] A* pathfinding for place_path: edge-based cost grid, pre-computed stair edges, auto-stairs across z-levels, obstacle/water avoidance, existing path reuse, style and sections params
 - [feature] A* stair orientation toward destination, overhang avoidance
 - [feature] map: show topmost occupant (highest z) for correct top-down view
@@ -9,16 +7,16 @@
 - [feature] debug endpoint: generic reflection inspector (get, fields, call with $ chaining, validate, validate_all)
 - [feature] debug endpoint: assertion targets (eq, ne, null, contains, gt, gte, lt, lte, assert, compare, describe, roots)
 - [feature] benchmark endpoint: /api/benchmark with GC0 tracking, micro-benchmarks, endpoint profiling, toon variants
-- [feature] brain: live summary + persistent goal/tasks/maps per settlement
-- [feature] summary: settlement, faction, DC per district, building role counts, tree/food clusters, per-district housing/employment/wellbeing, species breakdowns, wellbeing categories, speed
-- [feature] food_clusters endpoint: top 5 gatherable food clusters by density
-- [feature] settlement endpoint: save name for per-settlement memory folders
-- [feature] find_placement distance: path cost from DC via flow field
-- [feature] map name param: saves ANSI map to memory and indexes in brain
-- [feature] map delta ANSI encoding: 35KB -> 6KB output
-- [feature] --host and --port CLI flags, httpHost in settings.json for remote connections
-- [feature] per-settlement memory folders with clear_brain to start fresh
+- [feature] summary: added speed field
 - [feature] science/distribution endpoints pre-built on main thread via RefreshMainThreadData
+- [feature] ReadV2: staged capture with per-frame budget, background finalize/publish, concurrent reader coalescing
+- [feature] off-thread finalize: expensive snapshot publish work runs on ReadV2's internal background worker
+- [feature] write job system: ITimberbotWriteJob + ProcessWriteJobs for budgeted main-thread write execution
+- [feature] writeBudgetMs setting (default 2ms) for per-frame write budget
+- [feature] place_path timings param: detailed timing breakdown (snapshot, graph, astar, placement)
+- [feature] blocker tracking: ruins, MapEditorObjects, MapEditorWater, Wood now visible in /api/tiles and block pathing/placement
+- [feature] blocker name resolution: placement errors name the blocking entity instead of "unknown"
+- [feature] /api/crop/demolish endpoint: remove planted crop entities
 - [perf] thread-unsafe reads fixed: CollectTreeClusters/CollectFoodClusters use cached primitives
 - [perf] CollectSummary json: eliminated Newtonsoft DeserializeObject, inline WriteClustersFiltered
 - [perf] CollectSummary: ~20 temp collections hoisted to field-level, static roleMap/cropNames
@@ -28,11 +26,16 @@
 - [perf] district refresh: reuses existing CachedDistrict objects, zero alloc steady state
 - [perf] RefreshCachedState: confirmed 0 GC0 across all hot paths (10K iteration benchmarks)
 - [perf] Math.Round boxing claim disproved: 0 GC0 across 11.4M calls
-- [fix] localhost DNS -> 127.0.0.1 (2300ms -> 310ms latency)
-- [fix] session reuse: 200x brain speedup
-- [fix] toon summary aggregates population/resources across districts
+- [perf] no cadence-driven refresh -- snapshots published only when readers need them
 - [fix] A* path cost=0 for existing paths broke admissibility; changed to cost=1
+- [fix] remove zombie refreshIntervalSeconds setting (no longer affects any behavior)
+- [fix] inner-value alloc in derived read endpoints: reuse containers in summary/alerts/power/clusters
+- [test] test_v2.py: new primary test harness (smoke, freshness, write_to_read, performance, concurrency)
 - [test] 3 new A* path tests: diagonal, obstacle, no-route
+- [test] 77 total tests in 11 groups (read, write, placement, path, crops, buildings, beavers, webhooks, cli, perf, wipe)
+- [test] test groups: run by group name, --exclude flag, --list shows groups
+- [test] new tests: blocker_tracking, path_sections, demolish_crop
+- [docs] architecture.md rewritten for native ReadV2 stack, removed all double-buffer references
 - [docs] architecture.md: thread model table, reusable collections, main-thread cached endpoints
 - [docs] performance.md: full audit (3 high, 8 medium, 11 low), all high+medium fixed
 - [docs] developing.md: owns file structure, testing, build instructions
@@ -43,14 +46,4 @@
 - [internal] debug endpoint enabled by default
 - [internal] TimberbotAutoLoad + TimberbotAutoLoadConfigurator for auto-load
 - [internal] TimberbotDebug expanded to full reflection inspector + validation + assertions
-- [breaking] ReadV2 cutover: all GET endpoints now served by TimberbotReadV2 with fresh-on-request projection snapshots
-- [breaking] removed TimberbotRead, TimberbotDoubleBuffer, TimberbotEntityCache -- replaced by TimberbotReadV2 + TimberbotEntityRegistry
-- [feature] ReadV2: staged capture with per-frame budget, background finalize/publish, concurrent reader coalescing
-- [feature] off-thread finalize: expensive snapshot publish work runs on ReadV2's internal background worker
-- [perf] no cadence-driven refresh -- snapshots published only when readers need them
-- [test] test_v2.py: new primary test harness (smoke, freshness, write_to_read, performance, concurrency)
-- [test] 74 total tests (up from 63)
-- [docs] architecture.md rewritten for native ReadV2 stack, removed all double-buffer references
-- [feature] write job system: ITimberbotWriteJob + ProcessWriteJobs for budgeted main-thread write execution
-- [feature] writeBudgetMs setting (default 2ms) for per-frame write budget
-- [feature] place_path timings param: detailed timing breakdown (snapshot, graph, astar, placement)
+- [refactor] RoutePath delegates to PlanRoute, single BuildSurfaceGraph authority

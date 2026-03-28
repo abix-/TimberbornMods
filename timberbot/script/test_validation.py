@@ -23,7 +23,7 @@ import time
 from timberbot import Timberbot, TimberbotError
 
 
-REFRESH_WAIT = 1.5  # seconds to wait after POST for snapshot refresh + margin
+NAVMESH_SETTLE_WAIT = 3.0  # extra settle time for navmesh-dependent reachability checks
 
 
 class TestRunner:
@@ -202,15 +202,17 @@ class TestRunner:
                 return p
         return base
 
-    def wait_for_refresh(self):
-        """Wait for the double-buffered cache to refresh after a write."""
-        time.sleep(REFRESH_WAIT)
+    def wait_for_navmesh_settle(self):
+        """Wait for Timberborn navmesh/path reachability to catch up after path edits."""
+        time.sleep(NAVMESH_SETTLE_WAIT)
 
-    def write_and_wait(self, fn):
-        """Execute a write operation and wait for cache refresh."""
-        result = fn()
-        self.wait_for_refresh()
-        return result
+    def prime_validation_snapshots(self):
+        """Force fresh snapshot publishes before debug validation checks."""
+        self._safe_call(lambda: self.bot.buildings(limit=0), None)
+        self._safe_call(lambda: self.bot.beavers(limit=0), None)
+        self._safe_call(lambda: self.bot.trees(limit=0), None)
+        self._safe_call(lambda: self.bot.crops(limit=0), None)
+        self._safe_call(lambda: self.bot.districts(), None)
 
     def check(self, name, ok, detail=""):
         if ok:
@@ -275,71 +277,73 @@ class TestRunner:
                 return b.get("id")
         return None
 
+    GROUPS = {
+        "read": [
+            "read_endpoints", "summary_projection", "map_moisture", "map_render",
+            "map_stacking", "find_helper", "json_schema", "data_accuracy",
+            "district_accuracy",
+        ],
+        "write": [
+            "speed", "pause", "priority", "workers", "floodgate", "clutch",
+            "haul_priority", "recipe", "farmhouse_action", "plantable_priority",
+            "stockpile", "stockpile_capacity", "workhours", "distribution",
+            "migrate", "unlock",
+        ],
+        "placement": [
+            "placement_and_demolish", "orientation", "find_placement",
+            "water_placement", "overridable_placement", "blocker_tracking",
+        ],
+        "path": [
+            "path_flat", "path_1z", "path_1z_east", "path_1z_north",
+            "path_1z_south", "path_1z_west", "path_2z", "path_2z_east",
+            "path_2z_north", "path_2z_south", "path_2z_west", "path_errors",
+            "path_astar_diagonal", "path_astar_obstacle", "path_astar_no_route",
+            "path_sections",
+        ],
+        "crops": [
+            "crops", "tree_marking", "find_planting", "clear_planting",
+            "clear_trees", "demolish_crop",
+        ],
+        "buildings": [
+            "building_detail", "building_inventory", "building_range",
+            "building_recipes", "prefab_costs", "power_networks",
+        ],
+        "beavers": [
+            "beaver_detail", "beaver_needs", "beaver_position", "beaver_district",
+            "carried_goods", "bot_data", "bot_buildings", "bot_in_summary",
+            "bot_toon_format", "bot_durability",
+        ],
+        "webhooks": ["webhooks"],
+        "cli": ["cli_commands", "error_codes"],
+        "perf": [
+            "performance", "building_endpoint_perf", "brain_perf",
+            "buildings_v2_parity",
+        ],
+        "wipe": ["wipe_all"],
+    }
+
+    # ordered list of groups for default run (perf and wipe excluded)
+    DEFAULT_GROUPS = [
+        "read", "write", "placement", "path", "crops",
+        "buildings", "beavers", "webhooks", "cli",
+    ]
+
     def run(self):
         if not self.bot.ping():
             print("error: game not reachable")
             sys.exit(1)
 
         self.discover()
-        self.test_read_endpoints()
-        self.test_speed()
-        self.test_placement_and_demolish()
-        self.test_priority()
-        self.test_workers()
-        self.test_pause()
-        self.test_crops()
-        self.test_tree_marking()
-        self.test_stockpile()
-        self.test_orientation()
-        self.test_find_placement()
-        self.test_water_placement()
-        self.test_path_flat()
-        self.test_path_1z()
-        self.test_path_2z()
-        self.test_path_errors()
-        self.test_overridable_placement()
-        self.test_summary_projection()
-        self.test_map_moisture()
-        self.test_unlock()
-        self.test_floodgate()
-        self.test_haul_priority()
-        self.test_recipe()
-        self.test_farmhouse_action()
-        self.test_plantable_priority()
-        self.test_stockpile_capacity()
-        self.test_workhours()
-        self.test_distribution()
-        self.test_beaver_needs()
-        self.test_building_range()
-        self.test_find_planting()
-        self.test_prefab_costs()
-        self.test_building_inventory()
-        self.test_building_recipes()
-        self.test_clutch()
-        self.test_bot_data()
-        self.test_bot_buildings()
-        self.test_bot_in_summary()
-        self.test_bot_toon_format()
-        self.test_beaver_detail()
-        self.test_building_detail()
-        self.test_beaver_position()
-        self.test_beaver_district()
-        self.test_map_stacking()
-        self.test_carried_goods()
-        self.test_bot_durability()
-        self.test_power_networks()
-        self.test_webhooks()
-        self.test_map_render()
-        self.test_find_helper()
-        self.test_clear_planting()
-        self.test_clear_trees()
-        self.test_migrate()
-        self.test_cli_commands()
-        self.test_error_codes()
-        self.test_data_accuracy()
-        self.test_json_schema()
-        self.test_performance()
-        self.test_brain_perf()
+        self.run_groups(self.DEFAULT_GROUPS)
+
+    def run_groups(self, groups):
+        test_map = {name.replace("test_", ""): getattr(self, name)
+                    for name in dir(self) if name.startswith("test_")}
+        for group in groups:
+            tests = self.GROUPS.get(group, [])
+            for name in tests:
+                if name in test_map:
+                    test_map[name]()
 
     def test_read_endpoints(self):
         print("\n=== read endpoints ===\n")
@@ -426,7 +430,7 @@ class TestRunner:
                        json.dumps(result)[:100])
 
         # valid placement using find_spot coords
-        result = self.write_and_wait(lambda: self.bot.place_building("Path", sx, sy, sz, spot.get("orientation", "south")))
+        result = self.bot.place_building("Path", sx, sy, sz, spot.get("orientation", "south"))
         self.check("valid placement", self.has(result, "id"))
 
         if self.has(result, "id"):
@@ -439,7 +443,7 @@ class TestRunner:
             self.check("verify placement via map", has_path)
 
             # demolish
-            dem = self.write_and_wait(lambda: self.bot.demolish_building(placed_id))
+            dem = self.bot.demolish_building(placed_id)
             self.check("demolish", self.has(dem, "demolished") or not self.err(dem))
 
             # verify gone
@@ -528,8 +532,7 @@ class TestRunner:
         result = self.bot.pause_building(dc_id)
         self.check("pause building", not self.err(result))
 
-        # verify via buildings endpoint (wait for cache refresh)
-        self.wait_for_refresh()
+        # verify via buildings endpoint
         buildings = self.bot.buildings()
         paused = False
         if isinstance(buildings, list):
@@ -543,7 +546,6 @@ class TestRunner:
         self.bot.unpause_building(dc_id)
 
         # verify unpaused
-        self.wait_for_refresh()
         buildings2 = self.bot.buildings()
         unpaused = True
         if isinstance(buildings2, list):
@@ -594,7 +596,6 @@ class TestRunner:
                    json.dumps(result)[:100] if self.err(result) else "")
 
         # verify via trees endpoint - some should be marked
-        self.wait_for_refresh()
         trees = self.bot.trees()
         marked = 0
         if isinstance(trees, list):
@@ -680,8 +681,7 @@ class TestRunner:
                     self.check(f"{prefab.split('.')[0]} {orient}", False, json.dumps(result)[:100])
                     continue
 
-                # wait for cache then verify origin via map
-                self.wait_for_refresh()
+                # verify origin via map
                 region = self.bot.tiles(bx - 1, by - 1, bx + sx, by + sy)
                 pname = prefab.split(".")[0]
                 occupied = []
@@ -832,10 +832,9 @@ class TestRunner:
                     spot = same_z[0]
                     ex, ey = spot["entranceX"], spot["entranceY"]
                     # build path from DC area to entrance
-                    path1 = self.write_and_wait(lambda: self.bot.place_path(dcx, dcy - 1, ex, dcy - 1))
-                    path2 = self.write_and_wait(lambda: self.bot.place_path(ex, dcy - 1, ex, ey))
-                    self.wait_for_refresh()
-                    self.wait_for_refresh()  # navmesh needs extra time to update
+                    path1 = self.bot.place_path(dcx, dcy - 1, ex, dcy - 1)
+                    path2 = self.bot.place_path(ex, dcy - 1, ex, ey)
+                    self.wait_for_navmesh_settle()
                     # re-query placement to check reachability
                     result2 = self.bot.find_placement(self.prefab("Inventor"),
                         spot["x"] - 1, spot["y"] - 1, spot["x"] + 1, spot["y"] + 1)
@@ -919,8 +918,8 @@ class TestRunner:
         # place a pump at the best water spot and verify it works
         if wet_not_flooded:
             p = wet_not_flooded[0]
-            placed = self.write_and_wait(lambda: self.bot.place_building(
-                pump_prefab, p["x"], p["y"], p["z"], orientation=p["orientation"]))
+            placed = self.bot.place_building(
+                pump_prefab, p["x"], p["y"], p["z"], orientation=p["orientation"])
             if self.has(placed, "id"):
                 self.check("pump placed successfully", True)
                 # verify it shows up in buildings
@@ -931,7 +930,6 @@ class TestRunner:
                                b.get("name", "").lower().find("pump") >= 0 or
                                "Water" in str(b.get("recipes", b.get("currentRecipe", ""))))
                 self.bot.demolish_building(placed["id"])
-                self.wait_for_refresh()
             else:
                 self.check("pump placement at water spot", False,
                            json.dumps(placed)[:100])
@@ -963,7 +961,6 @@ class TestRunner:
 
     def _path_demolish_range(self, x1, y1, x2, y2):
         """demolish all paths/stairs/platforms in a range"""
-        self.wait_for_refresh()
         buildings = self.bot.buildings()
         if not isinstance(buildings, list):
             return
@@ -1038,7 +1035,6 @@ class TestRunner:
             result = self.bot.place_building(prefab, bx, by, bz, "south")
             if isinstance(result, dict) and result.get("id"):
                 existing.add((bx, by, bz))
-                self.wait_for_refresh()
 
     def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
         """place a path and verify results -- no cleanup, paths stay for visual inspection"""
@@ -1209,7 +1205,6 @@ class TestRunner:
         if not blocker_id:
             self.skip("astar obstacle", f"could not place {blocker_prefab}")
             return
-        self.wait_for_refresh()
 
         result = self.bot.place_path(x1, y1, x2, y2)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
@@ -1237,12 +1232,53 @@ class TestRunner:
                    no_route,
                    json.dumps(result)[:120])
 
+    def test_path_sections(self):
+        """Verify sections param stops path placement after N connector crossings."""
+        print("\n=== path routing: sections limit ===\n")
+        # route a long diagonal path with sections=1 -- should stop after first connector
+        x1, y1 = 0, 0
+        x2, y2 = self.map_x - 1, self.map_y - 1
+        result = self.bot.place_path(x1, y1, x2, y2, sections=1)
+        placed = result.get("placed", {}) if isinstance(result, dict) else {}
+        stopped = result.get("stoppedAt") if isinstance(result, dict) else None
+        self.check("sections: paths placed",
+                   placed.get("paths", 0) > 0,
+                   json.dumps(result)[:120])
+        self.check("sections: stopped before reaching goal",
+                   stopped is not None,
+                   f"stoppedAt={stopped}")
+
+    def test_demolish_crop(self):
+        """Verify demolish_crop returns success for a valid crop."""
+        print("\n=== demolish crop ===\n")
+        crops = self.bot.crops()
+        crop_list = crops.get("items", []) if isinstance(crops, dict) else (crops if isinstance(crops, list) else [])
+        if not crop_list:
+            self.skip("demolish crop", "no crops on map")
+            return
+        crop = crop_list[0]
+        crop_id = crop.get("id")
+        if crop_id is None:
+            self.skip("demolish crop", "crop has no id")
+            return
+        result = self.bot.demolish_crop(crop_id)
+        self.check("demolish crop: no error",
+                   not self.err(result),
+                   json.dumps(result)[:120] if isinstance(result, dict) else str(result)[:120])
+        # verify it's gone
+        crops_after = self.bot.crops()
+        crop_list_after = crops_after.get("items", []) if isinstance(crops_after, dict) else (crops_after if isinstance(crops_after, list) else [])
+        ids_after = {c.get("id") for c in crop_list_after}
+        self.check("demolish crop: crop removed",
+                   crop_id not in ids_after,
+                   f"id {crop_id} still present in {len(crop_list_after)} crops")
+
     def test_blocker_tracking(self):
         """Verify uncached block objects (ruins, editor objects) appear in tiles and block placement."""
         print("\n=== blocker tracking (ruins / editor objects) ===\n")
 
         # scan a large tile region for any ruin/editor occupants
-        tiles_result = self.bot._post_json("/api/tiles", {
+        tiles_result = self.bot._get_json("/api/tiles", {
             "x1": 0, "y1": 0, "x2": self.map_x - 1, "y2": self.map_y - 1
         })
         if self.err(tiles_result):
@@ -1269,7 +1305,7 @@ class TestRunner:
         path_prefab = "Path"
         tz = 0
         # get terrain height at that tile
-        spot_tiles = self.bot._post_json("/api/tiles", {
+        spot_tiles = self.bot._get_json("/api/tiles", {
             "x1": rx, "y1": ry, "x2": rx, "y2": ry
         })
         for t in spot_tiles.get("tiles", []):
@@ -2502,10 +2538,8 @@ class TestRunner:
         """Validate cached API data matches live game components using debug validate."""
         print("\n=== data accuracy (cached vs live) ===\n")
 
-        # wait for a fresh cache cycle
-        self.wait_for_refresh()
-
-        # validate a sample of buildings
+        # validate a sample of buildings against freshly published snapshots
+        self.prime_validation_snapshots()
         buildings = self.bot.buildings()
         if isinstance(buildings, list) and buildings:
             for b in buildings[:5]:
@@ -2894,7 +2928,7 @@ class TestRunner:
         self.check("schema: webhooks (toon)", isinstance(t_webhooks, list), f"got {type(t_webhooks).__name__}")
 
         # --- cross-validate cached data vs live game state via debug endpoint ---
-        self.wait_for_refresh()
+        self.prime_validation_snapshots()
         result = self.bot.debug(target="validate_all")
         if isinstance(result, dict) and "mismatches" in result:
             entities = result.get("entities", 0)
@@ -3290,6 +3324,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Timberbot API test suite")
     parser.add_argument("tests", nargs="*", help="specific test names to run (e.g. speed priority webhooks). omit for all")
+    parser.add_argument("--exclude", "-x", nargs="+", default=[], help="test names to exclude (e.g. -x performance brain_perf)")
     parser.add_argument("--perf", action="store_true", help="run only the performance test")
     parser.add_argument("--benchmark", action="store_true", help="call the in-game /api/benchmark endpoint")
     parser.add_argument("--iterations", "-n", type=int, default=100, help="iterations for perf/benchmark (default: 100)")
@@ -3303,9 +3338,12 @@ def main():
                  for name in dir(runner) if name.startswith("test_")]
 
     if args.list:
-        print("Available tests:")
-        for name, _ in all_tests:
-            print(f"  {name}")
+        print("Groups:")
+        for group in list(runner.GROUPS.keys()):
+            tests = runner.GROUPS[group]
+            print(f"  {group:12s} ({len(tests)}) {', '.join(tests)}")
+        print(f"\nDefault run: {', '.join(runner.DEFAULT_GROUPS)}")
+        print(f"Excluded from default: {', '.join(k for k in runner.GROUPS if k not in runner.DEFAULT_GROUPS)}")
         return
 
     if not runner.bot.ping():
@@ -3318,6 +3356,8 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     test_names = "-".join(args.tests) if args.tests else "all"
+    if len(test_names) > 80:
+        test_names = test_names[:77] + "..."
     logpath = os.path.join(results_dir, f"{timestamp}-{test_names}.txt")
     logfile = open(logpath, "w")
     print(f"results: {logpath}")
@@ -3346,6 +3386,26 @@ def main():
             print(f"  {b['test']:<35} {pc:>8.3f} {tot:>10.1f} {gc:>5} {str(items):>6} {str(passed):>5}")
         return
 
+    group_names = set(runner.GROUPS.keys())
+    test_names_set = {name for name, _ in all_tests}
+
+    # resolve args: group names expand to their tests, individual test names pass through
+    def resolve_names(names):
+        resolved = []
+        for name in names:
+            if name in group_names:
+                resolved.extend(runner.GROUPS[name])
+            elif name in test_names_set:
+                resolved.append(name)
+            else:
+                print(f"  unknown test or group: {name}")
+                print(f"  groups: {', '.join(sorted(group_names))}")
+                print(f"  tests: {', '.join(sorted(test_names_set))}")
+                sys.exit(1)
+        return resolved
+
+    exclude = set(resolve_names(args.exclude))
+
     if args.perf:
         runner.discover()
         runner.perf_iterations = args.iterations
@@ -3353,18 +3413,23 @@ def main():
     elif args.tests:
         runner.discover()
         runner.perf_iterations = args.iterations
-        # run only specified tests
         test_map = dict(all_tests)
-        for name in args.tests:
-            if name in test_map:
-                test_map[name]()
-            else:
-                print(f"  unknown test: {name}")
-                print(f"  available: {', '.join(test_map.keys())}")
-                sys.exit(1)
+        for name in resolve_names(args.tests):
+            if name in exclude:
+                continue
+            test_map[name]()
     else:
         runner.perf_iterations = args.iterations
-        runner.run()
+        if exclude:
+            runner.discover()
+            # run default groups, skipping excluded tests
+            test_map = dict(all_tests)
+            for group in runner.DEFAULT_GROUPS:
+                for name in runner.GROUPS[group]:
+                    if name not in exclude and name in test_map:
+                        test_map[name]()
+        else:
+            runner.run()
 
     summary = f"\n=== {runner.passed} passed, {runner.failed} failed"
     if runner.skipped:

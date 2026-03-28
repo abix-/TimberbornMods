@@ -9,7 +9,7 @@
 // PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
 // creates a preview, validates, then calls BlockObjectPlacerService.Place().
 //
-// RoutePath: places a straight-line path with auto-stairs at z-level changes.
+// RoutePathJob: plans and places paths incrementally under the write-job budget.
 // Handles multi-level jumps by stacking platforms + stairs automatically.
 //
 // GetTerrainHeight: reads terrain column data for a single tile.
@@ -259,34 +259,33 @@ namespace Timberbot
             return jw.End();
         }
 
+        private object DemolishEntityById(int id, System.Func<EntityComponent, string> validateError)
+        {
+            var ec = _cache.FindEntity(id);
+            if (ec == null)
+                return Jw.Error("not_found", ("id", id));
+
+            var validationError = validateError?.Invoke(ec);
+            if (validationError != null)
+                return Jw.Error(validationError, ("id", id), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)));
+
+            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            _entityService.Delete(ec);
+            return Jw.Result(("id", id), ("name", name), ("demolished", true));
+        }
+
         // remove a building from the world
         public object DemolishBuilding(int buildingId)
-        {
-            var ec = _cache.FindEntity(buildingId);
-            if (ec == null)
-                return Jw.Error("not_found", ("id", buildingId));
-
-            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
-            _entityService.Delete(ec);
-            return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
-        }
+            => DemolishEntityById(buildingId, _ => null);
 
         public object DemolishCrop(int cropId)
-        {
-            var ec = _cache.FindEntity(cropId);
-            if (ec == null)
-                return Jw.Error("not_found", ("id", cropId));
-
-            if (ec.GetComponent<LivingNaturalResource>() == null)
-                return Jw.Error("invalid_type: not a natural resource", ("id", cropId));
-
-            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
-            if (!TimberbotEntityRegistry.CropSpecies.Contains(name))
-                return Jw.Error("invalid_type: not a crop", ("id", cropId), ("name", name));
-
-            _entityService.Delete(ec);
-            return Jw.Result(("id", cropId), ("name", name), ("demolished", true));
-        }
+            => DemolishEntityById(cropId, ec =>
+            {
+                if (ec.GetComponent<LivingNaturalResource>() == null)
+                    return "invalid_type: not a natural resource";
+                var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+                return TimberbotEntityRegistry.CropSpecies.Contains(name) ? null : "invalid_type: not a crop";
+            });
 
         // =====================================================================
         // A* PATH ROUTING
@@ -370,6 +369,9 @@ namespace Timberbot
 
         internal ITimberbotWriteJob CreateRoutePathJob(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0, bool timings = false, long queuedAtTicks = 0, int queuedAtFrame = 0)
             => new RoutePathJob(this, x1, y1, x2, y2, style, sections, timings, queuedAtTicks, queuedAtFrame);
+
+        internal ITimberbotWriteJob CreateFindPlacementJob(string prefabName, int x1, int y1, int x2, int y2)
+            => new FindPlacementJob(this, prefabName, x1, y1, x2, y2);
 
         private PathPlanningData CapturePathPlanningData(int x1, int y1, int x2, int y2, string style)
         {
@@ -646,89 +648,6 @@ namespace Timberbot
             }
 
             return result;
-        }
-
-        // Route a path from (x1,y1) to (x2,y2) using safe A* over a coherent 3D surface graph.
-        // Nodes represent walkable surfaces at (x,y,z). Edges represent either flat movement or
-        // directed vertical connectors. Existing stairs/platforms are reusable graph edges/surfaces,
-        // and generated connectors use the same edge abstraction with RequiresPlacement=true.
-        public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0, bool timings = false)
-        {
-            var totalSw = System.Diagnostics.Stopwatch.StartNew();
-            int placementsAttempted = 0;
-
-            var planData = CapturePathPlanningData(x1, y1, x2, y2, style);
-            var plan = PlanRoute(planData, x1, y1, x2, y2, style, sections);
-
-            var errors = new List<string>(plan.Errors);
-            var failedResults = new List<PlaceBuildingResult>();
-            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
-            double placementMs = 0d;
-
-            var placementSw = System.Diagnostics.Stopwatch.StartNew();
-            for (int i = 0; i < plan.Actions.Count; i++)
-            {
-                var action = plan.Actions[i];
-                placementsAttempted++;
-                var r = PlaceBuilding(action.Prefab, action.X, action.Y, action.Z, action.Orientation);
-                if (r.Success)
-                {
-                    if (action.Bucket == "path") pathCount++;
-                    else if (action.Bucket == "platform") platformCount++;
-                    else if (action.Bucket == "stair") stairCount++;
-                }
-                else if (r.Error != null && r.Error.StartsWith("occupied by"))
-                {
-                    // benign -- tile already occupied by compatible structure
-                }
-                else
-                {
-                    skipped++;
-                    failedResults.Add(r);
-                    errors.Add($"{action.Bucket} failed at ({action.X},{action.Y},{action.Z})");
-                    plan.Stopped = true;
-                    plan.StoppedX = action.StopX;
-                    plan.StoppedY = action.StopY;
-                    break;
-                }
-            }
-            placementSw.Stop();
-            placementMs = placementSw.Elapsed.TotalMilliseconds;
-
-            var jw = Jw.Reset().BeginObj();
-            jw.Obj("placed").Prop("paths", pathCount);
-            if (stairCount > 0) jw.Prop("stairs", stairCount);
-            if (platformCount > 0) jw.Prop("platforms", platformCount);
-            jw.CloseObj().Prop("skipped", skipped);
-            jw.Prop("connectorEdgesInGrid", plan.ConnectorCount);
-            if (plan.Stopped) jw.Prop("stoppedAt", $"{plan.StoppedX},{plan.StoppedY}");
-
-            if (failedResults.Count > 0 || errors.Count > 0)
-            {
-                jw.Arr("errors");
-                foreach (var r in failedResults)
-                    r.WriteErrorJson(jw);
-                foreach (var e in errors)
-                    jw.OpenObj().Prop("error", e).CloseObj();
-                jw.CloseArr();
-            }
-            if (timings)
-            {
-                totalSw.Stop();
-                jw.Obj("timings")
-                    .Prop("totalMs", (float)totalSw.Elapsed.TotalMilliseconds, "F3")
-                    .Prop("snapshotMs", (float)plan.SnapshotMs, "F3")
-                    .Prop("graphMs", (float)plan.GraphMs, "F3")
-                    .Prop("astarMs", (float)plan.AstarMs, "F3")
-                    .Prop("placementMs", (float)placementMs, "F3")
-                    .Prop("placementsAttempted", placementsAttempted)
-                    .Prop("graphNodes", plan.GraphNodes)
-                    .Prop("pathNodes", plan.PathNodes)
-                    .Prop("pathEdges", plan.PathEdges)
-                    .CloseObj();
-            }
-            jw.CloseObj();
-            return jw.ToString();
         }
 
         private enum SurfaceKind : byte
@@ -1572,6 +1491,352 @@ namespace Timberbot
         // 4. FLOOD CHECK: checks WaterDepth > 0 on ground-required tiles only
         //    (MatterBelow.GroundOrStackable). Water intake tiles are expected wet.
         //
+        private sealed class FindPlacementJob : ITimberbotWriteJob
+        {
+            private readonly TimberbotPlacement _owner;
+            private readonly string _prefabName;
+            private readonly int _x1;
+            private readonly int _y1;
+            private readonly int _x2;
+            private readonly int _y2;
+            private readonly string[] _orientNames = { "south", "west", "north", "east" };
+            private readonly List<(int x, int y, int z, int orient, bool pathAccess, bool reachable, float distance, bool nearPower, bool flooded, float waterDepth, int entranceX, int entranceY)> _results
+                = new List<(int x, int y, int z, int orient, bool pathAccess, bool reachable, float distance, bool nearPower, bool flooded, float waterDepth, int entranceX, int entranceY)>();
+            private Dictionary<Vector3Int, float> _reachableRoadCoords;
+            private HashSet<long> _pathTiles;
+            private HashSet<long> _powerTiles;
+            private Preview _cachedPreview;
+            private BuildingSpec _buildingSpec;
+            private Vector3Int _size;
+            private Vector3Int? _waterInputLocal;
+            private int _tx;
+            private int _ty;
+            private int _minX;
+            private int _maxX;
+            private int _minY;
+            private int _maxY;
+            private bool _initialized;
+            private bool _completed;
+            private int _statusCode = 200;
+            private object _result;
+
+            public FindPlacementJob(TimberbotPlacement owner, string prefabName, int x1, int y1, int x2, int y2)
+            {
+                _owner = owner;
+                _prefabName = prefabName;
+                _x1 = x1;
+                _y1 = y1;
+                _x2 = x2;
+                _y2 = y2;
+            }
+
+            public string Name => "/api/placement/find";
+            public bool IsCompleted => _completed;
+            public int StatusCode => _statusCode;
+            public object Result => _result;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (_completed) return;
+                if (!_initialized && !Initialize(now)) return;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                while (_ty <= _maxY)
+                {
+                    EvaluateTile(_tx, _ty);
+                    _tx++;
+                    if (_tx > _maxX)
+                    {
+                        _tx = _minX;
+                        _ty++;
+                    }
+
+                    if (sw.Elapsed.TotalMilliseconds >= budgetMs)
+                        return;
+                }
+
+                FinalizeResult();
+            }
+
+            public void Cancel(string error)
+            {
+                if (_completed) return;
+                CleanupPreview();
+                _statusCode = 500;
+                _result = "{\"error\":\"" + error.Replace("\"", "'") + "\"}";
+                _completed = true;
+            }
+
+            private bool Initialize(float now)
+            {
+                _initialized = true;
+                try { _buildingSpec = _owner._buildingService.GetBuildingTemplate(_prefabName); }
+                catch
+                {
+                    _result = _owner.Jw.Error("not_found", ("prefab", _prefabName));
+                    _completed = true;
+                    return false;
+                }
+                if (_buildingSpec == null)
+                {
+                    _result = _owner.Jw.Error("not_found", ("prefab", _prefabName));
+                    _completed = true;
+                    return false;
+                }
+
+                var blockObjectSpec = _buildingSpec.GetSpec<BlockObjectSpec>();
+                if (blockObjectSpec == null)
+                {
+                    _result = _owner.Jw.Error("invalid_type: no block object spec", ("prefab", _prefabName));
+                    _completed = true;
+                    return false;
+                }
+
+                _size = blockObjectSpec.Size;
+                var waterInputSpec = _buildingSpec.GetSpec<WaterInputSpec>();
+                _waterInputLocal = waterInputSpec != null ? (Vector3Int?)waterInputSpec.WaterInputCoordinates : null;
+                _minX = System.Math.Min(_x1, _x2);
+                _maxX = System.Math.Max(_x1, _x2);
+                _minY = System.Math.Min(_y1, _y2);
+                _maxY = System.Math.Max(_y1, _y2);
+                _tx = _minX;
+                _ty = _minY;
+
+                _reachableRoadCoords = new Dictionary<Vector3Int, float>();
+                try
+                {
+                    var reflFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                    var nodeIdSvc = _owner._navMeshService.GetType().GetField("_nodeIdService", reflFlags)
+                        ?.GetValue(_owner._navMeshService) as Timberborn.Navigation.NodeIdService;
+
+                    foreach (var dc in _owner._districtCenterRegistry.FinishedDistrictCenters)
+                    {
+                        var cachingFF = dc.GetComponent<BuildingCachingFlowField>();
+                        if (cachingFF == null || nodeIdSvc == null) continue;
+                        var accessCoords = (Vector3Int)cachingFF.GetType().GetField("_accessCoordinates", reflFlags).GetValue(cachingFF);
+                        int dcNodeId = nodeIdSvc.GridToId(accessCoords);
+                        Vector3 dcWorldPos = nodeIdSvc.IdToWorld(dcNodeId);
+
+                        var drawer = dc.GetComponent<DistrictPathNavRangeDrawer>();
+                        if (drawer == null) continue;
+                        var navRangeSvc = drawer.GetType().GetField("_navigationRangeService", reflFlags)?.GetValue(drawer);
+                        if (navRangeSvc == null) continue;
+
+                        var nodesInRange = navRangeSvc.GetType().GetMethod("GetRoadNodesInRange")
+                            ?.Invoke(navRangeSvc, new object[] { dcWorldPos }) as System.Collections.IEnumerable;
+                        if (nodesInRange == null) continue;
+
+                        foreach (var wc in nodesInRange)
+                        {
+                            var wcType = wc.GetType();
+                            var coordsProp = wcType.GetProperty("Coordinates");
+                            var distProp = wcType.GetProperty("Distance");
+                            if (coordsProp != null)
+                            {
+                                var coords = (Vector3Int)coordsProp.GetValue(wc);
+                                float dist = distProp != null ? (float)distProp.GetValue(wc) : -1f;
+                                _reachableRoadCoords[coords] = dist;
+                            }
+                        }
+                        break;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    TimberbotLog.Error("placement", ex);
+                }
+
+                _pathTiles = new HashSet<long>();
+                _powerTiles = new HashSet<long>();
+                var buildingSnapshot = _owner._readV2.EnsureBuildingsFreshNow(now);
+                for (int i = 0; i < buildingSnapshot.Count; i++)
+                {
+                    var cb = buildingSnapshot.Definitions[i];
+                    if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
+                    {
+                        foreach (var c in cb.OccupiedTiles)
+                            _pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                    if (cb.HasPowerNode != 0)
+                    {
+                        foreach (var c in cb.OccupiedTiles)
+                            _powerTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+
+                var placeableSpec = _buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+                try
+                {
+                    if (placeableSpec != null)
+                        _cachedPreview = _owner._previewFactory.Create(placeableSpec);
+                }
+                catch (System.Exception ex)
+                {
+                    TimberbotLog.Error("placement", ex);
+                }
+
+                return true;
+            }
+
+            private void EvaluateTile(int tx, int ty)
+            {
+                int tz = _owner.GetTerrainHeight(tx, ty);
+                if (tz <= 0 || _cachedPreview == null) return;
+
+                int bestOrient = -1;
+                bool bestHasPath = false;
+
+                for (int orient = 0; orient < 4; orient++)
+                {
+                    int vrx = _size.x;
+                    int vry = _size.y;
+                    if (orient == 1 || orient == 3) { vrx = _size.y; vry = _size.x; }
+                    int vgx = tx;
+                    int vgy = ty;
+                    switch (orient)
+                    {
+                        case 1: vgy = ty + vry - 1; break;
+                        case 2: vgx = tx + vrx - 1; vgy = ty + vry - 1; break;
+                        case 3: vgx = tx + vrx - 1; break;
+                    }
+
+                    var placement = new Placement(new Vector3Int(vgx, vgy, tz), (Timberborn.Coordinates.Orientation)orient, FlipMode.Unflipped);
+                    _cachedPreview.Reposition(placement);
+                    if (!_cachedPreview.BlockObject.IsValid()) continue;
+
+                    bool hasPath = false;
+                    if (_cachedPreview.BlockObject.HasEntrance)
+                    {
+                        var ds = _cachedPreview.BlockObject.PositionedEntrance.Coordinates;
+                        hasPath = _pathTiles.Contains((long)ds.x * 1000000 + (long)ds.y * 1000 + ds.z);
+                    }
+
+                    if ((hasPath && !bestHasPath) || (!bestHasPath && bestOrient < 0))
+                    {
+                        bestHasPath = hasPath;
+                        bestOrient = orient;
+                    }
+                }
+
+                if (bestOrient < 0) return;
+
+                int brx2 = _size.x;
+                int bry2 = _size.y;
+                if (bestOrient == 1 || bestOrient == 3) { brx2 = _size.y; bry2 = _size.x; }
+                int bgx = tx;
+                int bgy = ty;
+                switch (bestOrient)
+                {
+                    case 1: bgy = ty + bry2 - 1; break;
+                    case 2: bgx = tx + brx2 - 1; bgy = ty + bry2 - 1; break;
+                    case 3: bgx = tx + brx2 - 1; break;
+                }
+                _cachedPreview.Reposition(new Placement(new Vector3Int(bgx, bgy, tz), (Timberborn.Coordinates.Orientation)bestOrient, FlipMode.Unflipped));
+
+                int entranceX = tx;
+                int entranceY = ty;
+                if (_cachedPreview.BlockObject.HasEntrance)
+                {
+                    var ds = _cachedPreview.BlockObject.PositionedEntrance.Coordinates;
+                    entranceX = ds.x;
+                    entranceY = ds.y;
+                }
+
+                bool reachable = false;
+                float distance = -1f;
+                if (bestHasPath && _cachedPreview.BlockObject.HasEntrance)
+                {
+                    var ds = _cachedPreview.BlockObject.PositionedEntrance.Coordinates;
+                    if (_reachableRoadCoords.TryGetValue(ds, out float dist))
+                    {
+                        reachable = true;
+                        distance = dist;
+                    }
+                }
+
+                bool nearPower = false;
+                for (int px = tx - 1; px <= tx + brx2 && !nearPower; px++)
+                    for (int py = ty - 1; py <= ty + bry2 && !nearPower; py++)
+                    {
+                        if (px >= tx && px < tx + brx2 && py >= ty && py < ty + bry2) continue;
+                        if (_powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
+                            nearPower = true;
+                    }
+
+                bool flooded = false;
+                float waterDepth = 0f;
+                foreach (var block in _cachedPreview.BlockObject.PositionedBlocks.GetAllBlocks())
+                {
+                    var c = block.Coordinates;
+                    if (c.z != tz) continue;
+                    float depth = _owner.GetWaterDepth(c.x, c.y);
+                    if (block.MatterBelow == MatterBelow.GroundOrStackable)
+                    {
+                        if (depth > 0) flooded = true;
+                    }
+                    else if (block.MatterBelow != MatterBelow.Air && _waterInputLocal.HasValue)
+                    {
+                        if (depth > waterDepth) waterDepth = depth;
+                    }
+                }
+
+                _results.Add((tx, ty, tz, bestOrient, bestHasPath, reachable, distance, nearPower, flooded, waterDepth, entranceX, entranceY));
+            }
+
+            private void FinalizeResult()
+            {
+                _results.Sort((a, b) =>
+                {
+                    if (_waterInputLocal.HasValue && a.waterDepth != b.waterDepth) return b.waterDepth.CompareTo(a.waterDepth);
+                    if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
+                    if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
+                    if (a.distance != b.distance)
+                    {
+                        if (a.distance < 0) return 1;
+                        if (b.distance < 0) return -1;
+                        return a.distance.CompareTo(b.distance);
+                    }
+                    if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
+                    if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
+                    return 0;
+                });
+
+                int count = _results.Count > 10 ? 10 : _results.Count;
+                var jw = _owner.Jw.Reset().BeginObj()
+                    .Prop("prefab", _prefabName)
+                    .Prop("sizeX", _size.x).Prop("sizeY", _size.y)
+                    .Arr("placements");
+                for (int i = 0; i < count; i++)
+                {
+                    var r = _results[i];
+                    jw.OpenObj()
+                        .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
+                        .Prop("orientation", _orientNames[r.orient])
+                        .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
+                        .Prop("pathAccess", r.pathAccess ? 1 : 0)
+                        .Prop("reachable", r.reachable ? 1 : 0)
+                        .Prop("distance", r.distance, "F1")
+                        .Prop("nearPower", r.nearPower ? 1 : 0)
+                        .Prop("flooded", r.flooded ? 1 : 0);
+                    if (_waterInputLocal.HasValue)
+                        jw.Prop("waterDepth", r.waterDepth, "F2");
+                    jw.CloseObj();
+                }
+                _result = jw.CloseArr().CloseObj().ToString();
+                CleanupPreview();
+                _completed = true;
+            }
+
+            private void CleanupPreview()
+            {
+                if (_cachedPreview != null)
+                {
+                    UnityEngine.Object.Destroy(_cachedPreview.GameObject);
+                    _cachedPreview = null;
+                }
+            }
+        }
+
         // 5. PLACEMENT VALIDATION: uses the game's own PreviewFactory to create a
         //    preview entity, Reposition it, and check IsValid(). This runs the same
         //    9 validators the player UI uses (terrain, occupancy, water buildings, etc).

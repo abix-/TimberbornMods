@@ -28,7 +28,7 @@ TimberbornMods/
       timberbot.py                      Python client (API + CLI + dashboard)
       test_v2.py                        Primary test harness (smoke, freshness, write_to_read, performance, concurrency)
       test_v2_specs.py                  Test spec definitions for test_v2
-      test_validation.py                Legacy test suite (74 tests, any save game)
+      test_validation.py                Validation test suite (77 tests in 11 groups, any save game)
       release.py                        Build + package + GitHub release script
   docs/                               Documentation
     architecture.md                     How the mod works (thread model, caching, serialization)
@@ -104,26 +104,54 @@ python timberbot/script/test_v2.py concurrency
 python timberbot/script/test_v2.py all -n 200
 ```
 
-Legacy broader script: `timberbot/script/test_validation.py`
+Validation test suite: `timberbot/script/test_validation.py`
+
+Tests are organized into groups. Default run excludes `perf` and `wipe`.
 
 ```bash
-# run all tests (game must be running with mod loaded)
+# run all default groups (game must be running with mod loaded)
 python timberbot/script/test_validation.py
 
-# run specific tests
-python timberbot/script/test_validation.py speed webhooks
+# run a specific group
+python timberbot/script/test_validation.py path
+
+# run multiple groups
+python timberbot/script/test_validation.py read write placement
+
+# run individual tests
+python timberbot/script/test_validation.py blocker_tracking path_astar_diagonal
+
+# mix groups and individual tests
+python timberbot/script/test_validation.py path blocker_tracking
+
+# exclude groups or tests
+python timberbot/script/test_validation.py -x perf wipe
+
+# list groups and their tests
+python timberbot/script/test_validation.py --list
 
 # performance only (latency across 20 endpoints)
 python timberbot/script/test_validation.py --perf
 python timberbot/script/test_validation.py --perf -n 500
 
-# in-game benchmark endpoint (micro-benchmarks + endpoint profiling)
+# in-game benchmark endpoint
 python timberbot/script/test_validation.py --benchmark
 python timberbot/script/test_validation.py --benchmark -n 10000
-
-# list all test names
-python timberbot/script/test_validation.py --list
 ```
+
+| Group | Tests | Description |
+|---|---|---|
+| read | 9 | GET endpoints, projections, map, schema, data accuracy |
+| write | 16 | speed, pause, priority, workers, floodgate, recipes, etc. |
+| placement | 6 | place/demolish, orientation, find, water, overridable, blockers |
+| path | 16 | flat, 1z, 2z (all directions), A* diagonal/obstacle/no-route, sections |
+| crops | 6 | crops, tree marking, planting, clear, demolish crop |
+| buildings | 6 | detail, inventory, range, recipes, prefab costs, power |
+| beavers | 10 | detail, needs, position, district, bots, carrying, durability |
+| webhooks | 1 | register, receive, filter, unregister, resilience |
+| cli | 2 | CLI commands, error codes |
+| perf | 4 | endpoint latency, building perf, brain perf, v2 parity |
+| wipe | 1 | demolish all buildings + clear all crops |
 
 ### What the tests cover
 
@@ -131,7 +159,7 @@ python timberbot/script/test_validation.py --list
 - **Write-to-read**: POST change -> first GET sees it -> restore -> first GET sees restoration
 - **Performance**: direct endpoint latency comparisons across the live snapshot path
 - **Concurrency**: simultaneous requests against projection-backed endpoints
-- **Legacy validation**: the older `test_validation.py` script is still useful for broad compatibility checks
+- **Validation**: `test_validation.py` covers 77 tests across 11 groups (read, write, placement, path, crops, buildings, beavers, webhooks, cli, perf, wipe)
 - **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + fresh-on-request snapshots)
 - **Data accuracy**: `validate` endpoint compares cached vs live game state per field. `validate_all` checks all entities, all fields, 0 mismatches
 - **Burst**: 7 sequential calls < 3s total (24ms measured)

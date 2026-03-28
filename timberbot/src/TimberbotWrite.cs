@@ -593,6 +593,9 @@ namespace Timberbot
             }
         }
 
+        internal ITimberbotWriteJob CreateFindPlantingSpotsJob(string crop, int buildingId, int x1, int y1, int x2, int y2, int z)
+            => new FindPlantingSpotsJob(this, crop, buildingId, x1, y1, x2, y2, z);
+
         public object UnmarkPlanting(int x1, int y1, int x2, int y2, int z)
         {
             var minX = Mathf.Min(x1, x2);
@@ -739,6 +742,230 @@ namespace Timberbot
                 moist = moistCount,
                 bounds = range.Count > 0 ? new { x1 = minX, y1 = minY, x2 = maxX, y2 = maxY } : null
             };
+        }
+
+        internal ITimberbotWriteJob CreateCollectBuildingRangeJob(int buildingId)
+            => new CollectBuildingRangeJob(this, buildingId);
+
+        private sealed class FindPlantingSpotsJob : ITimberbotWriteJob
+        {
+            private readonly TimberbotWrite _owner;
+            private readonly string _crop;
+            private readonly int _buildingId;
+            private readonly int _x1;
+            private readonly int _y1;
+            private readonly int _x2;
+            private readonly int _y2;
+            private readonly int _z;
+            private readonly List<Spot> _spots = new List<Spot>();
+            private List<Vector3Int> _coords;
+            private int _index;
+            private bool _initialized;
+            private bool _completed;
+            private int _statusCode = 200;
+            private object _result;
+
+            private struct Spot
+            {
+                public int X;
+                public int Y;
+                public int Z;
+                public bool Moist;
+                public bool Planted;
+            }
+
+            public FindPlantingSpotsJob(TimberbotWrite owner, string crop, int buildingId, int x1, int y1, int x2, int y2, int z)
+            {
+                _owner = owner;
+                _crop = crop;
+                _buildingId = buildingId;
+                _x1 = x1;
+                _y1 = y1;
+                _x2 = x2;
+                _y2 = y2;
+                _z = z;
+            }
+
+            public string Name => "/api/planting/find";
+            public bool IsCompleted => _completed;
+            public int StatusCode => _statusCode;
+            public object Result => _result;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (_completed) return;
+                if (!_initialized && !Initialize()) return;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                while (_index < _coords.Count)
+                {
+                    var c = _coords[_index++];
+                    if (_owner._plantingAreaValidator.CanPlant(c, _crop))
+                    {
+                        _spots.Add(new Spot
+                        {
+                            X = c.x,
+                            Y = c.y,
+                            Z = c.z,
+                            Moist = _owner._soilMoistureService.SoilIsMoist(c),
+                            Planted = _owner._plantingService.IsResourceAt(c)
+                        });
+                    }
+
+                    if (sw.Elapsed.TotalMilliseconds >= budgetMs)
+                        return;
+                }
+
+                var jw = _owner._jw.Reset().BeginObj().Prop("crop", _crop).Arr("spots");
+                for (int i = 0; i < _spots.Count; i++)
+                {
+                    var s = _spots[i];
+                    jw.OpenObj()
+                        .Prop("x", s.X)
+                        .Prop("y", s.Y)
+                        .Prop("z", s.Z)
+                        .Prop("moist", s.Moist)
+                        .Prop("planted", s.Planted)
+                        .CloseObj();
+                }
+                _result = jw.CloseArr().CloseObj().ToString();
+                _completed = true;
+            }
+
+            public void Cancel(string error)
+            {
+                if (_completed) return;
+                _statusCode = 500;
+                _result = "{\"error\":\"" + error.Replace("\"", "'") + "\"}";
+                _completed = true;
+            }
+
+            private bool Initialize()
+            {
+                _initialized = true;
+                _coords = new List<Vector3Int>();
+
+                if (_buildingId != 0)
+                {
+                    var ec = _owner._cache.FindEntity(_buildingId);
+                    if (ec == null)
+                    {
+                        _result = _owner._jw.Error("not_found", ("id", _buildingId));
+                        _completed = true;
+                        return false;
+                    }
+
+                    var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
+                    if (inRange == null)
+                    {
+                        _result = _owner._jw.Error("invalid_type: no planting range", ("id", _buildingId));
+                        _completed = true;
+                        return false;
+                    }
+
+                    foreach (var c in inRange.GetCoordinates())
+                        _coords.Add(c);
+                    return true;
+                }
+
+                for (int x = Mathf.Min(_x1, _x2); x <= Mathf.Max(_x1, _x2); x++)
+                    for (int y = Mathf.Min(_y1, _y2); y <= Mathf.Max(_y1, _y2); y++)
+                        _coords.Add(new Vector3Int(x, y, _z));
+                return true;
+            }
+        }
+
+        private sealed class CollectBuildingRangeJob : ITimberbotWriteJob
+        {
+            private readonly TimberbotWrite _owner;
+            private readonly int _buildingId;
+            private List<Vector3Int> _range;
+            private string _name;
+            private int _index;
+            private int _moistCount;
+            private int _minX = int.MaxValue;
+            private int _minY = int.MaxValue;
+            private int _maxX = int.MinValue;
+            private int _maxY = int.MinValue;
+            private bool _initialized;
+            private bool _completed;
+            private int _statusCode = 200;
+            private object _result;
+
+            public CollectBuildingRangeJob(TimberbotWrite owner, int buildingId)
+            {
+                _owner = owner;
+                _buildingId = buildingId;
+            }
+
+            public string Name => "/api/building/range";
+            public bool IsCompleted => _completed;
+            public int StatusCode => _statusCode;
+            public object Result => _result;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (_completed) return;
+                if (!_initialized && !Initialize()) return;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                while (_index < _range.Count)
+                {
+                    var c = _range[_index++];
+                    if (c.x < _minX) _minX = c.x;
+                    if (c.x > _maxX) _maxX = c.x;
+                    if (c.y < _minY) _minY = c.y;
+                    if (c.y > _maxY) _maxY = c.y;
+                    if (_owner._soilMoistureService.SoilIsMoist(c)) _moistCount++;
+
+                    if (sw.Elapsed.TotalMilliseconds >= budgetMs)
+                        return;
+                }
+
+                _result = new
+                {
+                    id = _buildingId,
+                    name = _name,
+                    tiles = _range.Count,
+                    moist = _moistCount,
+                    bounds = _range.Count > 0 ? new { x1 = _minX, y1 = _minY, x2 = _maxX, y2 = _maxY } : null
+                };
+                _completed = true;
+            }
+
+            public void Cancel(string error)
+            {
+                if (_completed) return;
+                _statusCode = 500;
+                _result = "{\"error\":\"" + error.Replace("\"", "'") + "\"}";
+                _completed = true;
+            }
+
+            private bool Initialize()
+            {
+                _initialized = true;
+                var ec = _owner._cache.FindEntity(_buildingId);
+                if (ec == null)
+                {
+                    _result = _owner._jw.Error("not_found", ("id", _buildingId));
+                    _completed = true;
+                    return false;
+                }
+
+                var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
+                if (terrainRange == null)
+                {
+                    _result = _owner._jw.Error("invalid_type: no work range", ("id", _buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)));
+                    _completed = true;
+                    return false;
+                }
+
+                _range = new List<Vector3Int>();
+                foreach (var c in terrainRange.GetRange())
+                    _range.Add(c);
+                _name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+                return true;
+            }
         }
 
         // PLACEMENT VALIDATION

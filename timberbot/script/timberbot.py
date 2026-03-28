@@ -299,7 +299,7 @@ class Timberbot:
 
     def tiles(self, x1=0, y1=0, x2=0, y2=0):
         """Tile data for a region: terrain, water, occupants, moisture, contamination. No args = map size only."""
-        return self._post("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return self._get("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     # -- write actions (verb_noun) --
 
@@ -569,7 +569,7 @@ class Timberbot:
                 shade = 254 + min(z - 20, 1)
             return f"\033[48;5;{min(shade, 255)}m"
 
-        data = self._post_json("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        data = self._get_json("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         legend = {}
         z_levels = set()

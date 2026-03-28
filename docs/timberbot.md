@@ -1,7 +1,7 @@
 ---
 title: Timberbot AI
 description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
-version: "0.8.4"
+version: "0.8.5"
 ---
 # Timberbot AI
 
@@ -86,7 +86,7 @@ Beavers die if food or water hits 0.
 
 Never run mutating game API calls in parallel. Every placement, path, or config call changes the map state that the next call depends on. A failed placement invalidates every subsequent call that assumed it succeeded.
 
-Read-only calls like `brain`, `buildings`, `find_placement`, `map`, `tiles`, and `weather` can run in parallel if you truly need that, but any mutating call such as `place_building`, `place_path`, `demolish_building`, `set_*`, `plant_crop`, or `mark_trees` must complete and succeed before the next action.
+Read-only calls like `brain`, `buildings`, `find_placement`, `map`, `tiles`, and `weather` can run in parallel if you truly need that, but any mutating call such as `place_building`, `place_path`, `demolish_building`, `demolish_crop`, `set_*`, `plant_crop`, or `mark_trees` must complete and succeed before the next action.
 
 ## Roads
 
@@ -257,9 +257,17 @@ Use `brain` or summary output to confirm the current faction before planning bui
 
 ### Path routing
 
-`place_path` works best for simple axis-aligned routes. It plans the full route first, then places it. Stairs go on the lower `z` tile. For 2-level jumps, it uses a platform plus stairs stacked at the cliff edge.
+`place_path` uses A* pathfinding over a 3D surface graph. It routes around buildings, natural resources, ruins, water, and terrain obstacles. It handles diagonal routes, multi-z transitions with auto-stairs, and reuses existing paths/stairs/platforms.
+
+Parameters:
+
+- `x1, y1, x2, y2`: start and end coordinates
+- `style`: `"direct"` (default, shortest path) or `"straight"` (prefers straight lines when costs are equal)
+- `sections`: stop after N stair/ramp crossings (0 = unlimited). Useful for building paths incrementally across elevation changes.
 
 Paths cost nothing; use them freely. Stairs and platforms require science unlocks. Without those unlocks, vertical routing stops at z-changes.
+
+The path planner treats ruins and map editor objects as impassable, the same as buildings. If a path seems blocked by invisible obstacles, check `tiles` for ruin occupants.
 
 ### Flooding
 
