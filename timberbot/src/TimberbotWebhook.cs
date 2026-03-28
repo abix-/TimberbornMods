@@ -50,6 +50,8 @@ namespace Timberbot
         private readonly System.Text.StringBuilder _webhookSb = new System.Text.StringBuilder(1024);
         private readonly TimberbotJw _jw = new TimberbotJw(512);
         private float _lastWebhookFlush = 0f;
+        private int _activeDeliveries = 0;
+        private int _deliveryIdCounter = 0;
 
         public int Count => _webhooks.Count;
 
@@ -81,7 +83,9 @@ namespace Timberbot
 
         public object UnregisterWebhook(string id)
         {
+            TimberbotLog.Info($"wh.unregister.start id={id} hooks={_webhooks.Count} pendingEvents={_pendingEvents.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
             int removed = _webhooks.RemoveAll(w => w.Id == id);
+            TimberbotLog.Info($"wh.unregister.done id={id} removed={removed} hooks={_webhooks.Count} pendingEvents={_pendingEvents.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
             return _jw.Result(("id", id), ("removed", (removed > 0)));
         }
 
@@ -136,6 +140,7 @@ namespace Timberbot
             if (_pendingEvents.Count == 0) return;
             if (BatchSeconds > 0 && now - _lastWebhookFlush < BatchSeconds) return;
             _lastWebhookFlush = now;
+            TimberbotLog.Info($"wh.flush pendingEvents={_pendingEvents.Count} hooks={_webhooks.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
 
             for (int i = 0; i < _webhooks.Count; i++)
             {
@@ -165,16 +170,22 @@ namespace Timberbot
                 var url = wh.Url;
                 var whRef = wh;
                 var threshold = CircuitBreakerThreshold;
+                var deliveryId = System.Threading.Interlocked.Increment(ref _deliveryIdCounter);
+                TimberbotLog.Info($"wh.dispatch delivery={deliveryId} webhook={wh.Id} events={count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
+                    int activeNow = System.Threading.Interlocked.Increment(ref _activeDeliveries);
                     try
                     {
+                        TimberbotLog.Info($"wh.delivery.start delivery={deliveryId} webhook={whRef.Id} events={count} activeDeliveries={activeNow} {ThreadPoolState()}");
                         _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).Wait();
                         whRef.ConsecutiveFailures = 0; // success resets the counter
+                        TimberbotLog.Info($"wh.delivery.done delivery={deliveryId} webhook={whRef.Id} activeDeliveries={activeNow} {ThreadPoolState()}");
                     }
                     catch (Exception _ex)
                     {
                         whRef.ConsecutiveFailures++;
+                        TimberbotLog.Info($"wh.delivery.fail delivery={deliveryId} webhook={whRef.Id} failures={whRef.ConsecutiveFailures} activeDeliveries={activeNow} ex={_ex.GetType().Name}:{_ex.Message} {ThreadPoolState()}");
                         if (whRef.ConsecutiveFailures >= threshold)
                         {
                             // circuit breaker: disable this webhook permanently (until re-registered)
@@ -184,9 +195,21 @@ namespace Timberbot
                         else
                             TimberbotLog.Error("webhook.post", _ex);
                     }
+                    finally
+                    {
+                        int activeAfter = System.Threading.Interlocked.Decrement(ref _activeDeliveries);
+                        TimberbotLog.Info($"wh.delivery.end delivery={deliveryId} webhook={whRef.Id} activeDeliveries={activeAfter} {ThreadPoolState()}");
+                    }
                 });
             }
             _pendingEvents.Clear();
+        }
+
+        private static string ThreadPoolState()
+        {
+            System.Threading.ThreadPool.GetAvailableThreads(out int workerAvail, out int ioAvail);
+            System.Threading.ThreadPool.GetMaxThreads(out int workerMax, out int ioMax);
+            return $"tp={workerAvail}/{workerMax} io={ioAvail}/{ioMax}";
         }
 
         // helpers for building data JSON without anonymous objects

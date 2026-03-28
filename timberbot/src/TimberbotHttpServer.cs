@@ -39,6 +39,7 @@ namespace Timberbot
         private PendingRequest _activeWriteRequest;
         private ITimberbotWriteJob _activeWriteJob;
         private readonly Dictionary<string, PostRouteDescriptor> _postRoutes;
+        private long _nextRequestId;
         // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
         private readonly bool _debugEnabled;
@@ -70,6 +71,7 @@ namespace Timberbot
             public int FilterX, FilterY, FilterRadius; // proximity filter (Manhattan distance)
             public long QueuedAtTicks;           // listener-thread enqueue timestamp
             public int QueuedAtFrame;            // main-thread queue admission frame
+            public long RequestId;               // correlated request lifecycle logging
             public PostRouteDescriptor PostRoute;
         }
 
@@ -118,20 +120,23 @@ namespace Timberbot
                 processed++;
                 try
                 {
+                    LogRequest("req.drain", req, $"pending={_pending.Count} writeQueue={_writeQueue.Count} active={(_activeWriteJob != null ? _activeWriteJob.Name : "none")}");
                     if (req.PostRoute == null)
                     {
-                        RespondAsync(req.Context, 200, UnknownEndpoint());
+                        TimberbotLog.Info($"req.unknown id={req.RequestId} route={req.Route}");
+                        RespondAsync(req.Context, 200, UnknownEndpoint(), req.RequestId, req.Route);
                     }
                     else
                     {
                         req.QueuedAtFrame = UnityEngine.Time.frameCount;
                         _writeQueue.Enqueue(req);
+                        LogRequest("req.queue", req, $"writeQueue={_writeQueue.Count} pending={_pending.Count}");
                     }
                 }
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    RespondAsync(req.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                    RespondAsync(req.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")), req.RequestId, req.Route);
                 }
             }
         }
@@ -151,14 +156,20 @@ namespace Timberbot
                     _activeWriteJob = _activeWriteRequest.PostRoute?.JobFactory?.Invoke(_activeWriteRequest);
                     if (_activeWriteJob == null)
                     {
-                        RespondAsync(_activeWriteRequest.Context, 200, UnknownEndpoint());
+                        TimberbotLog.Info($"req.start.null id={_activeWriteRequest.RequestId} route={_activeWriteRequest.Route}");
+                        RespondAsync(_activeWriteRequest.Context, 200, UnknownEndpoint(), _activeWriteRequest.RequestId, _activeWriteRequest.Route);
                         _activeWriteRequest = null;
+                    }
+                    else
+                    {
+                        LogRequest("req.start", _activeWriteRequest, $"job={_activeWriteJob.Name} writeQueue={_writeQueue.Count}");
                     }
                 }
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("write.admit", ex);
-                    RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                    TimberbotLog.Info($"req.start.fail id={_activeWriteRequest.RequestId} route={_activeWriteRequest.Route} ex={ex.GetType().Name}:{ex.Message}");
+                    RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")), _activeWriteRequest.RequestId, _activeWriteRequest.Route);
                     _activeWriteRequest = null;
                     _activeWriteJob = null;
                 }
@@ -171,7 +182,8 @@ namespace Timberbot
                 _activeWriteJob.Step(now, budgetMs);
                 if (_activeWriteJob.IsCompleted)
                 {
-                    RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result);
+                    LogRequest("req.done", _activeWriteRequest, $"job={_activeWriteJob.Name} status={_activeWriteJob.StatusCode}");
+                    RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result, _activeWriteRequest.RequestId, _activeWriteRequest.Route);
                     _activeWriteRequest = null;
                     _activeWriteJob = null;
                 }
@@ -179,7 +191,8 @@ namespace Timberbot
             catch (Exception ex)
             {
                 TimberbotLog.Error("write.step", ex);
-                RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                TimberbotLog.Info($"req.step.fail id={_activeWriteRequest.RequestId} route={_activeWriteRequest.Route} job={_activeWriteJob?.Name ?? "null"} ex={ex.GetType().Name}:{ex.Message}");
+                RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")), _activeWriteRequest.RequestId, _activeWriteRequest.Route);
                 _activeWriteRequest = null;
                 _activeWriteJob = null;
             }
@@ -286,7 +299,7 @@ namespace Timberbot
                 if (body?["y"] != null) filterY = body.Value<int>("y");
                 if (body?["radius"] != null) filterRadius = body.Value<int>("radius");
 
-                _pending.Enqueue(new PendingRequest
+                var req = new PendingRequest
                 {
                     Context = ctx,
                     Route = path,
@@ -302,8 +315,11 @@ namespace Timberbot
                     FilterY = filterY,
                     FilterRadius = filterRadius,
                     QueuedAtTicks = System.Diagnostics.Stopwatch.GetTimestamp(),
+                    RequestId = System.Threading.Interlocked.Increment(ref _nextRequestId),
                     PostRoute = ResolvePostRoute(path)
-                });
+                };
+                LogRequest("req.admit", req, $"pending={_pending.Count} writeQueue={_writeQueue.Count}");
+                _pending.Enqueue(req);
             }
         }
 
@@ -441,30 +457,35 @@ namespace Timberbot
         {
             var payload = _jw.Error(error.Replace("\"", "'"));
             while (_pending.TryDequeue(out var req))
-                RespondAsync(req.Context, 500, payload);
+                RespondAsync(req.Context, 500, payload, req.RequestId, req.Route);
             while (_writeQueue.Count > 0)
-                RespondAsync(_writeQueue.Dequeue().Context, 500, payload);
+            {
+                var req = _writeQueue.Dequeue();
+                RespondAsync(req.Context, 500, payload, req.RequestId, req.Route);
+            }
             if (_activeWriteJob != null && _activeWriteRequest != null)
             {
                 _activeWriteJob.Cancel(error);
-                RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result);
+                RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result, _activeWriteRequest.RequestId, _activeWriteRequest.Route);
                 _activeWriteJob = null;
                 _activeWriteRequest = null;
             }
         }
 
-        private void RespondAsync(HttpListenerContext ctx, int statusCode, object data)
+        private void RespondAsync(HttpListenerContext ctx, int statusCode, object data, long requestId = 0, string route = null)
         {
-            ThreadPool.QueueUserWorkItem(_ => Respond(ctx, statusCode, data));
+            TimberbotLog.Info($"resp.queue id={requestId} route={route ?? ""} status={statusCode} {ThreadPoolState()}");
+            ThreadPool.QueueUserWorkItem(_ => Respond(ctx, statusCode, data, requestId, route));
         }
 
         // Send a JSON response. If data is already a string (from JW serialization),
         // use it directly. Otherwise serialize via Newtonsoft.Json (for anonymous objects).
         // StreamWriter writes directly to the output stream -- no intermediate byte[] allocation.
-        private void Respond(HttpListenerContext ctx, int statusCode, object data)
+        private void Respond(HttpListenerContext ctx, int statusCode, object data, long requestId = 0, string route = null)
         {
             try
             {
+                TimberbotLog.Info($"resp.start id={requestId} route={route ?? ""} status={statusCode} {ThreadPoolState()}");
                 // JW endpoints return pre-serialized strings; anonymous objects need serialization
                 var json = data is string s ? s : JsonConvert.SerializeObject(data);
                 ctx.Response.StatusCode = statusCode;
@@ -475,11 +496,28 @@ namespace Timberbot
                 using (var sw = new StreamWriter(ctx.Response.OutputStream, new UTF8Encoding(false)))
                     sw.Write(json);
                 ctx.Response.OutputStream.Close();
+                TimberbotLog.Info($"resp.done id={requestId} route={route ?? ""} status={statusCode} bytes={json.Length} {ThreadPoolState()}");
             }
             catch (Exception ex)
             {
+                TimberbotLog.Info($"resp.fail id={requestId} route={route ?? ""} status={statusCode} ex={ex.GetType().Name}:{ex.Message} {ThreadPoolState()}");
                 TimberbotLog.Error("response", ex);
             }
+        }
+
+        private static string ThreadPoolState()
+        {
+            ThreadPool.GetAvailableThreads(out int workerAvail, out int ioAvail);
+            ThreadPool.GetMaxThreads(out int workerMax, out int ioMax);
+            return $"tp={workerAvail}/{workerMax} io={ioAvail}/{ioMax}";
+        }
+
+        private static void LogRequest(string phase, PendingRequest req, string extra = null)
+        {
+            double ageMs = req.QueuedAtTicks > 0
+                ? (System.Diagnostics.Stopwatch.GetTimestamp() - req.QueuedAtTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency
+                : 0;
+            TimberbotLog.Info($"{phase} id={req.RequestId} route={req.Route} frame={UnityEngine.Time.frameCount} ageMs={ageMs:F1} {ThreadPoolState()}" + (string.IsNullOrEmpty(extra) ? "" : $" {extra}"));
         }
     }
 }
