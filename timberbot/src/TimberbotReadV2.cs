@@ -1,3 +1,61 @@
+// TimberbotReadV2.cs -- All GET read endpoints. The core of the mod's read path.
+//
+// WHY THIS EXISTS
+// ---------------
+// Timberborn runs on Unity's main thread. Every frame the game updates beavers,
+// buildings, water, weather, etc. We want external tools (AI agents, dashboards,
+// scripts) to read this data over HTTP without stalling the game. The solution:
+// snapshot the live game state on the main thread, then serve HTTP requests from
+// the snapshot on a background thread.
+//
+// HOW IT WORKS (the snapshot pipeline)
+// ------------------------------------
+// 1. An HTTP GET arrives on the background listener thread.
+// 2. The endpoint calls RequestFresh(), which sets a flag and blocks.
+// 3. Next frame, ProcessPendingRefresh() runs on the main thread:
+//    - Reads live game state (building workers, beaver needs, tree growth, etc.)
+//    - Copies values into DTO buffers (BuildingState, BeaverState, etc.)
+//    - Respects a per-frame time budget (~1ms) so the game stays smooth.
+//    - Queues expensive finalize work (JSON pre-build) to a background thread.
+// 4. The background finalize thread publishes the immutable snapshot.
+// 5. All waiting HTTP readers wake up and serialize from the published snapshot.
+//
+// This means: reads never touch live game objects on the background thread,
+// the game thread spends at most ~1ms per frame on our snapshots, and multiple
+// concurrent HTTP readers share the same snapshot (no duplicate work).
+//
+// KEY ABSTRACTIONS
+// ----------------
+// ProjectionSnapshot<TDef, TState, TDetail>
+//   Generic snapshot pipeline for entity collections (buildings, beavers, trees).
+//   TDef = static data (id, name, coords) set once at entity creation.
+//   TState = mutable data (workers, wellbeing) refreshed every snapshot.
+//   TDetail = expensive data (inventory strings) only captured on detail requests.
+//   Uses double-buffered capture arrays so the main thread writes while readers
+//   read the previously published snapshot.
+//
+// ValueStore<TCapture, TSnapshot>
+//   Same pattern for singleton endpoints (time, weather, speed, science).
+//   Capture reads live state on main thread, finalize may do JSON pre-build
+//   off-thread, publish makes it available to readers.
+//
+// CollectionRoute / ValueRoute / FlatArrayRoute
+//   HTTP endpoint helpers that handle format (toon/json), pagination, filtering,
+//   and the request-fresh-then-serialize flow. One route per endpoint.
+//
+// TrackedBuildingRef / TrackedBeaverRef / TrackedNaturalResourceRef
+//   Live references to game entities, held so we can read their components each
+//   frame. Added on EntityInitializedEvent, removed on EntityDeletedEvent.
+//
+// THREAD SAFETY RULES
+// -------------------
+// - Background thread reads ONLY from published snapshots or explicit thread-safe
+//   services (IThreadSafeWaterMap, IThreadSafeColumnTerrainMap).
+// - Background thread NEVER walks live entity/component graphs.
+// - Main thread captures into DTO buffers, background finalizes and publishes.
+// - The finalize thread is a single dedicated thread (not ThreadPool) so
+//   publish order is deterministic.
+
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -50,8 +108,6 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    // Native /api/v2 read stack. Keeps generic snapshot, route, and serialization
-    // helpers internal so v2 stays DRY without adding extra top-level services.
     public class TimberbotReadV2
     {
         private readonly EntityRegistry _entityRegistry;
@@ -74,12 +130,20 @@ namespace Timberbot
         private readonly IThreadSafeColumnTerrainMap _terrainMap;
         private readonly ISoilContaminationService _soilContaminationService;
         private readonly ISoilMoistureService _soilMoistureService;
+        // --- Tracked entity refs ---
+        // Live references to game entities. The main thread reads their components
+        // each snapshot cycle. Added/removed via EventBus entity lifecycle events.
         private readonly List<TrackedBuildingRef> _tracked = new List<TrackedBuildingRef>();
         private readonly Dictionary<Guid, TrackedBuildingRef> _trackedById = new Dictionary<Guid, TrackedBuildingRef>();
         private readonly List<TrackedBeaverRef> _trackedBeavers = new List<TrackedBeaverRef>();
         private readonly Dictionary<Guid, TrackedBeaverRef> _trackedBeaversById = new Dictionary<Guid, TrackedBeaverRef>();
         private readonly List<TrackedNaturalResourceRef> _trackedNaturalResources = new List<TrackedNaturalResourceRef>();
         private readonly Dictionary<Guid, TrackedNaturalResourceRef> _trackedNaturalResourcesById = new Dictionary<Guid, TrackedNaturalResourceRef>();
+        private readonly List<TrackedBlockerRef> _trackedBlockers = new List<TrackedBlockerRef>();
+        private readonly Dictionary<Guid, TrackedBlockerRef> _trackedBlockersById = new Dictionary<Guid, TrackedBlockerRef>();
+        // --- Snapshot infrastructure ---
+        // Each ProjectionSnapshot holds the capture buffers and published snapshot
+        // for one entity type. ValueStores do the same for singleton endpoints.
         private readonly TimberbotJw _jw = new TimberbotJw(300000);
         private readonly ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState> _snapshot
             = new ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>();
@@ -128,6 +192,9 @@ namespace Timberbot
         private readonly HashSet<long> _tileSeedlings = new HashSet<long>();
         private readonly HashSet<long> _tileDeadTiles = new HashSet<long>();
         private readonly StringBuilder _tileSb = new StringBuilder(256);
+        // --- Background finalize thread ---
+        // Expensive work (JSON pre-build for science/distribution, building detail
+        // string assembly) runs here so the main thread stays under budget.
         private readonly object _finalizeQueueLock = new object();
         private readonly Queue<Action> _finalizeQueue = new Queue<Action>();
         private readonly AutoResetEvent _finalizeSignal = new AutoResetEvent(false);
@@ -137,6 +204,8 @@ namespace Timberbot
         private static readonly HashSet<string> _cropNames = new HashSet<string>
             { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
         public static readonly int[] SpeedScale = { 0, 1, 3, 7 };
+        // Building role classification for the summary endpoint. Maps building names
+        // to categories (water, food, housing, etc.) so the AI gets role counts.
         private static readonly Dictionary<string, string[]> _roleMap = new Dictionary<string, string[]> {
             {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
             {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
@@ -294,6 +363,7 @@ namespace Timberbot
         internal IReadOnlyList<TrackedBuildingRef> TrackedBuildings => _tracked;
         internal IReadOnlyList<TrackedBeaverRef> TrackedBeavers => _trackedBeavers;
         internal IReadOnlyList<TrackedNaturalResourceRef> TrackedNaturalResources => _trackedNaturalResources;
+        internal IReadOnlyList<TrackedBlockerRef> TrackedBlockers => _trackedBlockers;
         internal DistrictCenterRegistry DebugDistrictRegistry => _districtCenterRegistry;
 
         private void EnqueueFinalize(Action action)
@@ -350,6 +420,9 @@ namespace Timberbot
                 _finalizeThread.Join(2000);
         }
 
+        // Called once when the game loads. Walks every entity in the game,
+        // registers tracked refs, and publishes the first snapshot synchronously
+        // so the API is ready before the first HTTP request arrives.
         public void BuildAll()
         {
             _tracked.Clear();
@@ -358,11 +431,14 @@ namespace Timberbot
             _trackedBeaversById.Clear();
             _trackedNaturalResources.Clear();
             _trackedNaturalResourcesById.Clear();
+            _trackedBlockers.Clear();
+            _trackedBlockersById.Clear();
             foreach (var ec in _entityRegistry.Entities)
             {
                 TryAddTrackedBuilding(ec);
                 TryAddTrackedBeaver(ec);
                 TryAddTrackedNaturalResource(ec);
+                TryAddTrackedBlocker(ec);
             }
             _snapshot.MarkDirty();
             _beaverSnapshot.MarkDirty();
@@ -389,6 +465,12 @@ namespace Timberbot
             _districtStore.PublishNow(0f, CaptureDistrictSnapshots, FinalizeDistrictSnapshots);
         }
 
+        // Called every frame from UpdateSingleton(). Checks if any snapshot has
+        // waiting readers, and if so, captures live state into DTO buffers.
+        // Respects a time budget (~1ms) so the game stays smooth -- if budget is
+        // exceeded mid-capture, it resumes next frame where it left off.
+        // After capture completes, expensive finalize work is queued to the
+        // background finalize thread, which publishes the snapshot and wakes readers.
         public void ProcessPendingRefresh(float now)
         {
             var budget = Stopwatch.StartNew();
@@ -451,6 +533,10 @@ namespace Timberbot
             string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
             => _buildingsEndpoint.Collect(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
 
+        // CollectSummary: the single-call colony overview.
+        // Returns everything an AI needs to assess the colony: population, resources,
+        // weather, drought countdown, tree/food clusters, building roles, wellbeing,
+        // and projected days of critical supplies. Aggregates across all districts.
         public object CollectSummary(string format = "toon")
         {
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot naturalSnapshot;
@@ -735,8 +821,12 @@ namespace Timberbot
             jw.CloseObj();
             return jw.End();
         }
+        // Derived endpoints: built from published snapshots on the background thread.
+        // No main-thread work needed -- just reads from the last published data.
         public object CollectAlerts(string format = "toon", int limit = 100, int offset = 0)
             => _alertsRoute.Collect(format, limit, offset);
+        // Cluster endpoints: divide the map into cells, count trees/food in each,
+        // return the densest N. Used by the AI to find good foresting/gathering spots.
         public object CollectTreeClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot snapshot;
@@ -897,6 +987,9 @@ namespace Timberbot
             => _beaversEndpoint.Collect(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectDistribution(string format = "toon") => _distributionRoute.Collect(format);
         public object CollectScience(string format = "toon") => _scienceRoute.Collect(format);
+        // CollectWellbeing: aggregate wellbeing by category across all beavers.
+        // Groups needs by Timberborn's wellbeing categories (Social, Fun, Nutrition,
+        // Aesthetics, Awe, etc.) and averages across the population.
         public object CollectWellbeing(string format = "toon")
         {
             try
@@ -963,6 +1056,10 @@ namespace Timberbot
         public object CollectWorkHours() => _workHoursRoute.Collect();
         public object CollectPowerNetworks(string format = "toon") => _powerRoute.Collect(format);
         public object CollectSpeed() => _speedRoute.Collect();
+        // CollectTiles: raw map data for a region. Unlike other endpoints, this reads
+        // directly from thread-safe game services (IThreadSafeWaterMap, terrain) plus
+        // the building/resource snapshots for occupant data. This is what powers the
+        // ASCII map and the AI's spatial reasoning about water depth and contamination.
         public object CollectTiles(string format = "toon", int x1 = 0, int y1 = 0, int x2 = 0, int y2 = 0)
         {
             ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Snapshot buildingSnapshot;
@@ -1026,6 +1123,22 @@ namespace Timberbot
                 if (!occupants.ContainsKey(key))
                     occupants[key] = new List<(string, int)>();
                 occupants[key].Add((d.Name, c.Z));
+            }
+
+            for (int i = 0; i < _trackedBlockers.Count; i++)
+            {
+                var b = _trackedBlockers[i];
+                if (b.OccupiedTiles == null) continue;
+                foreach (var tile in b.OccupiedTiles)
+                {
+                    if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
+                    {
+                        long key = (long)tile.x * 100000 + tile.y;
+                        if (!occupants.ContainsKey(key))
+                            occupants[key] = new List<(string, int)>();
+                        occupants[key].Add((b.Name, tile.z));
+                    }
+                }
             }
 
             var jw = _jw.Reset().BeginObj();
@@ -1737,6 +1850,12 @@ namespace Timberbot
             jw.CloseArr();
         }
 
+        // =====================================================================
+        // ENTITY LIFECYCLE -- add/remove tracked refs via EventBus
+        // =====================================================================
+        // When Timberborn creates or destroys an entity, we get an event and
+        // add/remove the corresponding tracked ref. This keeps our snapshot data
+        // in sync with the live game without polling.
         private void TryAddTrackedBuilding(EntityComponent ec)
         {
             if (ec.GetComponent<Building>() == null) return;
@@ -1926,12 +2045,55 @@ namespace Timberbot
             _naturalResourceSnapshot.MarkDirty();
         }
 
+        private void TryAddTrackedBlocker(EntityComponent ec)
+        {
+            var blockObject = ec.GetComponent<BlockObject>();
+            if (blockObject == null) return;
+            var entityId = ec.EntityId;
+            if (entityId == Guid.Empty) return;
+            if (_trackedBlockersById.ContainsKey(entityId)) return;
+            // skip entities already tracked as building, natural resource, or beaver
+            if (_trackedById.ContainsKey(entityId)) return;
+            if (_trackedNaturalResourcesById.ContainsKey(entityId)) return;
+            if (_trackedBeaversById.ContainsKey(entityId)) return;
+
+            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            var occupied = new List<(int, int, int)>();
+            try
+            {
+                foreach (var block in blockObject.PositionedBlocks.GetAllBlocks())
+                {
+                    var tc = block.Coordinates;
+                    occupied.Add((tc.x, tc.y, tc.z));
+                }
+            }
+            catch { occupied.Add((blockObject.Coordinates.x, blockObject.Coordinates.y, blockObject.Coordinates.z)); }
+
+            _trackedBlockers.Add(new TrackedBlockerRef
+            {
+                EntityId = entityId,
+                Name = name,
+                OccupiedTiles = occupied.ToArray()
+            });
+            _trackedBlockersById[entityId] = _trackedBlockers[_trackedBlockers.Count - 1];
+        }
+
+        private void RemoveTrackedBlocker(EntityComponent ec)
+        {
+            var entityId = ec.EntityId;
+            if (entityId == Guid.Empty) return;
+            if (!_trackedBlockersById.TryGetValue(entityId, out var tracked)) return;
+            _trackedBlockersById.Remove(entityId);
+            _trackedBlockers.Remove(tracked);
+        }
+
         [OnEvent]
         public void OnEntityInitialized(EntityInitializedEvent e)
         {
             TryAddTrackedBuilding(e.Entity);
             TryAddTrackedBeaver(e.Entity);
             TryAddTrackedNaturalResource(e.Entity);
+            TryAddTrackedBlocker(e.Entity);
         }
 
         [OnEvent]
@@ -1940,8 +2102,15 @@ namespace Timberbot
             RemoveTrackedBuilding(e.Entity);
             RemoveTrackedBeaver(e.Entity);
             RemoveTrackedNaturalResource(e.Entity);
+            RemoveTrackedBlocker(e.Entity);
         }
 
+        // =====================================================================
+        // TRACKED REFS -- live references to game entities
+        // =====================================================================
+        // Each tracked ref holds direct component references so we can read
+        // properties (workers, wellbeing, growth) without GetComponent<T>() calls
+        // every frame. Components are resolved once at entity add time.
         internal sealed class TrackedBuildingRef
         {
             public Guid EntityId;
@@ -1996,6 +2165,19 @@ namespace Timberbot
             public NaturalResourceDefinition Definition;
         }
 
+        internal sealed class TrackedBlockerRef
+        {
+            public Guid EntityId;
+            public string Name;
+            public (int x, int y, int z)[] OccupiedTiles;
+        }
+
+        // =====================================================================
+        // DTO STRUCTS -- plain data objects that live in snapshot buffers
+        // =====================================================================
+        // These hold the actual data served to HTTP clients. Definition = static
+        // (set once), State = mutable (refreshed each snapshot), Detail = expensive
+        // (only populated on full-detail requests like ?detail=full).
         internal sealed class BuildingDefinition
         {
             public int Id;
@@ -2153,6 +2335,23 @@ namespace Timberbot
             }
         }
 
+        // =====================================================================
+        // GENERIC SNAPSHOT PIPELINE
+        // =====================================================================
+        // ProjectionSnapshot manages the full lifecycle of an entity collection:
+        //   1. HTTP reader calls RequestFresh() -> sets flag, blocks on ManualResetEvent
+        //   2. Main thread ProcessPendingCapture() -> reads live state into buffer arrays
+        //   3. Finalize thread publishes immutable Snapshot -> wakes all waiting readers
+        //
+        // Double-buffered: two Buffer objects (A and B) alternate. While one is being
+        // captured, the other holds the last published snapshot for readers.
+        //
+        // Budget-aware: capture can pause mid-array and resume next frame. The main
+        // thread tracks _captureIndex so it picks up where it left off.
+        //
+        // TDef  = static definition (id, name, coords) -- set once at entity add
+        // TState = mutable state (workers, wellbeing) -- refreshed every snapshot
+        // TDetail = expensive detail (inventory strings) -- only on full-detail requests
         internal sealed class ProjectionSnapshot<TDef, TState, TDetail>
             where TDef : class
             where TState : class, new()
@@ -2438,6 +2637,10 @@ namespace Timberbot
             }
         }
 
+        // CollectionRoute: HTTP endpoint helper for entity collections.
+        // Handles the full request cycle: request fresh snapshot, wait for publish,
+        // then filter/paginate/serialize from the published data. Supports both
+        // toon (compact CSV for AI) and json (nested objects) output formats.
         private sealed class CollectionRoute<TDef, TState, TDetail>
             where TDef : class
             where TState : class, new()
@@ -2762,6 +2965,10 @@ namespace Timberbot
             void Write(TimberbotJw jw, string format, TSnapshot snapshot);
         }
 
+        // ValueStore: same fresh-on-request pattern as ProjectionSnapshot, but for
+        // singleton/aggregate endpoints (time, weather, speed, science, distribution).
+        // Capture produces a typed payload on the main thread, finalize may transform
+        // it (e.g. pre-build JSON), publish makes it available to readers.
         private sealed class ValueStore<TCapture, TSnapshot>
             where TCapture : class
             where TSnapshot : class

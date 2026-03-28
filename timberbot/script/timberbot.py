@@ -99,7 +99,7 @@ class Timberbot:
     No client-side transformation of API data.
     """
 
-    def __init__(self, host=None, port=None, json_mode=False):
+    def __init__(self, host=None, port=None, json_mode=False, write_timeout=60):
         if host is None or port is None:
             try:
                 spath = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "settings.json")
@@ -114,6 +114,7 @@ class Timberbot:
                 port = port or 8085
         self.url = f"http://{host}:{port}"
         self._format = "json" if json_mode else "toon"
+        self._write_timeout = write_timeout
         self.s = requests.Session()
         self.s.headers["Accept"] = "application/json"
 
@@ -132,13 +133,13 @@ class Timberbot:
 
     def _post(self, path, data):
         data["format"] = self._format
-        r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
+        r = self.s.post(f"{self.url}{path}", json=data, timeout=self._write_timeout)
         return self._check(r.json())
 
     def _post_json(self, path, data):
         """Force JSON format for internal programmatic use."""
         data["format"] = "json"
-        r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
+        r = self.s.post(f"{self.url}{path}", json=data, timeout=self._write_timeout)
         return self._check(r.json())
 
     def _get_json(self, path, params=None):
@@ -367,6 +368,10 @@ class Timberbot:
         """Demolish a building. Get IDs from buildings()."""
         return self._post("/api/building/demolish", {"id": building_id})
 
+    def demolish_crop(self, crop_id):
+        """Demolish a planted crop entity by ID. Get IDs from crops()."""
+        return self._post("/api/crop/demolish", {"id": crop_id})
+
     def mark_trees(self, x1, y1, x2, y2, z):
         """Mark a rectangular area for tree cutting."""
         return self._post("/api/cutting/area", {
@@ -410,10 +415,11 @@ class Timberbot:
         """Set allowed good on a single-good stockpile."""
         return self._post("/api/stockpile/good", {"id": building_id, "good": good})
 
-    def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0):
+    def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0, timings=False):
         """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N stair crossings then stop."""
         body = {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "style": style}
         if sections: body["sections"] = sections
+        if timings: body["timings"] = True
         return self._post("/api/path/place", body)
 
     # -- helpers --

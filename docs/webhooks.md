@@ -43,7 +43,7 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 
 ## Events (68 total)
 
-### Weather (6)
+### Weather (7)
 
 | Event | Fires when |
 |---|---|

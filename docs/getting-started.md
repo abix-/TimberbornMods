@@ -2,7 +2,7 @@
 
 **Full read/write HTTP API for controlling Timberborn with AI.**
 
-Timberbot API gives Claude, ChatGPT, or your own scripts complete access to your beaver colony over HTTP -- read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
+Timberbot API gives Claude, Codex, ChatGPT, or your own scripts complete access to your beaver colony over HTTP -- read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
 
 ---
 
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x"
 
 ## Let AI play your colony
 
-The mod ships a thin Claude skill plus docs for AI play:
+The mod ships docs for AI play with Claude Code, OpenAI Codex, ChatGPT, or any AI agent that can make HTTP calls:
 
 - `skill/timberbot.md` is the distributable Claude Code entrypoint
 - [timberbot.md](timberbot.md) is the single authoritative AI guide
@@ -176,6 +176,10 @@ cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 # workshop docs live in %USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs
 /loop 1m /timberbot
 ```
+
+### OpenAI Codex
+
+Point Codex at the mod folder (or repo root). It can call the HTTP API directly on port 8085. The docs in `docs/` give it everything it needs.
 
 ### Other LLMs
 

@@ -8,20 +8,20 @@ Historical note: sections that still discuss `TimberbotRead`, `TimberbotDoubleBu
 
 | # | Severity | Issue | Cost | Location |
 |---|---|---|---|---|
-| 12 | Low | `CollectSummary` toon: `$"..."` interpolations for beds/workers/alerts + `string.Join` | ~7 strings | `TimberbotRead.cs:515-538` |
-| 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotRead.cs:563` |
-| 14 | Low | `CollectBuildings` basic: `$"{a}/{b}"` per building with workers | N strings | `TimberbotRead.cs:816` |
-| 15 | Low | `CollectBeavers` basic: string concat `critical + "+" + n.Id` | N strings | `TimberbotRead.cs:1019-1020` |
-| 16 | Low | `CollectPowerNetworks`: new Dict + PowerNetwork + List per network | ~N networks | `TimberbotRead.cs:1076-1084` |
-| 17 | Low | `CollectWellbeing`: 4 Dicts + List per group | ~10 objects | `TimberbotRead.cs:1143-1155` |
-| 18 | Low | `CollectNotifications`: `.ToString()` per notification field | 2N strings | `TimberbotRead.cs:1209` |
-| 20 | Low | `GetBeaverNeeds()` called on background thread (thread-questionable) | unknown | `TimberbotRead.cs:290,1142` |
+| 12 | Low | `CollectSummary` toon: `$"..."` interpolations for beds/workers/alerts + `string.Join` | ~7 strings | `TimberbotReadV2.cs` |
+| 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotReadV2.cs` |
+| 14 | Low | `CollectBuildings` basic: `$"{a}/{b}"` per building with workers | N strings | `TimberbotReadV2.cs` |
+| 15 | Low | `CollectBeavers` basic: string concat `critical + "+" + n.Id` | N strings | `TimberbotReadV2.cs` |
+| 16 | Low | `CollectPowerNetworks`: new Dict + PowerNetwork + List per network | ~N networks | `TimberbotReadV2.cs` |
+| 17 | Low | `CollectWellbeing`: 4 Dicts + List per group | ~10 objects | `TimberbotReadV2.cs` |
+| 18 | Low | `CollectNotifications`: `.ToString()` per notification field | 2N strings | `TimberbotReadV2.cs` |
+| 20 | Low | `GetBeaverNeeds()` called on background thread (thread-questionable) | unknown | `TimberbotReadV2.cs` |
 | 21 | Low | Unity GC spikes freeze all threads | 0.5-2s | unavoidable |
 | 22 | Low | `sb.ToString()` alloc per HTTP response | 100-500KB | unavoidable |
 
 All remaining issues are low severity. Benchmark with `/api/benchmark` to measure impact.
 
-For thread model, double buffer, cached classes, serialization, and reusable collections see [architecture.md](architecture.md).
+For thread model, snapshot pipeline, serialization, and reusable collections see [architecture.md](architecture.md).
 
 ## GC pressure
 
@@ -33,22 +33,20 @@ Goal: allocate once at game load, reuse forever. The only per-request allocation
 
 ```
 Game loads
-  -> allocate TimberbotDoubleBuffer x3, TimberbotJw, Dictionaries, Lists
+  -> allocate TimberbotJw, Dictionaries, Lists, projection buffers
   -> done allocating
 
-Every 1 second (main thread)
-  -> read building/beaver/tree properties into existing objects (zero alloc)
-  -> refresh districts in place (reuses existing CachedDistrict, clears/repopulates Dict)
-  -> pre-build science + distribution JSON (RefreshMainThreadData)
-  -> swap: apply pending adds/removes, then swap buffer pointers
+Every frame (main thread, on demand)
+  -> ReadV2.ProcessPendingRefresh(): capture live state into DTO buffers (bounded budget)
+  -> background finalize: publish immutable snapshots from captured data
 
-Every HTTP request (background thread)
-  -> read from cached buffers (zero alloc)
+Every HTTP GET (background thread)
+  -> read from published snapshots (zero alloc)
   -> write into existing StringBuilder via TimberbotJw (zero alloc)
   -> ToString() to create response string (1 alloc, unavoidable)
 ```
 
-### RefreshCachedState (1Hz, main thread)
+### Snapshot capture (main thread, on demand)
 
 Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 
@@ -66,7 +64,7 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 | `new CachedNeed{...}` struct | 2400 | Struct = stack alloc, not heap |
 | Inventory for-loop (indexed) | 500 | `for (int ii = 0; ...)` -- no enumerator boxing |
 | District refresh | 1-3 | Reuses existing CachedDistrict objects, clears Dict |
-| `Swap()` x3 | 3 | Apply pending adds/removes then ref swap |
+| Snapshot publish | on demand | Immutable DTO snapshot replaces previous via ref swap |
 
 **Known allocations (accepted):**
 
@@ -97,7 +95,7 @@ With subscribers: `TimberbotJw` payload string (1 per event), field-level `_webh
 
 ### Entity lifecycle (per add/remove)
 
-`new CachedBuilding/Beaver/NaturalResource` + `Clone()` + `CleanName()` + OccupiedTiles list. Once per entity lifetime. Webhook events only with subscribers.
+Entity registration in `TimberbotEntityRegistry` + projection buffer slot allocation. Once per entity lifetime. Webhook events only with subscribers.
 
 ## Benchmarks
 
@@ -185,10 +183,10 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | Event-driven (EventBus) | 28ms | 9ms | 13ms | 62ms |
 | Cached component refs | 25ms | 8ms | 13ms | 64ms |
 | GETs on listener thread | 23ms | 6.5ms | 8ms | 39ms |
-| Double buffer + cached primitives | 4.7ms | 2.8ms | 1.3ms | 28ms |
+| Cached primitives + snapshot buffers | 4.7ms | 2.8ms | 1.3ms | 28ms |
 | StringBuilder (trees) | 2.0ms | 2.8ms | 1.3ms | 28ms |
 | Alloc-once + SB buildings | 2.0ms | ~1ms | ~1ms | ~20ms est |
-| DRY (Jw + DoubleBuffer) | **8.6ms** | **2.1ms** | **3.4ms** | **17ms** |
+| DRY (Jw + ReadV2 snapshots) | **8.6ms** | **2.1ms** | **3.4ms** | **17ms** |
 
 ## Closed issues
 

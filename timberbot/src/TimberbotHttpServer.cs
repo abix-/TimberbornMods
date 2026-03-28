@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -34,6 +35,9 @@ namespace Timberbot
         private readonly Thread _listenerThread;
         // thread-safe queue: background listener thread enqueues, Unity main thread dequeues
         private readonly ConcurrentQueue<PendingRequest> _pending = new ConcurrentQueue<PendingRequest>();
+        private readonly Queue<PendingRequest> _writeQueue = new Queue<PendingRequest>();
+        private PendingRequest _activeWriteRequest;
+        private ITimberbotWriteJob _activeWriteJob;
         // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
         private readonly bool _debugEnabled;
@@ -55,6 +59,8 @@ namespace Timberbot
             public int Offset;                   // skip first N items
             public string FilterName;            // name substring filter (case-insensitive)
             public int FilterX, FilterY, FilterRadius; // proximity filter (Manhattan distance)
+            public long QueuedAtTicks;           // listener-thread enqueue timestamp
+            public int QueuedAtFrame;            // main-thread queue admission frame
         }
 
         public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
@@ -87,12 +93,12 @@ namespace Timberbot
         public void Stop()
         {
             _running = false;
+            FailOutstanding("operation_failed: server_stopped");
             try { _listener?.Stop(); } catch { }
         }
 
         // Called every frame from UpdateSingleton on the Unity main thread.
-        // Drains up to 10 queued POST requests per frame to avoid frame spikes.
-        // 10/frame at 60fps = 600 requests/sec throughput, more than enough for any AI.
+        // Admits up to 10 queued POST requests per frame.
         public void DrainRequests()
         {
             int processed = 0;
@@ -101,14 +107,66 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius);
-                    Respond(req.Context, 200, data);
+                    if (ShouldQueueWrite(req.Route, req.Method))
+                    {
+                        req.QueuedAtFrame = UnityEngine.Time.frameCount;
+                        _writeQueue.Enqueue(req);
+                    }
+                    else
+                    {
+                        var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius);
+                        RespondAsync(req.Context, 200, data);
+                    }
                 }
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    Respond(req.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                    RespondAsync(req.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
                 }
+            }
+        }
+
+        // Called every frame. Steps the active write job forward until it completes
+        // or the per-frame budget (default 2ms) runs out. When the job completes,
+        // sends the HTTP response back to the waiting client.
+        public void ProcessWriteJobs(float now, double budgetMs)
+        {
+            if (!_running) return;
+
+            if (_activeWriteJob == null && _writeQueue.Count > 0)
+            {
+                _activeWriteRequest = _writeQueue.Dequeue();
+                try
+                {
+                    _activeWriteJob = CreateWriteJob(_activeWriteRequest);
+                }
+                catch (Exception ex)
+                {
+                    TimberbotLog.Error("write.admit", ex);
+                    RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                    _activeWriteRequest = null;
+                    _activeWriteJob = null;
+                }
+            }
+
+            if (_activeWriteJob == null) return;
+
+            try
+            {
+                _activeWriteJob.Step(now, budgetMs);
+                if (_activeWriteJob.IsCompleted)
+                {
+                    RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result);
+                    _activeWriteRequest = null;
+                    _activeWriteJob = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                TimberbotLog.Error("write.step", ex);
+                RespondAsync(_activeWriteRequest.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
+                _activeWriteRequest = null;
+                _activeWriteJob = null;
             }
         }
 
@@ -218,7 +276,8 @@ namespace Timberbot
                     FilterName = filterName,
                     FilterX = filterX,
                     FilterY = filterY,
-                    FilterRadius = filterRadius
+                    FilterRadius = filterRadius,
+                    QueuedAtTicks = System.Diagnostics.Stopwatch.GetTimestamp()
                 });
             }
         }
@@ -402,6 +461,9 @@ namespace Timberbot
                     case "/api/building/demolish":
                         return _service.Placement.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
+                    case "/api/crop/demolish":
+                        return _service.Placement.DemolishCrop(
+                            body?.Value<int>("id") ?? 0);
                     case "/api/webhooks":
                         return _service.WebhookMgr.RegisterWebhook(
                             body?.Value<string>("url") ?? "",
@@ -428,7 +490,8 @@ namespace Timberbot
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0,
                             body?.Value<string>("style") ?? "direct",
-                            body?.Value<int>("sections") ?? 0);
+                            body?.Value<int>("sections") ?? 0,
+                            body?.Value<bool?>("timings") ?? false);
                     case "/api/placement/find":
                         return _service.Placement.FindPlacement(
                             body?.Value<string>("prefab") ?? "",
@@ -454,6 +517,120 @@ namespace Timberbot
                 "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power",
                 "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"
             }));
+        }
+
+        private bool ShouldQueueWrite(string path, string method)
+        {
+            if (method != "POST") return false;
+            switch (path)
+            {
+                case "/api/tiles":
+                case "/api/building/range":
+                case "/api/placement/find":
+                case "/api/planting/find":
+                case "/api/debug":
+                case "/api/benchmark":
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
+        private ITimberbotWriteJob CreateWriteJob(PendingRequest req)
+        {
+            var body = req.Body;
+            switch (req.Route)
+            {
+                case "/api/path/place":
+                    return _service.Placement.CreateRoutePathJob(
+                        body?.Value<int>("x1") ?? 0,
+                        body?.Value<int>("y1") ?? 0,
+                        body?.Value<int>("x2") ?? 0,
+                        body?.Value<int>("y2") ?? 0,
+                        body?.Value<string>("style") ?? "direct",
+                        body?.Value<int>("sections") ?? 0,
+                        body?.Value<bool?>("timings") ?? false,
+                        req.QueuedAtTicks,
+                        req.QueuedAtFrame);
+                case "/api/building/place":
+                    return new LambdaWriteJob(req.Route, () =>
+                        _service.Placement.PlaceBuilding(
+                            body?.Value<string>("prefab") ?? "",
+                            body?.Value<int>("x") ?? 0,
+                            body?.Value<int>("y") ?? 0,
+                            body?.Value<int>("z") ?? 0,
+                            body?.Value<string>("orientation") ?? "south")
+                        .ToJson(_service.Placement.Jw));
+                case "/api/building/demolish":
+                    return new LambdaWriteJob(req.Route, () => _service.Placement.DemolishBuilding(body?.Value<int>("id") ?? 0));
+                case "/api/crop/demolish":
+                    return new LambdaWriteJob(req.Route, () => _service.Placement.DemolishCrop(body?.Value<int>("id") ?? 0));
+                case "/api/speed":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetSpeed(body?.Value<int>("speed") ?? 0));
+                case "/api/building/pause":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.PauseBuilding(body?.Value<int>("id") ?? 0, body?.Value<bool>("paused") ?? false));
+                case "/api/building/clutch":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetClutch(body?.Value<int>("id") ?? 0, body?.Value<bool>("engaged") ?? true));
+                case "/api/building/floodgate":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetFloodgateHeight(body?.Value<int>("id") ?? 0, body?.Value<float>("height") ?? 0f));
+                case "/api/building/priority":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetBuildingPriority(body?.Value<int>("id") ?? 0, body?.Value<string>("priority") ?? "Normal", body?.Value<string>("type") ?? ""));
+                case "/api/building/hauling":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetHaulPriority(body?.Value<int>("id") ?? 0, body?.Value<bool>("prioritized") ?? true));
+                case "/api/building/recipe":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetRecipe(body?.Value<int>("id") ?? 0, body?.Value<string>("recipe") ?? ""));
+                case "/api/building/farmhouse":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetFarmhouseAction(body?.Value<int>("id") ?? 0, body?.Value<string>("action") ?? ""));
+                case "/api/building/plantable":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetPlantablePriority(body?.Value<int>("id") ?? 0, body?.Value<string>("plantable") ?? ""));
+                case "/api/building/workers":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetWorkers(body?.Value<int>("id") ?? 0, body?.Value<int>("count") ?? 0));
+                case "/api/planting/mark":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.MarkPlanting(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0, body?.Value<string>("crop") ?? ""));
+                case "/api/planting/clear":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.UnmarkPlanting(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0));
+                case "/api/cutting/area":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.MarkCuttingArea(body?.Value<int>("x1") ?? 0, body?.Value<int>("y1") ?? 0, body?.Value<int>("x2") ?? 0, body?.Value<int>("y2") ?? 0, body?.Value<int>("z") ?? 0, body?.Value<bool>("marked") ?? true));
+                case "/api/stockpile/capacity":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileCapacity(body?.Value<int>("id") ?? 0, body?.Value<int>("capacity") ?? 0));
+                case "/api/stockpile/good":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileGood(body?.Value<int>("id") ?? 0, body?.Value<string>("good") ?? ""));
+                case "/api/workhours":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetWorkHours(body?.Value<int>("endHours") ?? 16));
+                case "/api/district/migrate":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.MigratePopulation(body?.Value<string>("from") ?? "", body?.Value<string>("to") ?? "", body?.Value<int>("count") ?? 1));
+                case "/api/science/unlock":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.UnlockBuilding(body?.Value<string>("building") ?? ""));
+                case "/api/distribution":
+                    return new LambdaWriteJob(req.Route, () => _service.Write.SetDistribution(body?.Value<string>("district") ?? "", body?.Value<string>("good") ?? "", body?.Value<string>("import") ?? "", body?.Value<int>("exportThreshold") ?? -1));
+                case "/api/webhooks":
+                    return new LambdaWriteJob(req.Route, () => _service.WebhookMgr.RegisterWebhook(body?.Value<string>("url") ?? "", body?["events"]?.ToObject<List<string>>()));
+                case "/api/webhooks/delete":
+                    return new LambdaWriteJob(req.Route, () => _service.WebhookMgr.UnregisterWebhook(body?.Value<string>("id") ?? ""));
+                default:
+                    return new LambdaWriteJob(req.Route, () => RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset, req.FilterName, req.FilterX, req.FilterY, req.FilterRadius));
+            }
+        }
+
+        private void FailOutstanding(string error)
+        {
+            var payload = _jw.Error(error.Replace("\"", "'"));
+            while (_pending.TryDequeue(out var req))
+                RespondAsync(req.Context, 500, payload);
+            while (_writeQueue.Count > 0)
+                RespondAsync(_writeQueue.Dequeue().Context, 500, payload);
+            if (_activeWriteJob != null && _activeWriteRequest != null)
+            {
+                _activeWriteJob.Cancel(error);
+                RespondAsync(_activeWriteRequest.Context, _activeWriteJob.StatusCode, _activeWriteJob.Result);
+                _activeWriteJob = null;
+                _activeWriteRequest = null;
+            }
+        }
+
+        private void RespondAsync(HttpListenerContext ctx, int statusCode, object data)
+        {
+            ThreadPool.QueueUserWorkItem(_ => Respond(ctx, statusCode, data));
         }
 
         // Send a JSON response. If data is already a string (from JW serialization),

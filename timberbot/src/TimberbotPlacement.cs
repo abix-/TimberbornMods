@@ -28,6 +28,7 @@ using Timberborn.GameDistricts;
 using Timberborn.ScienceSystem;
 using Timberborn.BuildingsNavigation;
 using Timberborn.GameFactionSystem;
+using Timberborn.NaturalResourcesLifecycle;
 using UnityEngine;
 
 namespace Timberbot
@@ -270,21 +271,108 @@ namespace Timberbot
             return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
-        // Route a path from (x1,y1) to (x2,y2) using safe A* over a coherent 3D surface graph.
-        // Nodes represent walkable surfaces at (x,y,z). Edges represent either flat movement or
-        // directed vertical connectors. Existing stairs/platforms are reusable graph edges/surfaces,
-        // and generated connectors use the same edge abstraction with RequiresPlacement=true.
-        public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0)
+        public object DemolishCrop(int cropId)
         {
-            string stairsPrefab = "Stairs" + _factionSuffix;
-            string platformPrefab = "Platform" + _factionSuffix;
-            var stairsSpec = _buildingService.GetBuildingTemplate(stairsPrefab);
-            var platformSpec = _buildingService.GetBuildingTemplate(platformPrefab);
-            var stairsBs = stairsSpec?.GetSpec<BuildingSpec>();
-            var platformBs = platformSpec?.GetSpec<BuildingSpec>();
-            bool stairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
-            bool platformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
+            var ec = _cache.FindEntity(cropId);
+            if (ec == null)
+                return Jw.Error("not_found", ("id", cropId));
 
+            if (ec.GetComponent<LivingNaturalResource>() == null)
+                return Jw.Error("invalid_type: not a natural resource", ("id", cropId));
+
+            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            if (!TimberbotEntityRegistry.CropSpecies.Contains(name))
+                return Jw.Error("invalid_type: not a crop", ("id", cropId), ("name", name));
+
+            _entityService.Delete(ec);
+            return Jw.Result(("id", cropId), ("name", name), ("demolished", true));
+        }
+
+        // =====================================================================
+        // A* PATH ROUTING
+        // =====================================================================
+        // Routes a path from (x1,y1) to (x2,y2) across arbitrary terrain,
+        // automatically placing stairs at z-level changes and platforms for
+        // multi-level jumps. The algorithm:
+        //
+        // 1. BUILD SURFACE GRAPH: scan terrain in the bounding box, create a
+        //    node for each walkable surface tile (x,y,z). Add edges between
+        //    adjacent nodes at the same z. Add directed connector edges for
+        //    existing stairs/platforms and potential new stair placements.
+        //    Cost grid: water=expensive, existing paths=cheap, impassable=255.
+        //
+        // 2. A* SEARCH: find shortest path through the graph from start to goal.
+        //    The graph is 3D (nodes at different z-levels), so the pathfinder
+        //    naturally routes up/down via stair connector edges.
+        //
+        // 3. PLACEMENT: walk the A* path, place paths on flat segments, place
+        //    platforms+stairs at vertical connector edges. Uses the game's own
+        //    placement validation (PlaceBuilding) so invalid spots are skipped.
+        //
+        // The key insight: stairs in Timberborn are placed on the LOWER tile and
+        // face a direction. A stair at (x,y,z) facing north connects z to z+1 on
+        // the y+1 side. Platforms stack under stairs for multi-level jumps.
+        private sealed class PlanningBuilding
+        {
+            public string Name;
+            public int X;
+            public int Y;
+            public int Z;
+            public string Orientation;
+            public List<(int x, int y, int z)> OccupiedTiles;
+        }
+
+        private sealed class PathPlanningData
+        {
+            public readonly List<PlanningBuilding> Buildings = new List<PlanningBuilding>();
+            public readonly List<(int x, int y)> NaturalTiles = new List<(int x, int y)>();
+            public readonly List<(int x, int y)> BlockerTiles = new List<(int x, int y)>();
+            public double SnapshotMs;
+            public string StairsPrefab;
+            public string PlatformPrefab;
+            public bool StairsUnlocked;
+            public bool PlatformUnlocked;
+            public int MinX;
+            public int MinY;
+            public int MaxX;
+            public int MaxY;
+            public int GridWidth;
+            public int GridHeight;
+        }
+
+        private sealed class PlacementAction
+        {
+            public string Prefab;
+            public int X;
+            public int Y;
+            public int Z;
+            public string Orientation;
+            public string Bucket;
+            public int StopX;
+            public int StopY;
+        }
+
+        private sealed class PathPlanResult
+        {
+            public readonly List<PlacementAction> Actions = new List<PlacementAction>();
+            public readonly List<string> Errors = new List<string>();
+            public int ConnectorCount;
+            public int GraphNodes;
+            public int PathNodes;
+            public int PathEdges;
+            public double SnapshotMs;
+            public double GraphMs;
+            public double AstarMs;
+            public int StoppedX;
+            public int StoppedY;
+            public bool Stopped;
+        }
+
+        internal ITimberbotWriteJob CreateRoutePathJob(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0, bool timings = false, long queuedAtTicks = 0, int queuedAtFrame = 0)
+            => new RoutePathJob(this, x1, y1, x2, y2, style, sections, timings, queuedAtTicks, queuedAtFrame);
+
+        private PathPlanningData CapturePathPlanningData(int x1, int y1, int x2, int y2, string style)
+        {
             const int PADDING = 10;
             int minX = System.Math.Min(x1, x2) - PADDING;
             int minY = System.Math.Min(y1, y2) - PADDING;
@@ -295,73 +383,133 @@ namespace Timberbot
             if (minY < 0) minY = 0;
             if (maxX >= mapSize.x) maxX = mapSize.x - 1;
             if (maxY >= mapSize.y) maxY = mapSize.y - 1;
-            int gw = maxX - minX + 1;
-            int gh = maxY - minY + 1;
 
+            var data = new PathPlanningData
+            {
+                MinX = minX,
+                MinY = minY,
+                MaxX = maxX,
+                MaxY = maxY,
+                GridWidth = maxX - minX + 1,
+                GridHeight = maxY - minY + 1,
+                StairsPrefab = "Stairs" + _factionSuffix,
+                PlatformPrefab = "Platform" + _factionSuffix
+            };
+
+            var snapshotSw = System.Diagnostics.Stopwatch.StartNew();
+            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
+            snapshotSw.Stop();
+            data.SnapshotMs += snapshotSw.Elapsed.TotalMilliseconds;
+            snapshotSw.Restart();
+            var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
+            snapshotSw.Stop();
+            data.SnapshotMs += snapshotSw.Elapsed.TotalMilliseconds;
+
+            var stairsSpec = _buildingService.GetBuildingTemplate(data.StairsPrefab);
+            var platformSpec = _buildingService.GetBuildingTemplate(data.PlatformPrefab);
+            var stairsBs = stairsSpec?.GetSpec<BuildingSpec>();
+            var platformBs = platformSpec?.GetSpec<BuildingSpec>();
+            data.StairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
+            data.PlatformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
+
+            bool IntersectsRegion(List<(int x, int y, int z)> tiles)
+            {
+                for (int i = 0; i < tiles.Count; i++)
+                {
+                    var t = tiles[i];
+                    if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY)
+                        return true;
+                }
+                return false;
+            }
+
+            for (int i = 0; i < buildingSnapshot.Count; i++)
+            {
+                var def = buildingSnapshot.Definitions[i];
+                if (def.OccupiedTiles == null || def.Name == null) continue;
+                var tiles = new List<(int x, int y, int z)>(def.OccupiedTiles.Length);
+                foreach (var t in def.OccupiedTiles)
+                    tiles.Add((t.x, t.y, t.z));
+                if (!IntersectsRegion(tiles) &&
+                    !(def.X >= minX && def.X <= maxX && def.Y >= minY && def.Y <= maxY))
+                    continue;
+                data.Buildings.Add(new PlanningBuilding
+                {
+                    Name = def.Name,
+                    X = def.X,
+                    Y = def.Y,
+                    Z = def.Z,
+                    Orientation = def.Orientation,
+                    OccupiedTiles = tiles
+                });
+            }
+
+            for (int i = 0; i < naturalSnapshot.Count; i++)
+            {
+                var nr = naturalSnapshot.States[i];
+                if (nr.X < minX || nr.X > maxX || nr.Y < minY || nr.Y > maxY) continue;
+                data.NaturalTiles.Add((nr.X, nr.Y));
+            }
+
+            var blockers = _readV2.TrackedBlockers;
+            for (int i = 0; i < blockers.Count; i++)
+            {
+                var b = blockers[i];
+                if (b.OccupiedTiles == null) continue;
+                foreach (var tile in b.OccupiedTiles)
+                {
+                    if (tile.x < minX || tile.x > maxX || tile.y < minY || tile.y > maxY) continue;
+                    data.BlockerTiles.Add((tile.x, tile.y));
+                }
+            }
+
+            return data;
+        }
+
+        private PathPlanResult PlanRoute(PathPlanningData planning, int x1, int y1, int x2, int y2, string style, int sections)
+        {
             if (style != "direct" && style != "straight") style = "direct";
 
             List<SurfaceNode> nodes;
             List<GraphEdge>[] adj;
             Dictionary<long, List<int>> nodesByTile;
             int connectorCount;
-            BuildSurfaceGraph(minX, minY, gw, gh, out nodes, out adj, out nodesByTile, out connectorCount);
+            var graphSw = System.Diagnostics.Stopwatch.StartNew();
+            BuildSurfaceGraph(planning, out nodes, out adj, out nodesByTile, out connectorCount);
+            graphSw.Stop();
+
+            var result = new PathPlanResult
+            {
+                SnapshotMs = planning.SnapshotMs,
+                GraphMs = graphSw.Elapsed.TotalMilliseconds,
+                ConnectorCount = connectorCount,
+                GraphNodes = nodes.Count,
+                StoppedX = x2,
+                StoppedY = y2
+            };
 
             string PathKey(int x, int y, int z) => $"P|{x}|{y}|{z}";
             string PlatformKey(int x, int y, int z) => $"F|{x}|{y}|{z}";
             string StairKey(int x, int y, int z, int orient) => $"S|{x}|{y}|{z}|{orient}";
-            bool IsBenignOccupied(PlaceBuildingResult r) => r.Error != null && r.Error.StartsWith("occupied by");
-            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
 
             var existingPathKeys = new HashSet<string>();
             var existingPlatformKeys = new HashSet<string>();
             var existingStairKeys = new HashSet<string>();
-            for (int i = 0; i < buildingSnapshot.Count; i++)
+            for (int i = 0; i < planning.Buildings.Count; i++)
             {
-                var cb = buildingSnapshot.Definitions[i];
-                if (cb.Name == null || cb.OccupiedTiles == null) continue;
+                var cb = planning.Buildings[i];
                 bool isPath = cb.Name.Contains("Path");
                 bool isStairs = cb.Name.Contains("Stairs");
                 bool isPlatform = cb.Name.Contains("Platform");
                 if (!isPath && !isStairs && !isPlatform) continue;
-                foreach (var t in cb.OccupiedTiles)
+                for (int t = 0; t < cb.OccupiedTiles.Count; t++)
                 {
-                    if (isPath) existingPathKeys.Add(PathKey(t.x, t.y, t.z));
-                    if (isPlatform) existingPlatformKeys.Add(PlatformKey(t.x, t.y, t.z));
+                    var tile = cb.OccupiedTiles[t];
+                    if (isPath) existingPathKeys.Add(PathKey(tile.x, tile.y, tile.z));
+                    if (isPlatform) existingPlatformKeys.Add(PlatformKey(tile.x, tile.y, tile.z));
                 }
                 if (isStairs)
                     existingStairKeys.Add(StairKey(cb.X, cb.Y, cb.Z, ParseOrientation(cb.Orientation ?? "south")));
-            }
-
-            var placedPathKeys = new HashSet<string>();
-            var placedPlatformKeys = new HashSet<string>();
-            var placedStairKeys = new HashSet<string>();
-            var errors = new List<string>();
-            var failedResults = new List<PlaceBuildingResult>();
-            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
-            int connectorCrossings = 0;
-            int stoppedX = x2, stoppedY = y2;
-            bool stopped = false;
-
-            void TryPlacePathNode(SurfaceNode node)
-            {
-                if (!node.PlacePath || node.Z <= 0) return;
-                string key = PathKey(node.X, node.Y, node.Z);
-                if (existingPathKeys.Contains(key) || placedPathKeys.Contains(key)) return;
-                var r = PlaceBuilding("Path", node.X, node.Y, node.Z, "south");
-                if (r.Success)
-                {
-                    pathCount++;
-                    placedPathKeys.Add(key);
-                }
-                else if (IsBenignOccupied(r))
-                {
-                    placedPathKeys.Add(key);
-                }
-                else
-                {
-                    skipped++;
-                    failedResults.Add(r);
-                }
             }
 
             List<int> startIds;
@@ -373,123 +521,187 @@ namespace Timberbot
 
             if (startIds == null || goalIds == null)
             {
-                if (startIds == null) errors.Add($"no walkable surface at start ({x1},{y1})");
-                if (goalIds == null) errors.Add($"no walkable surface at goal ({x2},{y2})");
+                if (startIds == null) result.Errors.Add($"no walkable surface at start ({x1},{y1})");
+                if (goalIds == null) result.Errors.Add($"no walkable surface at goal ({x2},{y2})");
+                return result;
             }
-            else
+
+            var astarSw = System.Diagnostics.Stopwatch.StartNew();
+            var path = AStarPath(nodes, adj, startIds, goalIds, nodes.Count * 8, style);
+            astarSw.Stop();
+            result.AstarMs = astarSw.Elapsed.TotalMilliseconds;
+            if (path == null)
             {
-                var path = AStarPath(nodes, adj, startIds, goalIds, nodes.Count * 8, style);
-                if (path == null)
+                result.Errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {connectorCount} connectors in graph");
+                return result;
+            }
+
+            result.PathNodes = path.Nodes.Count;
+            result.PathEdges = path.Edges.Count;
+
+            var plannedPathKeys = new HashSet<string>();
+            var plannedPlatformKeys = new HashSet<string>();
+            var plannedStairKeys = new HashSet<string>();
+
+            void AddPathAction(SurfaceNode node, int stopX, int stopY)
+            {
+                if (!node.PlacePath || node.Z <= 0) return;
+                string key = PathKey(node.X, node.Y, node.Z);
+                if (existingPathKeys.Contains(key) || !plannedPathKeys.Add(key)) return;
+                result.Actions.Add(new PlacementAction
                 {
-                    errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {connectorCount} connectors in graph");
+                    Prefab = "Path",
+                    X = node.X,
+                    Y = node.Y,
+                    Z = node.Z,
+                    Orientation = "south",
+                    Bucket = "path",
+                    StopX = stopX,
+                    StopY = stopY
+                });
+            }
+
+            if (path.Nodes.Count > 0)
+                AddPathAction(nodes[path.Nodes[0]], x2, y2);
+
+            int connectorCrossings = 0;
+            for (int i = 0; i < path.Edges.Count; i++)
+            {
+                var edge = path.Edges[i];
+                var src = nodes[path.Nodes[i]];
+                var dst = nodes[path.Nodes[i + 1]];
+
+                if (edge.IsConnector)
+                {
+                    if (edge.RequiresPlacement)
+                    {
+                        if (!planning.StairsUnlocked)
+                        {
+                            result.Errors.Add($"stairs not unlocked at ({src.X},{src.Y})");
+                            result.Stopped = true;
+                            result.StoppedX = src.X;
+                            result.StoppedY = src.Y;
+                            break;
+                        }
+                        if (edge.Levels > 1 && !planning.PlatformUnlocked)
+                        {
+                            result.Errors.Add($"platforms not unlocked for {edge.Levels}-level connector at ({src.X},{src.Y})");
+                            result.Stopped = true;
+                            result.StoppedX = src.X;
+                            result.StoppedY = src.Y;
+                            break;
+                        }
+
+                        for (int rtIdx = 0; rtIdx < edge.RampTiles.Count; rtIdx++)
+                        {
+                            var rt = edge.RampTiles[rtIdx];
+                            for (int p = 0; p < rt.platCount; p++)
+                            {
+                                int platformZ = rt.baseZ + p;
+                                string pk = PlatformKey(rt.x, rt.y, platformZ);
+                                if (existingPlatformKeys.Contains(pk) || !plannedPlatformKeys.Add(pk)) continue;
+                                result.Actions.Add(new PlacementAction
+                                {
+                                    Prefab = planning.PlatformPrefab,
+                                    X = rt.x,
+                                    Y = rt.y,
+                                    Z = platformZ,
+                                    Orientation = "south",
+                                    Bucket = "platform",
+                                    StopX = src.X,
+                                    StopY = src.Y
+                                });
+                            }
+
+                            int stairZ = rt.baseZ + rt.platCount;
+                            string sk = StairKey(rt.x, rt.y, stairZ, edge.OrientIdx);
+                            if (existingStairKeys.Contains(sk) || !plannedStairKeys.Add(sk)) continue;
+                            result.Actions.Add(new PlacementAction
+                            {
+                                Prefab = planning.StairsPrefab,
+                                X = rt.x,
+                                Y = rt.y,
+                                Z = stairZ,
+                                Orientation = OrientNames[edge.OrientIdx],
+                                Bucket = "stair",
+                                StopX = src.X,
+                                StopY = src.Y
+                            });
+                        }
+                    }
+
+                    AddPathAction(dst, dst.X, dst.Y);
+                    connectorCrossings++;
+                    if (sections > 0 && connectorCrossings >= sections)
+                    {
+                        result.Stopped = true;
+                        result.StoppedX = dst.X;
+                        result.StoppedY = dst.Y;
+                        break;
+                    }
+                    continue;
+                }
+
+                AddPathAction(dst, dst.X, dst.Y);
+            }
+
+            return result;
+        }
+
+        // Route a path from (x1,y1) to (x2,y2) using safe A* over a coherent 3D surface graph.
+        // Nodes represent walkable surfaces at (x,y,z). Edges represent either flat movement or
+        // directed vertical connectors. Existing stairs/platforms are reusable graph edges/surfaces,
+        // and generated connectors use the same edge abstraction with RequiresPlacement=true.
+        public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0, bool timings = false)
+        {
+            var totalSw = System.Diagnostics.Stopwatch.StartNew();
+            int placementsAttempted = 0;
+
+            var planData = CapturePathPlanningData(x1, y1, x2, y2, style);
+            var plan = PlanRoute(planData, x1, y1, x2, y2, style, sections);
+
+            var errors = new List<string>(plan.Errors);
+            var failedResults = new List<PlaceBuildingResult>();
+            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
+            double placementMs = 0d;
+
+            var placementSw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < plan.Actions.Count; i++)
+            {
+                var action = plan.Actions[i];
+                placementsAttempted++;
+                var r = PlaceBuilding(action.Prefab, action.X, action.Y, action.Z, action.Orientation);
+                if (r.Success)
+                {
+                    if (action.Bucket == "path") pathCount++;
+                    else if (action.Bucket == "platform") platformCount++;
+                    else if (action.Bucket == "stair") stairCount++;
+                }
+                else if (r.Error != null && r.Error.StartsWith("occupied by"))
+                {
+                    // benign -- tile already occupied by compatible structure
                 }
                 else
                 {
-                    if (path.Nodes.Count > 0)
-                        TryPlacePathNode(nodes[path.Nodes[0]]);
-
-                    for (int i = 0; i < path.Edges.Count; i++)
-                    {
-                        var edge = path.Edges[i];
-                        var src = nodes[path.Nodes[i]];
-                        var dst = nodes[path.Nodes[i + 1]];
-
-                        if (edge.IsConnector)
-                        {
-                            if (edge.RequiresPlacement)
-                            {
-                                if (!stairsUnlocked)
-                                {
-                                    errors.Add($"stairs not unlocked at ({src.X},{src.Y})");
-                                    stoppedX = src.X; stoppedY = src.Y; stopped = true;
-                                    break;
-                                }
-                                if (edge.Levels > 1 && !platformUnlocked)
-                                {
-                                    errors.Add($"platforms not unlocked for {edge.Levels}-level connector at ({src.X},{src.Y})");
-                                    stoppedX = src.X; stoppedY = src.Y; stopped = true;
-                                    break;
-                                }
-
-                                bool connectorFailed = false;
-                                foreach (var rt in edge.RampTiles)
-                                {
-                                    for (int p = 0; p < rt.platCount; p++)
-                                    {
-                                        int platformZ = rt.baseZ + p;
-                                        string pk = PlatformKey(rt.x, rt.y, platformZ);
-                                        if (existingPlatformKeys.Contains(pk) || placedPlatformKeys.Contains(pk)) continue;
-                                        var pr = PlaceBuilding(platformPrefab, rt.x, rt.y, platformZ, "south");
-                                        if (pr.Success)
-                                        {
-                                            platformCount++;
-                                            placedPlatformKeys.Add(pk);
-                                        }
-                                        else if (IsBenignOccupied(pr))
-                                        {
-                                            placedPlatformKeys.Add(pk);
-                                        }
-                                        else
-                                        {
-                                            skipped++;
-                                            failedResults.Add(pr);
-                                            errors.Add($"platform failed at ({rt.x},{rt.y},{platformZ})");
-                                            stoppedX = src.X; stoppedY = src.Y; stopped = true;
-                                            connectorFailed = true;
-                                            break;
-                                        }
-                                    }
-                                    if (connectorFailed) break;
-
-                                    int stairZ = rt.baseZ + rt.platCount;
-                                    string sk = StairKey(rt.x, rt.y, stairZ, edge.OrientIdx);
-                                    if (existingStairKeys.Contains(sk) || placedStairKeys.Contains(sk)) continue;
-                                    var sr = PlaceBuilding(stairsPrefab, rt.x, rt.y, stairZ, OrientNames[edge.OrientIdx]);
-                                    if (sr.Success)
-                                    {
-                                        stairCount++;
-                                        placedStairKeys.Add(sk);
-                                    }
-                                    else if (IsBenignOccupied(sr))
-                                    {
-                                        placedStairKeys.Add(sk);
-                                    }
-                                    else
-                                    {
-                                        skipped++;
-                                        failedResults.Add(sr);
-                                        errors.Add($"stair failed at ({rt.x},{rt.y},{stairZ})");
-                                        stoppedX = src.X; stoppedY = src.Y; stopped = true;
-                                        connectorFailed = true;
-                                        break;
-                                    }
-                                }
-                                if (connectorFailed) break;
-                            }
-
-                            TryPlacePathNode(dst);
-                            connectorCrossings++;
-                            if (sections > 0 && connectorCrossings >= sections)
-                            {
-                                stoppedX = dst.X; stoppedY = dst.Y; stopped = true;
-                                break;
-                            }
-                            continue;
-                        }
-
-                        TryPlacePathNode(dst);
-                    }
+                    skipped++;
+                    failedResults.Add(r);
+                    errors.Add($"{action.Bucket} failed at ({action.X},{action.Y},{action.Z})");
+                    plan.Stopped = true;
+                    plan.StoppedX = action.StopX;
+                    plan.StoppedY = action.StopY;
+                    break;
                 }
             }
+            placementSw.Stop();
+            placementMs = placementSw.Elapsed.TotalMilliseconds;
 
             var jw = Jw.Reset().BeginObj();
             jw.Obj("placed").Prop("paths", pathCount);
             if (stairCount > 0) jw.Prop("stairs", stairCount);
             if (platformCount > 0) jw.Prop("platforms", platformCount);
             jw.CloseObj().Prop("skipped", skipped);
-            jw.Prop("stairEdgesInGrid", connectorCount);
-            jw.Prop("connectorEdgesInGrid", connectorCount);
-            if (stopped) jw.Prop("stoppedAt", $"{stoppedX},{stoppedY}");
+            jw.Prop("connectorEdgesInGrid", plan.ConnectorCount);
+            if (plan.Stopped) jw.Prop("stoppedAt", $"{plan.StoppedX},{plan.StoppedY}");
 
             if (failedResults.Count > 0 || errors.Count > 0)
             {
@@ -499,6 +711,21 @@ namespace Timberbot
                 foreach (var e in errors)
                     jw.OpenObj().Prop("error", e).CloseObj();
                 jw.CloseArr();
+            }
+            if (timings)
+            {
+                totalSw.Stop();
+                jw.Obj("timings")
+                    .Prop("totalMs", (float)totalSw.Elapsed.TotalMilliseconds, "F3")
+                    .Prop("snapshotMs", (float)plan.SnapshotMs, "F3")
+                    .Prop("graphMs", (float)plan.GraphMs, "F3")
+                    .Prop("astarMs", (float)plan.AstarMs, "F3")
+                    .Prop("placementMs", (float)placementMs, "F3")
+                    .Prop("placementsAttempted", placementsAttempted)
+                    .Prop("graphNodes", plan.GraphNodes)
+                    .Prop("pathNodes", plan.PathNodes)
+                    .Prop("pathEdges", plan.PathEdges)
+                    .CloseObj();
             }
             jw.CloseObj();
             return jw.ToString();
@@ -536,6 +763,228 @@ namespace Timberbot
         {
             public List<int> Nodes;
             public List<GraphEdge> Edges;
+        }
+
+        private sealed class RoutePathJob : ITimberbotWriteJob
+        {
+            private readonly TimberbotPlacement _owner;
+            private readonly int _x1;
+            private readonly int _y1;
+            private readonly int _x2;
+            private readonly int _y2;
+            private readonly string _style;
+            private readonly int _sections;
+            private readonly bool _timings;
+            private readonly long _queuedAtTicks;
+            private readonly int _queuedAtFrame;
+            private readonly System.Diagnostics.Stopwatch _wallClock = System.Diagnostics.Stopwatch.StartNew();
+            private System.Threading.Tasks.Task<PathPlanResult> _planningTask;
+            private PathPlanResult _plan;
+            private bool _completed;
+            private int _statusCode = 200;
+            private object _result;
+            private int _framesActive;
+            private int _actionIndex;
+            private int _pathCount;
+            private int _stairCount;
+            private int _platformCount;
+            private int _skipped;
+            private int _placementsAttempted;
+            private double _applyPathMs;
+            private double _applyPlatformMs;
+            private double _applyStairMs;
+            private readonly List<PlaceBuildingResult> _failedResults = new List<PlaceBuildingResult>();
+            private readonly List<string> _errors = new List<string>();
+            private int _settleFramesRemaining = -1;
+            private bool _awaitingFinalize;
+            private int _startedFrame = -1;
+
+            public RoutePathJob(TimberbotPlacement owner, int x1, int y1, int x2, int y2, string style, int sections, bool timings, long queuedAtTicks, int queuedAtFrame)
+            {
+                _owner = owner;
+                _x1 = x1;
+                _y1 = y1;
+                _x2 = x2;
+                _y2 = y2;
+                _style = style;
+                _sections = sections;
+                _timings = timings;
+                _queuedAtTicks = queuedAtTicks;
+                _queuedAtFrame = queuedAtFrame;
+            }
+
+            public string Name => "path.place";
+            public bool IsCompleted => _completed;
+            public int StatusCode => _statusCode;
+            public object Result => _result;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (_completed) return;
+                if (_startedFrame < 0)
+                    _startedFrame = UnityEngine.Time.frameCount;
+                _framesActive++;
+
+                if (_planningTask == null)
+                {
+                    var planningData = _owner.CapturePathPlanningData(_x1, _y1, _x2, _y2, _style);
+                    _planningTask = System.Threading.Tasks.Task.Run(() => _owner.PlanRoute(planningData, _x1, _y1, _x2, _y2, _style, _sections));
+                    return;
+                }
+
+                if (_plan == null)
+                {
+                    if (!_planningTask.IsCompleted)
+                        return;
+
+                    if (_planningTask.IsFaulted)
+                    {
+                        var ex = _planningTask.Exception?.GetBaseException();
+                        FinishError("operation_failed: " + (ex?.Message ?? "route planning failed"));
+                        return;
+                    }
+
+                    if (_planningTask.IsCanceled)
+                    {
+                        FinishError("operation_failed: route planning canceled");
+                        return;
+                    }
+
+                    _plan = _planningTask.Result;
+                    _errors.AddRange(_plan.Errors);
+                    if (_plan.Actions.Count == 0)
+                    {
+                        FinishResponse();
+                        return;
+                    }
+                }
+
+                if (_awaitingFinalize)
+                {
+                    if (_settleFramesRemaining < 0)
+                    {
+                        _settleFramesRemaining = 1;
+                        return;
+                    }
+                    if (_settleFramesRemaining > 0)
+                    {
+                        _settleFramesRemaining--;
+                        return;
+                    }
+                    FinishResponse();
+                    return;
+                }
+
+                var budget = System.Diagnostics.Stopwatch.StartNew();
+                while (_actionIndex < _plan.Actions.Count)
+                {
+                    if (budget.Elapsed.TotalMilliseconds >= budgetMs)
+                        return;
+
+                    var action = _plan.Actions[_actionIndex];
+                    _placementsAttempted++;
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    var placement = _owner.PlaceBuilding(action.Prefab, action.X, action.Y, action.Z, action.Orientation);
+                    sw.Stop();
+
+                    switch (action.Bucket)
+                    {
+                        case "path": _applyPathMs += sw.Elapsed.TotalMilliseconds; break;
+                        case "platform": _applyPlatformMs += sw.Elapsed.TotalMilliseconds; break;
+                        case "stair": _applyStairMs += sw.Elapsed.TotalMilliseconds; break;
+                    }
+
+                    if (placement.Success)
+                    {
+                        if (action.Bucket == "path") _pathCount++;
+                        else if (action.Bucket == "platform") _platformCount++;
+                        else if (action.Bucket == "stair") _stairCount++;
+                    }
+                    else if (!IsBenignOccupied(placement))
+                    {
+                        _skipped++;
+                        _failedResults.Add(placement);
+                        _errors.Add($"{action.Bucket} failed at ({action.X},{action.Y},{action.Z})");
+                        _plan.Stopped = true;
+                        _plan.StoppedX = action.StopX;
+                        _plan.StoppedY = action.StopY;
+                        _awaitingFinalize = true;
+                        return;
+                    }
+
+                    _actionIndex++;
+                }
+
+                _awaitingFinalize = true;
+            }
+
+            public void Cancel(string error)
+            {
+                if (_completed) return;
+                FinishError(error);
+            }
+
+            private static bool IsBenignOccupied(PlaceBuildingResult r) => r.Error != null && r.Error.StartsWith("occupied by");
+
+            private void FinishError(string error)
+            {
+                _statusCode = 500;
+                _result = _owner.Jw.Error(error);
+                _completed = true;
+            }
+
+            private void FinishResponse()
+            {
+                var queueWaitMs = _queuedAtTicks > 0
+                    ? (System.Diagnostics.Stopwatch.GetTimestamp() - _queuedAtTicks) * 1000d / System.Diagnostics.Stopwatch.Frequency - _wallClock.Elapsed.TotalMilliseconds
+                    : 0d;
+                if (queueWaitMs < 0d) queueWaitMs = 0d;
+
+                var jw = _owner.Jw.Reset().BeginObj();
+                jw.Obj("placed").Prop("paths", _pathCount);
+                if (_stairCount > 0) jw.Prop("stairs", _stairCount);
+                if (_platformCount > 0) jw.Prop("platforms", _platformCount);
+                jw.CloseObj().Prop("skipped", _skipped);
+                jw.Prop("stairEdgesInGrid", _plan?.ConnectorCount ?? 0);
+                jw.Prop("connectorEdgesInGrid", _plan?.ConnectorCount ?? 0);
+                if (_plan != null && _plan.Stopped)
+                    jw.Prop("stoppedAt", $"{_plan.StoppedX},{_plan.StoppedY}");
+
+                if (_failedResults.Count > 0 || _errors.Count > 0)
+                {
+                    jw.Arr("errors");
+                    foreach (var r in _failedResults)
+                        r.WriteErrorJson(jw);
+                    foreach (var e in _errors)
+                        jw.OpenObj().Prop("error", e).CloseObj();
+                    jw.CloseArr();
+                }
+                if (_timings)
+                {
+                    int queuedFrames = _startedFrame >= 0 ? _startedFrame - _queuedAtFrame : 0;
+                    if (queuedFrames < 0) queuedFrames = 0;
+                    jw.Obj("timings")
+                        .Prop("totalMs", (float)_wallClock.Elapsed.TotalMilliseconds, "F3")
+                        .Prop("queueWaitMs", (float)queueWaitMs, "F3")
+                        .Prop("snapshotMs", (float)(_plan?.SnapshotMs ?? 0d), "F3")
+                        .Prop("graphMs", (float)(_plan?.GraphMs ?? 0d), "F3")
+                        .Prop("astarMs", (float)(_plan?.AstarMs ?? 0d), "F3")
+                        .Prop("applyPathMs", (float)_applyPathMs, "F3")
+                        .Prop("applyPlatformMs", (float)_applyPlatformMs, "F3")
+                        .Prop("applyStairMs", (float)_applyStairMs, "F3")
+                        .Prop("placementMs", (float)(_applyPathMs + _applyPlatformMs + _applyStairMs), "F3")
+                        .Prop("placementsAttempted", _placementsAttempted)
+                        .Prop("graphNodes", _plan?.GraphNodes ?? 0)
+                        .Prop("pathNodes", _plan?.PathNodes ?? 0)
+                        .Prop("pathEdges", _plan?.PathEdges ?? 0)
+                        .Prop("framesQueued", queuedFrames)
+                        .Prop("framesActive", _framesActive)
+                        .CloseObj();
+                }
+                jw.CloseObj();
+                _result = jw.ToString();
+                _completed = true;
+            }
         }
 
         private static long TileKey(int x, int y)
@@ -655,15 +1104,18 @@ namespace Timberbot
             return true;
         }
 
-        // Build a coherent 3D surface graph over the region.
-        // Terrain/path/platform surfaces become nodes at (x,y,z).
-        // Existing stairs and generated ramps become directed connector edges.
-        private void BuildSurfaceGraph(int minX, int minY, int w, int h,
+        // Build a 3D walkable surface graph from terrain data. Each node is a
+        // walkable (x,y,z) position. Flat neighbors get cost-weighted edges.
+        // Existing stairs become free directed edges. Potential new stair
+        // placements become RequiresPlacement edges that A* can use if needed.
+        private void BuildSurfaceGraph(PathPlanningData planning,
             out List<SurfaceNode> nodes, out List<GraphEdge>[] adj,
             out Dictionary<long, List<int>> nodesByTile, out int connectorCount)
         {
-            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
-            var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
+            int minX = planning.MinX;
+            int minY = planning.MinY;
+            int w = planning.GridWidth;
+            int h = planning.GridHeight;
             var baseCost = new ushort[w * h];
             var terrainHeights = new int[w * h];
 
@@ -696,10 +1148,9 @@ namespace Timberbot
             var existingPlatformSurfaces = new HashSet<long>();
             var existingStairs = new List<(int sx, int sy, int sz, int dir)>();
 
-            for (int i = 0; i < buildingSnapshot.Count; i++)
+            for (int i = 0; i < planning.Buildings.Count; i++)
             {
-                var cb = buildingSnapshot.Definitions[i];
-                if (cb.Name == null || cb.OccupiedTiles == null) continue;
+                var cb = planning.Buildings[i];
                 bool isPath = cb.Name.Contains("Path");
                 bool isStairs = cb.Name.Contains("Stairs");
                 bool isPlatform = cb.Name.Contains("Platform");
@@ -708,21 +1159,22 @@ namespace Timberbot
                 if (isStairs)
                     existingStairs.Add((cb.X, cb.Y, cb.Z, ParseOrientation(cb.Orientation ?? "south")));
 
-                foreach (var t in cb.OccupiedTiles)
+                for (int t = 0; t < cb.OccupiedTiles.Count; t++)
                 {
-                    int lx = t.x - minX;
-                    int ly = t.y - minY;
+                    var tile = cb.OccupiedTiles[t];
+                    int lx = tile.x - minX;
+                    int ly = tile.y - minY;
                     if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
                     int idx = ly * w + lx;
 
                     if (isPath)
                     {
-                        existingPathSurfaces.Add(SurfaceKey(t.x, t.y, t.z));
+                        existingPathSurfaces.Add(SurfaceKey(tile.x, tile.y, tile.z));
                         if (baseCost[idx] < 255) baseCost[idx] = 1;
                     }
                     else if (isPlatform)
                     {
-                        existingPlatformSurfaces.Add(SurfaceKey(t.x, t.y, t.z + 1));
+                        existingPlatformSurfaces.Add(SurfaceKey(tile.x, tile.y, tile.z + 1));
                     }
                     else if (isStairs)
                     {
@@ -735,11 +1187,20 @@ namespace Timberbot
                 }
             }
 
-            for (int i = 0; i < naturalSnapshot.Count; i++)
+            for (int i = 0; i < planning.NaturalTiles.Count; i++)
             {
-                var nr = naturalSnapshot.States[i];
-                int lx = nr.X - minX;
-                int ly = nr.Y - minY;
+                var nr = planning.NaturalTiles[i];
+                int lx = nr.x - minX;
+                int ly = nr.y - minY;
+                if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+                baseCost[ly * w + lx] = 255;
+            }
+
+            for (int i = 0; i < planning.BlockerTiles.Count; i++)
+            {
+                var bt = planning.BlockerTiles[i];
+                int lx = bt.x - minX;
+                int ly = bt.y - minY;
                 if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
                 baseCost[ly * w + lx] = 255;
             }
@@ -817,8 +1278,8 @@ namespace Timberbot
                 }
                 list.Add(i);
             }
-            var edgeMap = new Dictionary<(int from, int to), GraphEdge>();
 
+            var edgeMap = new Dictionary<(int from, int to), GraphEdge>();
             void AddEdge(int fromId, GraphEdge edge)
             {
                 var key = (fromId, edge.ToId);
@@ -837,13 +1298,7 @@ namespace Timberbot
                     long nk = SurfaceKey(n.X + ndx[d], n.Y + ndy[d], n.Z);
                     int toId;
                     if (!nodeIdBySurface.TryGetValue(nk, out toId)) continue;
-                    AddEdge(i, new GraphEdge
-                    {
-                        ToId = toId,
-                        Cost = nodeList[toId].EntryCost,
-                        IsConnector = false,
-                        RequiresPlacement = false
-                    });
+                    AddEdge(i, new GraphEdge { ToId = toId, Cost = nodeList[toId].EntryCost, IsConnector = false, RequiresPlacement = false });
                 }
             }
 
@@ -875,8 +1330,7 @@ namespace Timberbot
                         ExtX = extX,
                         ExtY = extY,
                         ExtZ = extZ,
-                        OrientIdx = s.dir,
-                        RampTiles = null
+                        OrientIdx = s.dir
                     });
                 }
                 if (nodeIdBySurface.TryGetValue(SurfaceKey(extX, extY, extZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(entX, entY, entZ), out toId))
@@ -895,8 +1349,7 @@ namespace Timberbot
                         ExtX = entX,
                         ExtY = entY,
                         ExtZ = entZ,
-                        OrientIdx = s.dir,
-                        RampTiles = null
+                        OrientIdx = s.dir
                     });
                 }
             }
@@ -1529,6 +1982,18 @@ namespace Timberbot
                                     var nr = naturalSnapshot.States[i];
                                     if (nr.X == bc.x && nr.Y == bc.y) { blocker = nd.Name; break; }
                                 }
+                            if (blocker == null)
+                            {
+                                var blk = _readV2.TrackedBlockers;
+                                for (int i = 0; i < blk.Count; i++)
+                                {
+                                    var b = blk[i];
+                                    if (b.OccupiedTiles == null) continue;
+                                    foreach (var t in b.OccupiedTiles)
+                                        if (t.x == bc.x && t.y == bc.y) { blocker = b.Name; break; }
+                                    if (blocker != null) break;
+                                }
+                            }
                             return $"occupied by {blocker ?? "unknown"} at ({bc.x},{bc.y},{bc.z})";
                         }
                         if (bv.BlockConflictsWithTerrain(block))

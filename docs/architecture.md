@@ -45,7 +45,11 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
   |     +-- advance main-thread capture       |     +-- Respond() sends JSON
   |     +-- queue background finalize/publish |
   |                                           +-- POST request arrives
-  +-- FlushWebhooks() [every frame]                 +-- queue to _pending
+  +-- ProcessWriteJobs() [budgeted]                 +-- queue to _pending
+  |     |
+  |     +-- step pending write jobs (2ms budget)
+  |
+  +-- FlushWebhooks() [every frame]
         |
         +-- batch _pendingEvents -> ThreadPool POST
 ```
@@ -56,6 +60,7 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 | Canonical GET endpoints | background | no |
 | POST endpoints | main thread via `DrainRequests()` | yes, for duration |
 | `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by capture budget |
+| `ProcessWriteJobs()` | main thread | yes, bounded by `writeBudgetMs` (default 2ms) |
 | Webhook flush scheduling | main thread | negligible |
 
 ## High-level pieces
@@ -74,6 +79,7 @@ It owns:
 - per-frame:
   - `DrainRequests()`
   - `ReadV2.ProcessPendingRefresh(now)`
+  - `_server.ProcessWriteJobs(now, writeBudgetMs)`
   - `WebhookMgr.FlushWebhooks(now)`
 
 ### `TimberbotReadV2`
@@ -383,12 +389,12 @@ Settings:
 ```json
 {
   "refreshIntervalSeconds": 1.0,
-  "debugEndpointEnabled": false,
+  "debugEndpointEnabled": true,
   "httpPort": 8085,
-  "httpHost": "127.0.0.1",
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
-  "webhookCircuitBreaker": 30
+  "webhookCircuitBreaker": 30,
+  "writeBudgetMs": 2.0
 }
 ```
 
@@ -446,6 +452,7 @@ Core runtime files:
 - [`TimberbotHttpServer.cs`](../timberbot/src/TimberbotHttpServer.cs)
 - [`TimberbotWebhook.cs`](../timberbot/src/TimberbotWebhook.cs)
 - [`TimberbotDebug.cs`](../timberbot/src/TimberbotDebug.cs)
+- [`ITimberbotWriteJob.cs`](../timberbot/src/ITimberbotWriteJob.cs)
 
 Related docs:
 

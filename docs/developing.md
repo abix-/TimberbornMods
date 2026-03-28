@@ -13,6 +13,7 @@ TimberbornMods/
       TimberbotPlacement.cs             Building placement, path routing, terrain (14 DI params)
       TimberbotWebhook.cs               Batched push event notifications, circuit breaker (5 DI params)
       TimberbotDebug.cs                 Reflection inspector and benchmark (1 DI param)
+      ITimberbotWriteJob.cs              Write job interface for budgeted main-thread execution
       TimberbotHttpServer.cs            HttpListener, routing, request/response handling
       TimberbotJw.cs                    Fluent zero-alloc JSON writer
       TimberbotLog.cs                   File-based error logging, timestamped, thread-safe
@@ -25,7 +26,9 @@ TimberbornMods/
       thumbnail.png                     Steam Workshop image
     script/
       timberbot.py                      Python client (API + CLI + dashboard)
-      test_validation.py                Test suite (63 tests, any save game)
+      test_v2.py                        Primary test harness (smoke, freshness, write_to_read, performance, concurrency)
+      test_v2_specs.py                  Test spec definitions for test_v2
+      test_validation.py                Legacy test suite (74 tests, any save game)
       release.py                        Build + package + GitHub release script
   docs/                               Documentation
     architecture.md                     How the mod works (thread model, caching, serialization)
@@ -129,7 +132,7 @@ python timberbot/script/test_validation.py --list
 - **Performance**: direct endpoint latency comparisons across the live snapshot path
 - **Concurrency**: simultaneous requests against projection-backed endpoints
 - **Legacy validation**: the older `test_validation.py` script is still useful for broad compatibility checks
-- **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + DoubleBuffer)
+- **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + fresh-on-request snapshots)
 - **Data accuracy**: `validate` endpoint compares cached vs live game state per field. `validate_all` checks all entities, all fields, 0 mismatches
 - **Burst**: 7 sequential calls < 3s total (24ms measured)
 - **Save-agnostic**: discovery phase detects faction, map bounds, existing buildings

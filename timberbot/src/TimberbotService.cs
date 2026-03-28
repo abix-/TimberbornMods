@@ -43,6 +43,7 @@ namespace Timberbot
         private bool _webhooksEnabled = true;
         private float _webhookBatchSeconds = 0.2f;
         private int _webhookCircuitBreaker = 30;
+        private double _writeBudgetMs = 1.0;
 
         public TimberbotService(
             EventBus eventBus,
@@ -124,6 +125,11 @@ namespace Timberbot
                         int cb = json.Value<int>("webhookCircuitBreaker");
                         _webhookCircuitBreaker = cb > 0 ? cb : 30;
                     }
+                    if (json["writeBudgetMs"] != null)
+                    {
+                        double budget = json.Value<double>("writeBudgetMs");
+                        _writeBudgetMs = budget > 0 ? budget : 1.0;
+                    }
                 }
             }
             catch (System.Exception ex)
@@ -150,6 +156,7 @@ namespace Timberbot
             float now = Time.realtimeSinceStartup;
             _server?.DrainRequests();
             ReadV2.ProcessPendingRefresh(now);
+            _server?.ProcessWriteJobs(now, _writeBudgetMs);
             WebhookMgr.FlushWebhooks(now);
         }
     }

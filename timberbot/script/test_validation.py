@@ -974,14 +974,8 @@ class TestRunner:
                 self.bot.demolish_building(b["id"])
 
 
-    def test_path_wipe_all(self):
+    def test_wipe_all(self):
         print("\n=== wipe all buildings and crops ===\n")
-        self.wait_for_refresh()
-        map_info = self.bot.tiles()
-        map_size = map_info.get("mapSize", {}) if isinstance(map_info, dict) else {}
-        map_x = map_size.get("x", 256)
-        map_y = map_size.get("y", 256)
-        map_z = map_size.get("z", 23)
         buildings = self.bot.buildings()
         if not isinstance(buildings, list):
             self.check("wipe all buildings and crops", False, "buildings endpoint returned invalid data")
@@ -989,9 +983,21 @@ class TestRunner:
         targets = [b for b in buildings if b.get("id") is not None]
         for b in targets:
             self.bot.demolish_building(b["id"])
-        for z in range(map_z):
-            self.bot.clear_planting(0, 0, map_x - 1, map_y - 1, z)
-        self.wait_for_refresh()
+
+        crops = self.bot.crops(limit=0)
+        deleted_crops = 0
+        crop_items = []
+        if isinstance(crops, dict):
+            crop_items = crops.get("items", [])
+        elif isinstance(crops, list):
+            crop_items = crops
+        for crop in crop_items:
+            crop_id = crop.get("id")
+            if crop_id is None:
+                continue
+            self.bot.demolish_crop(crop_id)
+            deleted_crops += 1
+
         remaining = self.bot.buildings()
         remaining_crops = self.bot.crops()
         remaining_count = 0
@@ -1003,7 +1009,7 @@ class TestRunner:
         self.check(
             "wipe all buildings and crops",
             remaining_count == 0 and remaining_crop_count == 0,
-            f"remaining_buildings={remaining_count} remaining_crops={remaining_crop_count} deleted_buildings={len(targets)}"
+            f"remaining_buildings={remaining_count} remaining_crops={remaining_crop_count} deleted_buildings={len(targets)} deleted_crops={deleted_crops}"
         )
 
 
@@ -1130,9 +1136,26 @@ class TestRunner:
     def test_path_astar_diagonal(self):
         """A* routes from the bottom-left corner to the top-right corner."""
         print("\n=== path routing: A* diagonal ===\n")
+        def print_timings(label, result):
+            timings = result.get("timings", {}) if isinstance(result, dict) else {}
+            if not timings:
+                return
+            print(
+                f"  {label} timings: total={timings.get('totalMs', 0):.1f}ms "
+                f"snapshot={timings.get('snapshotMs', 0):.1f}ms "
+                f"graph={timings.get('graphMs', 0):.1f}ms "
+                f"astar={timings.get('astarMs', 0):.1f}ms "
+                f"placement={timings.get('placementMs', 0):.1f}ms "
+                f"queuedFrames={timings.get('framesQueued', 0)} "
+                f"activeFrames={timings.get('framesActive', 0)} "
+                f"attempts={timings.get('placementsAttempted', 0)} "
+                f"nodes={timings.get('graphNodes', 0)} "
+                f"pathNodes={timings.get('pathNodes', 0)}"
+            )
         x1, y1 = 0, 0
         x2, y2 = self.map_x - 1, self.map_y - 1
-        result = self.bot.place_path(x1, y1, x2, y2)
+        result = self.bot.place_path(x1, y1, x2, y2, timings=True)
+        print_timings("diagonal", result)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
         self.check("diagonal: paths placed via A*",
                    placed.get("paths", 0) > 0,
@@ -1146,6 +1169,26 @@ class TestRunner:
         self.check("diagonal: no errors",
                    not result.get("errors"),
                    json.dumps(result)[:120])
+
+        # second path: top-left to bottom-right
+        x3, y3 = 0, self.map_y - 1
+        x4, y4 = self.map_x - 1, 0
+        result2 = self.bot.place_path(x3, y3, x4, y4, timings=True)
+        print_timings("diagonal2", result2)
+        placed2 = result2.get("placed", {}) if isinstance(result2, dict) else {}
+        self.check("diagonal2: paths placed via A*",
+                   placed2.get("paths", 0) > 0,
+                   json.dumps(result2)[:120])
+        self.check("diagonal2: no fallback",
+                   not result2.get("fallback", False),
+                   json.dumps(result2)[:120])
+        self.check("diagonal2: no skipped",
+                   result2.get("skipped", 0) == 0,
+                   json.dumps(result2)[:120])
+        self.check("diagonal2: no errors",
+                   not result2.get("errors"),
+                   json.dumps(result2)[:120])
+
     def test_path_astar_obstacle(self):
         """A* routes around a building placed in the middle of a straight path."""
         print("\n=== path routing: A* obstacle avoidance ===\n")

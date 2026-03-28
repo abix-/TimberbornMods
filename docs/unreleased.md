@@ -33,7 +33,6 @@
 - [fix] toon summary aggregates population/resources across districts
 - [fix] A* path cost=0 for existing paths broke admissibility; changed to cost=1
 - [test] 3 new A* path tests: diagonal, obstacle, no-route
-- [test] 63 total tests (up from 51)
 - [docs] architecture.md: thread model table, reusable collections, main-thread cached endpoints
 - [docs] performance.md: full audit (3 high, 8 medium, 11 low), all high+medium fixed
 - [docs] developing.md: owns file structure, testing, build instructions
@@ -44,3 +43,14 @@
 - [internal] debug endpoint enabled by default
 - [internal] TimberbotAutoLoad + TimberbotAutoLoadConfigurator for auto-load
 - [internal] TimberbotDebug expanded to full reflection inspector + validation + assertions
+- [breaking] ReadV2 cutover: all GET endpoints now served by TimberbotReadV2 with fresh-on-request projection snapshots
+- [breaking] removed TimberbotRead, TimberbotDoubleBuffer, TimberbotEntityCache -- replaced by TimberbotReadV2 + TimberbotEntityRegistry
+- [feature] ReadV2: staged capture with per-frame budget, background finalize/publish, concurrent reader coalescing
+- [feature] off-thread finalize: expensive snapshot publish work runs on ReadV2's internal background worker
+- [perf] no cadence-driven refresh -- snapshots published only when readers need them
+- [test] test_v2.py: new primary test harness (smoke, freshness, write_to_read, performance, concurrency)
+- [test] 74 total tests (up from 63)
+- [docs] architecture.md rewritten for native ReadV2 stack, removed all double-buffer references
+- [feature] write job system: ITimberbotWriteJob + ProcessWriteJobs for budgeted main-thread write execution
+- [feature] writeBudgetMs setting (default 2ms) for per-frame write budget
+- [feature] place_path timings param: detailed timing breakdown (snapshot, graph, astar, placement)

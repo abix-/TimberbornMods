@@ -6,7 +6,7 @@ Play Timberborn with an AI partner. Timberbot API adds external read/write HTTP 
 
 The AI checks your colony every minute, makes decisions based on what it sees, and takes action. It works alongside the game's native automation. Use levers and sensors for in-game logic. Use Timberbot for the big-picture decisions that need external intelligence.
 
-Or use it as a scripting API for your own tools, dashboards, and external automation.
+Works with Claude Code, OpenAI Codex, or any AI agent that can make HTTP calls. Or use it as a scripting API for your own tools, dashboards, and external automation.
 
 [h1]What can the AI see and do?[/h1]
 [b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
@@ -51,13 +51,18 @@ timberbot.py register_webhook url:http://localhost:9000/events events:drought.st
 [/code]
 Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
 
-[h1]AI setup (Claude Code)[/h1]
+[h1]AI setup[/h1]
+[b]Claude Code:[/b]
 [code]
 cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 # run Claude from Documents/Timberborn/Mods/Timberbot so ./docs is available
 /loop 1m /timberbot
 [/code]
-The mod ships with a thin Claude skill plus docs. The local docs live in Documents/Timberborn/Mods/Timberbot/docs. Claude reads the single AI guide first, then uses the API reference only when it needs exact command or error details. The AI decides its own strategy and works alongside whatever in-game automation you've already set up.
+
+[b]OpenAI Codex:[/b]
+Point Codex at the mod folder and give it the docs. It can call the HTTP API directly.
+
+The mod ships with docs that any AI agent can use. The local docs live in Documents/Timberborn/Mods/Timberbot/docs. The AI reads the single guide first, then uses the API reference only when it needs exact command or error details. The AI decides its own strategy and works alongside whatever in-game automation you've already set up.
 
 Works with ChatGPT too. Paste docs/timberbot.md as the prompt and keep docs/api-reference.md nearby for exact command details. If someone cannot access the workshop copy, the GitHub repo contains the same docs.
 
@@ -72,12 +77,11 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [code]
 {
   "refreshIntervalSeconds": 1.0,
-  "debugEndpointEnabled": false,
+  "debugEndpointEnabled": true,
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
-  "httpPort": 8085,
-  "httpHost": "127.0.0.1"
+  "httpPort": 8085
 }
 [/code]
 

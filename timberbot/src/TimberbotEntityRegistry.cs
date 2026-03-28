@@ -11,9 +11,17 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    // Thin adapter over Timberborn's EntityRegistry.
-    // Public API still uses numeric Unity instance IDs, but internal identity is the
-    // Timberborn entity GUID. This class only owns lookup/translation and lifecycle hooks.
+    // TimberbotEntityRegistry.cs -- Entity lookup and ID translation.
+    //
+    // WHY TWO ID SYSTEMS
+    // -------------------
+    // Timberborn internally identifies entities by GUID (EntityComponent.EntityId).
+    // But GUIDs are terrible for humans typing API calls ("set_workers id:abc123-...").
+    // So the public API uses short numeric IDs (Unity's GameObject.GetInstanceID()),
+    // and this class translates between them.
+    //
+    // Also holds shared constants (faction suffix, species lists, priority names)
+    // and the EventBus lifecycle hooks that keep ReadV2's tracked refs in sync.
     public class TimberbotEntityRegistry
     {
         private readonly EntityRegistry _entityRegistry;

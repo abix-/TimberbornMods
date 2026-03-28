@@ -1,3 +1,36 @@
+// TimberbotDebug.cs -- Runtime reflection inspector and performance benchmark.
+//
+// WHY THIS EXISTS
+// ---------------
+// Timberborn is a closed-source game. When adding new API endpoints, we often
+// need to discover what data a game service exposes, what methods it has, or
+// how a component behaves at runtime. Instead of guessing, rebuilding, and
+// restarting the game each time, the debug endpoint lets you inspect live game
+// objects from outside the game while it's running.
+//
+// REFLECTION INSPECTOR (/api/debug)
+// ---------------------------------
+// Walks the mod's injected game services via .NET reflection:
+//   target:get path:_scienceService.SciencePoints  -> reads a field/property chain
+//   target:fields path:_weatherService             -> lists all fields on a service
+//   target:call method:FindEntity arg0:-507504     -> calls a method, stores result in $
+//   target:get path:$.AllComponents                -> chains from the last call result
+//
+// This is how we verified thread safety of water/terrain services, discovered
+// undocumented component properties, and confirmed GC behavior -- all without
+// rebuilding the mod.
+//
+// BENCHMARK (/api/benchmark)
+// --------------------------
+// Profiles every API endpoint and micro-benchmarks hot-path operations:
+//   - Measures GC0 collections to detect hidden allocations
+//   - Profiles per-call latency for all Collect* methods
+//   - Tests game API patterns (GetNeeds, Inventories, BreedingPod.Nutrients)
+//   - Runs warmup iterations to stabilize JIT, then measures
+//
+// This is how we confirmed zero-alloc on the hot path (0 GC0 across 760K calls)
+// and identified which endpoints are slowest.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
