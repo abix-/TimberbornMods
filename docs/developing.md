@@ -22,7 +22,7 @@ TimberbornMods/
       TimberbotAutoLoadConfigurator.cs  MainMenu context DI registration for auto-load
       Timberbot.csproj                  Build config, game DLL references
       manifest.json                     Mod metadata (version, name, description)
-      settings.json                     Runtime config (port, refresh rate, debug, webhooks)
+      settings.json                     Runtime config (port, debug, webhooks, write budget)
       thumbnail.png                     Steam Workshop image
     script/
       timberbot.py                      Python client (API + CLI + dashboard)
