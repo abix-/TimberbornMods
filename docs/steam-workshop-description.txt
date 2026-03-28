@@ -15,7 +15,9 @@ Works with Claude Code, OpenAI Codex, or any AI agent that can make HTTP calls. 
 
 [b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII map with height shading.
 
-[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed. Auto-route paths with stairs across z-levels.
+[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed.
+
+[b]A* pathfinding:[/b] place_path builds roads between any two points. Routes around buildings, ruins, water, and terrain obstacles. Auto-places stairs and platforms across elevation changes. Handles diagonal routes, multi-level jumps, and reuses existing paths and stairs. Optional sections param for incremental building across cliffs.
 
 [b]Power networks:[/b] which buildings share a power grid, supply vs demand per network, generator output.
 
@@ -46,6 +48,8 @@ timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
 timberbot.py map x1:110 y1:130 x2:130 y2:150 name:base  # ANSI map saved to memory
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+timberbot.py place_path x1:0 y1:0 x2:200 y2:180    # A* path with auto-stairs
+timberbot.py launch settlement:"Potato Tomato" save:bot  # auto-load a save
 timberbot.py crops                                  # crops in the ground with growth status
 timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
 [/code]
@@ -80,7 +84,8 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
-  "httpPort": 8085
+  "httpPort": 8085,
+  "writeBudgetMs": 2.0
 }
 [/code]
 
