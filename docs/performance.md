@@ -28,6 +28,57 @@ Issues #24-27 share a common pattern: outer containers were hoisted to field-lev
 
 All remaining issues are low-medium severity. Benchmark with `/api/benchmark` to measure impact.
 
+### Fix patterns for #24-28
+
+All five issues use the same fix: hoist inner containers to field-level, `Clear()` instead of `new`. No new dependencies needed. `ArrayPool<T>` is unavailable (no `System.Buffers` in the mod's netstandard2.1 + Unity Mono runtime). `stackalloc` / `Span<T>` is unreliable on Unity Mono. Unity's internal `ListPool<T>` is not exposed to mods.
+
+**#24 (tiles) / #25 (clusters): reuse inner dict values**
+
+Don't `Clear()` the outer dict. Instead, `Clear()` each inner list/dict value in place. Keys stabilize at steady state (same cells, same tiles each call). Only `new` on first-ever encounter of a key:
+
+```csharp
+// before: allocates per key per call
+dict.Clear();
+// ...
+if (!dict.ContainsKey(key))
+    dict[key] = new List<(string, int)>();
+
+// after: reuse inner lists, zero alloc at steady state
+foreach (var kv in dict) kv.Value.Clear();
+// ...
+if (!dict.TryGetValue(key, out var list))
+{
+    list = new List<(string, int)>();
+    dict[key] = list;
+}
+```
+
+For `_clusterCells` `new int[5]`, use a field-level `List<int[]>` pool that hands out pre-allocated arrays.
+
+**#26 (alerts) / #27 (power): field-level buffer, avoid `.ToArray()`**
+
+Hoist the result list to a field. The `FlatArrayRoute` schema already iterates by index, so pass `(T[] items, int count)` or just use the list directly instead of copying to array:
+
+```csharp
+// before: allocates list + array copy per call
+var alerts = new List<AlertItem>();
+// ... populate ...
+return alerts.ToArray();
+
+// after: reuse list, return backing storage
+private readonly List<AlertItem> _alertBuffer = new List<AlertItem>();
+
+_alertBuffer.Clear();
+// ... populate _alertBuffer ...
+return _alertBuffer;  // or (items: array, count: int) if schema needs array
+```
+
+**#28 (wellbeing): hoist all 4 dicts to field-level**
+
+Same as #24. Move `groupNeeds`, `groupTotals`, `groupMaxTotals`, `needToGroup` to fields. `Clear()` per call. Inner `new List<NeedSpec>()` per group uses the same reuse-or-create pattern as #24.
+
+References: [Unity GC best practices](https://docs.unity3d.com/2022.3/Documentation/Manual/performance-garbage-collection-best-practices.html), [Zero allocation code in Unity](https://www.sebaslab.com/zero-allocation-code-in-unity/), [8 Techniques to Avoid GC Pressure](https://michaelscodingspot.com/avoid-gc-pressure/).
+
 For thread model, snapshot pipeline, serialization, and reusable collections see [architecture.md](architecture.md).
 
 ## GC pressure
