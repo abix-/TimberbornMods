@@ -8,6 +8,11 @@ Historical note: sections that still discuss `TimberbotRead`, `TimberbotDoubleBu
 
 | # | Severity | Issue | Cost | Location |
 |---|---|---|---|---|
+| 24 | Medium | `CollectTiles`: `new List<(string, int)>()` per occupied tile inside reused `_tileOccupants` dict. Outer dict is field-level but inner lists are heap-allocated per tile per request. ~100+ list allocs for a 20x20 region | ~N tiles | `TimberbotReadV2.cs:1107,1124,1138` |
+| 25 | Medium | `CollectTreeClusters`/`CollectFoodClusters`: `new int[]` + `new Dictionary<string, int>()` per cell inside reused `_clusterCells`/`_clusterSpecies` dicts. ~200 allocs per call with 3000 trees over ~100 cells. Closed #6/#7 only fixed outer containers | ~2N cells | `TimberbotReadV2.cs:848,885` |
+| 26 | Medium | `BuildAlertsFromBuildings`: `new List<AlertItem>()` + `.ToArray()` per call. The list + array copy is a bigger alloc than the `$"{a}/{b}"` string in #13 | 1 list + 1 array copy | `TimberbotReadV2.cs:1413,1433` |
+| 27 | Medium | `BuildPowerFromBuildings`: `new Dictionary` + `new List` per network + `new PowerNetworkItem[]` + `.ToArray()` per network. Described in #16 but understated -- also allocates `PowerBuildingItem` per building and copies via `.ToArray()` | ~N networks + N buildings | `TimberbotReadV2.cs:1439-1478` |
+| 28 | Low | `CollectWellbeing`: 4 new Dicts + N new Lists per call (worse than #17 describes). `groupNeeds`, `groupTotals`, `groupMaxTotals`, `needToGroup` all fresh-allocated, plus `new List<NeedSpec>()` per group | ~4 dicts + N lists | `TimberbotReadV2.cs:1001-1013` |
 | 12 | Low | `CollectSummary` toon: `$"..."` interpolations for beds/workers/alerts + `string.Join` | ~7 strings | `TimberbotReadV2.cs` |
 | 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotReadV2.cs` |
 | 14 | Low | `CollectBuildings` basic: `$"{a}/{b}"` per building with workers | N strings | `TimberbotReadV2.cs` |
@@ -19,7 +24,9 @@ Historical note: sections that still discuss `TimberbotRead`, `TimberbotDoubleBu
 | 21 | Low | Unity GC spikes freeze all threads | 0.5-2s | unavoidable |
 | 22 | Low | `sb.ToString()` alloc per HTTP response | 100-500KB | unavoidable |
 
-All remaining issues are low severity. Benchmark with `/api/benchmark` to measure impact.
+Issues #24-27 share a common pattern: outer containers were hoisted to field-level and reused via `.Clear()`, but inner values created per-key (`new int[]`, `new Dictionary<>`, `new List<>`) are still heap-allocated per request. Closed issues #6, #7, #8 only fixed the outer half. All are background-thread request-scoped (not per-frame), so practical impact is low at current polling cadence, but the zero-alloc claims in the closed issues section are incorrect.
+
+All remaining issues are low-medium severity. Benchmark with `/api/benchmark` to measure impact.
 
 For thread model, snapshot pipeline, serialization, and reusable collections see [architecture.md](architecture.md).
 
@@ -197,9 +204,9 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | 3 | `CollectSummary` json: `JsonConvert.DeserializeObject` re-parses cluster JSON | `WriteClustersFiltered` builds inline via JW, zero Newtonsoft |
 | 4 | `CollectSummary`: ~20 temp collections per call | Hoisted to field-level dicts/sets, cleared per call. Static roleMap/cropNames |
 | 5 | `CollectBuildings` full toon: new StringBuilder x2 per building | Reuses field-level `_invSb`/`_recSb`, cleared per building |
-| 6 | `CollectTreeClusters`: new Dictionary x2 + new int[] per cell | Reuses field-level `_clusterCells`/`_clusterSpecies`/`_clusterSorted` |
-| 7 | `CollectFoodClusters`: same as #6 | Same reusable fields |
-| 8 | `CollectTiles`: new Dictionary + 3 HashSet + StringBuilder per tile | Reuses field-level `_tileOccupants`/`_tileEntrances`/`_tileSeedlings`/`_tileDeadTiles`/`_tileSb` |
+| 6 | `CollectTreeClusters`: new Dictionary x2 + new int[] per cell | **Partial** -- outer dicts reused via field-level `_clusterCells`/`_clusterSpecies`/`_clusterSorted`, but inner `new int[]` + `new Dictionary<string, int>` per cell remain. See #25 |
+| 7 | `CollectFoodClusters`: same as #6 | **Partial** -- same outer fix, same inner allocs remain. See #25 |
+| 8 | `CollectTiles`: new Dictionary + 3 HashSet + StringBuilder per tile | **Partial** -- outer dict + HashSets + StringBuilder reused, but inner `new List<(string, int)>` per occupied tile remains. See #24 |
 | 9 | `CollectDistribution` GetComponent on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 10 | `CollectScience` GetSpec on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 11 | District refresh allocates new CachedDistrict + Dict every 1s | Reuses existing CachedDistrict objects, updates in place, clears Dict |
