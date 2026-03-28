@@ -883,7 +883,7 @@ def _row(left, right=None, split=43):
         return f"  {left}{' ' * pad_l}  {right}"
 
 
-def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, interval=5):
+def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, interval=5, agent_data=None, agent_turns=5):
     if not summary:
         print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
@@ -1100,11 +1100,72 @@ def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, 
             dl = dlog.get("available", 0) if isinstance(dlog, dict) else dlog
             print(_row(f"  {name:16s} {_BOLD}{dpop:>3}{_RST} pop   Water {_BBLU}{_BOLD}{dw:>4}{_RST}   Log {_BOLD}{dl:>4}{_RST}"))
 
+    # agent status (if running or recently completed)
+    if agent_data and isinstance(agent_data, dict):
+        s = agent_data.get("status", "idle")
+        if s != "idle":
+            print(_hline())
+            status_colors = {"gatheringstate": _BYEL, "thinking": _BMAG,
+                             "executing": _BCYN, "done": _BGRN, "error": _BRED}
+            sc = status_colors.get(s, _DIM)
+            turn = agent_data.get("turn", 0)
+            total = agent_data.get("totalTurns", 0)
+            binary = agent_data.get("binary", "")
+            model = agent_data.get("model", "")
+            cur_cmd = agent_data.get("currentCmd", "")
+            turn_bar = _bar(turn, total, 16) if total > 0 else ""
+            model_short = model.replace("claude-", "").replace("-20251001", "") if model else binary
+            print(_row(f"{_BMAG}{_BOLD}AGENT{_RST}  {sc}{_BOLD}{s}{_RST}  turn {_BOLD}{turn}{_RST}/{total}  {turn_bar}", f"{_DIM}{model_short}{_RST}"))
+
+            # show what's happening right now
+            if cur_cmd and s in ("gatheringstate", "thinking", "executing"):
+                print(_row(f"  {_BYEL}> {cur_cmd}{_RST}"))
+
+            # turn history
+            history = agent_data.get("history", [])
+            visible = history[-8:]  # last 8 turns
+            for rec in visible:
+                tn = rec.get("turn", 0)
+                ok = rec.get("ok", 0)
+                failed = rec.get("failed", 0)
+                secs = rec.get("seconds", 0)
+                cmds = rec.get("commands", [])
+                err = rec.get("error", "")
+                # format: turn N  12s  3ok  set_speed | buildings | place_building
+                cmd_names = []
+                for c in cmds:
+                    # "ok: set_speed speed:1" -> "set_speed speed:1"
+                    # "FAIL: place_building ..." -> "FAIL place_building ..."
+                    if c.startswith("ok: "):
+                        cmd_names.append(f"{_BCYN}{c[4:]}{_RST}")
+                    elif c.startswith("FAIL: "):
+                        cmd_names.append(f"{_BRED}{c[6:]}{_RST}")
+                    else:
+                        cmd_names.append(c)
+                summary_str = "  ".join(cmd_names[:4])
+                extra = f" {_DIM}+{len(cmd_names)-4}{_RST}" if len(cmd_names) > 4 else ""
+                fail_str = f" {_BRED}{failed}fail{_RST}" if failed else ""
+                time_str = f"{secs:.0f}s" if secs >= 1 else "<1s"
+                if err:
+                    print(_row(f"  {_DIM}t{tn}{_RST} {_DIM}{time_str:>4}{_RST}  {_RED}{err[:60]}{_RST}"))
+                else:
+                    print(_row(f"  {_DIM}t{tn}{_RST} {_DIM}{time_str:>4}{_RST}{fail_str}  {summary_str}{extra}"))
+
+            err = agent_data.get("lastError", "")
+            if err and s == "error":
+                print(_row(f"  {_RED}{err[:70]}{_RST}"))
+
     print(f" {_DIM}{'─' * W}{_RST}")
-    print(f"{'':30s}{_DIM}refreshing every {interval}s  ·  ctrl+c to stop{_RST}")
+    agent_running = agent_data and isinstance(agent_data, dict) and agent_data.get("status") not in ("idle", "done", "error", None)
+    if not agent_running:
+        keys = f"[s]tart({agent_turns}t)  [+/-]turns  [0-3]speed  [q]uit"
+    else:
+        keys = f"[x]stop  [0-3]speed  [q]uit"
+    print(f"  {_DIM}{keys}  ·  refreshing every {interval}s{_RST}")
 
 
 def _top(interval=5):
+    import msvcrt
     bot = Timberbot(json_mode=True)
 
     if not bot.ping():
@@ -1112,16 +1173,67 @@ def _top(interval=5):
         print(f"  {_DIM}start Timberborn with the mod loaded{_RST}\n")
         sys.exit(1)
 
+    agent_turns = 5  # default turns for [s]tart
+    agent_model = "claude-haiku-4-5-20251001"
+
+    def _drain_key():
+        """Non-blocking read of a keypress, or None."""
+        if msvcrt.kbhit():
+            return msvcrt.getch()
+        return None
+
     try:
         while True:
             try:
                 summary = bot.summary()
             except Exception:
                 summary = None
+            try:
+                agent = bot._get_json("/api/agent/status")
+            except Exception:
+                agent = None
             print("\033[2J\033[H", end="")
             print()
-            _top_render(summary, interval=interval)
-            time.sleep(interval)
+            _top_render(summary, interval=interval, agent_data=agent, agent_turns=agent_turns)
+
+            # poll for keypress during sleep interval
+            deadline = time.time() + interval
+            while time.time() < deadline:
+                key = _drain_key()
+                if key is None:
+                    time.sleep(0.1)
+                    continue
+                ch = key.lower()
+                if ch == b'q':
+                    print(f"\n  {_DIM}bye!{_RST}\n")
+                    return
+                elif ch == b's':
+                    agent_st = agent.get("status") if agent else "idle"
+                    if agent_st in ("idle", "done", "error", None):
+                        try:
+                            bot._post("/api/agent/start", {"binary": "claude", "turns": agent_turns, "model": agent_model, "interval": 5, "timeout": 300})
+                            # force refresh
+                            break
+                        except Exception as e:
+                            pass
+                elif ch == b'x':
+                    try:
+                        bot._post("/api/agent/stop", {})
+                    except Exception:
+                        pass
+                    break
+                elif ch == b'+' or ch == b'=':
+                    agent_turns = min(agent_turns + 5, 100)
+                    break
+                elif ch == b'-':
+                    agent_turns = max(agent_turns - 5, 1)
+                    break
+                elif ch in (b'0', b'1', b'2', b'3'):
+                    try:
+                        bot.set_speed(int(ch))
+                    except Exception:
+                        pass
+                    break
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
 
@@ -1277,35 +1389,7 @@ def _start_agent(args):
         sys.exit(1)
 
     print(f"  {_BGRN}started{_RST} binary={binary} turns={turns} interval={interval}s")
-
-    # poll status until done
-    print(f"  {_DIM}polling agent status...{_RST}")
-    while True:
-        time.sleep(3)
-        try:
-            status = bot._get_json("/api/agent/status")
-            s = status.get("status", "unknown")
-            turn = status.get("turn", 0)
-            total = status.get("totalTurns", 0)
-            print(f"  turn {turn}/{total}  status: {s}", end="\r")
-
-            if s in ("done", "error", "idle"):
-                print()
-                if s == "error":
-                    print(f"  {_RED}error: {status.get('lastError', 'unknown')}{_RST}", file=sys.stderr)
-                elif s == "done":
-                    print(f"  {_BGRN}done{_RST} completed {turn}/{total} turns")
-                else:
-                    print(f"  {_BYEL}stopped{_RST}")
-                break
-        except KeyboardInterrupt:
-            print(f"\n  {_DIM}stopping agent...{_RST}")
-            try: bot._post("/api/agent/stop", {})
-            except Exception: pass
-            break
-        except Exception as e:
-            print(f"  {_RED}poll error: {e}{_RST}", file=sys.stderr)
-            break
+    print(f"  {_DIM}use 'timberbot.py top' to monitor{_RST}")
 
 
 def _launch(args):

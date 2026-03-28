@@ -11,6 +11,7 @@
 // cancelled via POST /api/agent/stop.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -28,6 +29,16 @@ namespace Timberbot
         Error
     }
 
+    class TurnRecord
+    {
+        public int Turn;
+        public List<string> Commands = new List<string>();   // "ok: set_speed speed:1" or "FAIL: place_building ..."
+        public int Ok;
+        public int Failed;
+        public double Seconds;
+        public string Error;
+    }
+
     public class TimberbotAgent
     {
         private string _binary;
@@ -36,19 +47,19 @@ namespace Timberbot
         private int _totalTurns;
         private int _intervalSeconds;
         private int _processTimeoutSeconds;
-        private string _timberbotCmd;  // resolved path to run timberbot.py
+        private string _timberbotCmd;
 
         private int _currentTurn;
         private AgentStatus _status = AgentStatus.Idle;
         private string _lastResponse;
         private string _lastError;
+        private string _currentCmd;  // command currently being executed
         private Thread _thread;
         private volatile bool _cancelRequested;
+        private readonly List<TurnRecord> _history = new List<TurnRecord>();
 
-        // separate JW instances: _jw for main-thread POST calls (Start/Stop),
-        // _statusJw for listener-thread GET calls (Status) -- avoids race conditions
         private readonly TimberbotJw _jw = new TimberbotJw(1024);
-        private readonly TimberbotJw _statusJw = new TimberbotJw(1024);
+        private readonly TimberbotJw _statusJw = new TimberbotJw(4096);
 
         public string Start(string binary, int turns, string model, int interval, string prompt, int timeout)
         {
@@ -65,7 +76,9 @@ namespace Timberbot
             _currentTurn = 0;
             _lastResponse = null;
             _lastError = null;
+            _currentCmd = null;
             _cancelRequested = false;
+            _history.Clear();
             _status = AgentStatus.GatheringState;
 
             _thread = new Thread(AgentLoop) { IsBackground = true, Name = "Timberbot-Agent" };
@@ -92,14 +105,38 @@ namespace Timberbot
 
         public string Status()
         {
-            return _statusJw.Reset().OpenObj()
+            var jw = _statusJw.Reset().OpenObj()
                 .Prop("status", _status.ToString().ToLowerInvariant())
                 .Prop("turn", _currentTurn)
                 .Prop("totalTurns", _totalTurns)
                 .Prop("binary", _binary ?? "")
-                .Prop("lastResponse", JsonEscape(_lastResponse))
-                .Prop("lastError", JsonEscape(_lastError))
-                .CloseObj().ToString();
+                .Prop("model", _model ?? "")
+                .Prop("currentCmd", JsonEscape(_currentCmd))
+                .Prop("lastError", JsonEscape(_lastError));
+
+            // turn history array
+            jw.Arr("history");
+            // show last 10 turns
+            int start = _history.Count > 10 ? _history.Count - 10 : 0;
+            for (int i = start; i < _history.Count; i++)
+            {
+                var rec = _history[i];
+                jw.OpenObj()
+                    .Prop("turn", rec.Turn)
+                    .Prop("ok", rec.Ok)
+                    .Prop("failed", rec.Failed)
+                    .Prop("seconds", (float)rec.Seconds, "F1");
+                jw.Arr("commands");
+                foreach (var cmd in rec.Commands)
+                    jw.Str(JsonEscape(cmd));
+                jw.CloseArr();
+                if (rec.Error != null)
+                    jw.Prop("error", JsonEscape(rec.Error));
+                jw.CloseObj();
+            }
+            jw.CloseArr();
+
+            return jw.CloseObj().ToString();
         }
 
         private static string JsonEscape(string s)
@@ -120,14 +157,21 @@ namespace Timberbot
                     if (_cancelRequested) break;
 
                     _currentTurn = turn;
+                    _currentCmd = null;
                     TimberbotLog.Info($"agent.cycle turn={turn}/{_totalTurns}");
+                    var turnStart = System.Diagnostics.Stopwatch.StartNew();
+                    var rec = new TurnRecord { Turn = turn };
 
                     // 1. Get brain state (TOON format)
                     _status = AgentStatus.GatheringState;
+                    _currentCmd = "brain";
                     var (brainOk, brainOut) = RunProcess(_timberbotCmd, "brain", null, _processTimeoutSeconds);
                     if (!brainOk)
                     {
                         _lastError = "brain failed: " + brainOut;
+                        rec.Error = _lastError;
+                        rec.Seconds = turnStart.Elapsed.TotalSeconds;
+                        _history.Add(rec);
                         TimberbotLog.Info($"ERROR agent.brain.fail turn={turn}: {brainOut}");
                         _status = AgentStatus.Error;
                         return;
@@ -138,6 +182,7 @@ namespace Timberbot
 
                     // 2. Spawn binary with state on stdin
                     _status = AgentStatus.Thinking;
+                    _currentCmd = "thinking...";
                     var message = "Current game state:\n\n" + brainOut +
                         "\n\nRespond with timberbot.py commands, one per line. " +
                         "Example: place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2\n" +
@@ -150,8 +195,10 @@ namespace Timberbot
                     if (!thinkOk)
                     {
                         _lastError = "binary failed: " + response;
+                        rec.Error = _lastError;
+                        rec.Seconds = turnStart.Elapsed.TotalSeconds;
+                        _history.Add(rec);
                         TimberbotLog.Info($"ERROR agent.think.fail turn={turn}: {response}");
-                        // non-fatal: log and continue to next turn
                         _lastResponse = response;
                         if (turn < _totalTurns && !_cancelRequested)
                             Thread.Sleep(_intervalSeconds * 1000);
@@ -165,7 +212,6 @@ namespace Timberbot
                     // 3. Parse + execute commands
                     _status = AgentStatus.Executing;
                     var lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                    int executed = 0;
                     foreach (var rawLine in lines)
                     {
                         if (_cancelRequested) break;
@@ -175,20 +221,30 @@ namespace Timberbot
                         if (line.StartsWith("#") || line.StartsWith("//")) continue;
                         if (line.Equals("NONE", StringComparison.OrdinalIgnoreCase)) continue;
 
-                        // strip leading "timberbot.py " if present
                         var cmd = line;
                         if (cmd.StartsWith("timberbot.py "))
                             cmd = cmd.Substring("timberbot.py ".Length);
 
+                        _currentCmd = cmd;
                         TimberbotLog.Info($"agent.exec turn={turn} cmd={cmd}");
                         var (execOk, execOut) = RunProcess(_timberbotCmd, cmd, null, _processTimeoutSeconds);
-                        if (!execOk)
-                            TimberbotLog.Info($"ERROR agent.exec.fail turn={turn} cmd={cmd}: {execOut}");
-                        else
+                        if (execOk)
+                        {
+                            rec.Commands.Add("ok: " + cmd);
+                            rec.Ok++;
                             TimberbotLog.Info($"agent.exec.ok turn={turn} cmd={cmd}");
-                        executed++;
+                        }
+                        else
+                        {
+                            rec.Commands.Add("FAIL: " + cmd);
+                            rec.Failed++;
+                            TimberbotLog.Info($"ERROR agent.exec.fail turn={turn} cmd={cmd}: {execOut}");
+                        }
                     }
-                    TimberbotLog.Info($"agent.cycle.done turn={turn} executed={executed}");
+                    rec.Seconds = turnStart.Elapsed.TotalSeconds;
+                    _history.Add(rec);
+                    _currentCmd = null;
+                    TimberbotLog.Info($"agent.cycle.done turn={turn} ok={rec.Ok} fail={rec.Failed} {rec.Seconds:F1}s");
 
                     // delay between cycles (skip after last turn)
                     if (turn < _totalTurns && !_cancelRequested)
@@ -330,18 +386,34 @@ namespace Timberbot
             if (!string.IsNullOrEmpty(overridePrompt))
                 return overridePrompt;
 
-            // try loading from mod folder
-            var modDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "Timberborn", "Mods", "Timberbot");
-            var promptPath = Path.Combine(modDir, "agent-prompt.md");
-            if (File.Exists(promptPath))
+            // search for the timberbot gameplay skill (full game reference)
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var candidates = new[]
             {
-                try { return File.ReadAllText(promptPath); }
-                catch { }
+                // primary: the timberbot gameplay skill
+                Path.Combine(userProfile, ".claude", "skills", "timberbot", "SKILL.md"),
+                // fallback: repo docs
+                @"C:\code\timberborn\docs\timberbot.md",
+                // fallback: agent-prompt.md in mod folder
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Timberborn", "Mods", "Timberbot", "agent-prompt.md"),
+            };
+            foreach (var path in candidates)
+            {
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        var content = File.ReadAllText(path);
+                        TimberbotLog.Info($"agent.prompt loaded from {path} ({content.Length} bytes)");
+                        return content;
+                    }
+                    catch { }
+                }
             }
 
             // fallback minimal prompt
+            TimberbotLog.Info("agent.prompt using fallback (no skill file found)");
             return "You are playing Timberborn via the timberbot.py CLI. " +
                 "Respond with timberbot.py commands, one per line. " +
                 "Available commands: summary, buildings, beavers, trees, crops, prefabs, " +
