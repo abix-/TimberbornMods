@@ -1491,9 +1491,14 @@ def _launch(args):
     except Exception:
         pass
 
-    # launch via Steam protocol (no CLI args = no Steam dialog)
+    # launch via Steam -- try direct exe first, fall back to protocol handler
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
-    os.startfile("steam://rungameid/1062090")
+    steam_exe = r"C:\Games\Steam\steam.exe"
+    if os.path.exists(steam_exe):
+        subprocess.Popen([steam_exe, "-applaunch", "1062090"])
+    else:
+        # fall back to protocol handler
+        subprocess.Popen(["cmd.exe", "/c", "start", "steam://rungameid/1062090"], shell=False)
 
     # wait for Timberborn.exe to appear (confirms Steam actually launched it)
     print(f"  {_DIM}waiting for Timberborn.exe to start...{_RST}")
