@@ -210,7 +210,8 @@ namespace Timberbot
         // Building role classification for the summary endpoint. Maps building names
         // to categories (water, food, housing, etc.) so the AI gets role counts.
         private static readonly Dictionary<string, string[]> _roleMap = new Dictionary<string, string[]> {
-            {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
+            {"water", new[]{"Pump","Tank","FluidDump"}},
+            {"aquifer", new[]{"AquiferDrill"}},
             {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
             {"housing", new[]{"Lodge","MiniLodge","DoubleLodge","TripleLodge","Rowhouse","Barrack"}},
             {"wood", new[]{"Lumberjack","LumberMill","IndustrialLumberMill","Forester"}},
