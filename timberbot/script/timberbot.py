@@ -62,19 +62,10 @@ def _save_brain_file(brain, mdir=None):
         toons.dump(brain, f)
 
 
-def _update_brain_maps(region, x1, y1, x2, y2, fname, mdir=None):
-    """Update the maps index in brain.toon when a map is saved."""
+def _update_brain_locations(locations, mdir=None):
+    """Update the locations dict in brain.toon."""
     brain = _load_brain_file(mdir)
-    maps = brain.get("maps", {})
-    entry = maps.get(region, {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "files": []})
-    entry["x1"] = x1
-    entry["y1"] = y1
-    entry["x2"] = x2
-    entry["y2"] = y2
-    if fname not in entry["files"]:
-        entry["files"].append(fname)
-    maps[region] = entry
-    brain["maps"] = maps
+    brain["locations"] = locations
     _save_brain_file(brain, mdir)
 
 
@@ -457,8 +448,8 @@ class Timberbot:
         low = name.lower()
         return [i for i in items if low in i.get("name", "").lower()]
 
-    def map(self, x1, y1, x2, y2, name=None):
-        """Colored ASCII map with terrain height shading, buildings, water, trees. name: save to memory/."""
+    def map(self, x1, y1, x2, y2):
+        """Colored ASCII map with terrain height shading, buildings, water, trees."""
         R = "\033[0m"
         DIM = "\033[2m"
         RED = "\033[31m"
@@ -663,25 +654,14 @@ class Timberbot:
 
         # print directly to terminal instead of returning as JSON
         print("\n".join(lines))
-        result = {"rendered": True, "tiles": len(tiles)}
-        if name:
-            os.makedirs(_MEMORY_DIR, exist_ok=True)
-            fname = f"map-{name}-{x1}x{y1}y-{x2}x{y2}y.txt"
-            fpath = os.path.join(_MEMORY_DIR, fname)
-            with open(fpath, "w") as f:
-                f.write("\n".join(lines) + "\n")
-            # update brain.toon maps index
-            _update_brain_maps(name, x1, y1, x2, y2, fname)
-            print(f"saved: {fpath}", file=sys.stderr)
-            result["saved"] = fpath
-        return result
+        return {"rendered": True, "tiles": len(tiles)}
 
     # ------------------------------------------------------------------
     # Spatial memory
     # ------------------------------------------------------------------
 
     def brain(self, goal=None):
-        """Live summary + persistent goal/tasks/maps. Summary is never persisted (always stale)."""
+        """Live summary + persistent goal/tasks/locations."""
         global _MEMORY_DIR
 
         summary = self._get_json("/api/summary")
@@ -693,7 +673,7 @@ class Timberbot:
         # load persistent data
         existing_goal = ""
         tasks = []
-        maps = {}
+        locations = {}
         bpath = os.path.join(_MEMORY_DIR, "brain.toon")
         if os.path.exists(bpath):
             try:
@@ -702,37 +682,71 @@ class Timberbot:
                     old = _t.load(f)
                     existing_goal = old.get("goal", "")
                     tasks = old.get("tasks", [])
-                    maps = old.get("maps", {})
+                    locations = old.get("locations", {})
+                    # migrate old maps key if present
+                    if not locations and "maps" in old:
+                        locations = {}
             except Exception:
                 pass
 
         # goal: new param overwrites, otherwise keep existing
         current_goal = goal if goal else existing_goal
 
-        # persist brain.toon with consistent schema
+        # auto-seed locations from live data on first run
+        if not locations:
+            districts = summary.get("districts", []) if isinstance(summary, dict) else []
+            dc = next((d.get("dc") for d in districts if d.get("dc")), None)
+            if dc:
+                locations["dc"] = {"x": dc["x"], "y": dc["y"], "z": dc.get("z", 0)}
+            tree_clusters = summary.get("treeClusters", []) if isinstance(summary, dict) else []
+            for i, tc in enumerate(tree_clusters[:3]):
+                label = "forest" if i == 0 else f"forest-{i+1}"
+                locations[label] = {"x": tc["x"], "y": tc["y"], "z": tc.get("z", 0), "species": list(tc.get("species", {}).keys())}
+            food_clusters = summary.get("foodClusters", []) if isinstance(summary, dict) else []
+            for i, fc in enumerate(food_clusters[:3]):
+                label = "berries" if i == 0 else f"berries-{i+1}"
+                locations[label] = {"x": fc["x"], "y": fc["y"], "z": fc.get("z", 0), "species": list(fc.get("species", {}).keys())}
+
+        # persist brain.toon
         import toons as _t
         os.makedirs(_MEMORY_DIR, exist_ok=True)
         from datetime import datetime
-        brain_data = {"timestamp": datetime.now().isoformat(), "goal": current_goal, "tasks": tasks, "maps": maps}
+        brain_data = {"timestamp": datetime.now().isoformat(), "goal": current_goal, "tasks": tasks, "locations": locations}
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
-        # auto-map DC area on first run
-        districts = summary.get("districts", []) if isinstance(summary, dict) else []
-        dc = next((d.get("dc") for d in districts if d.get("dc")), None)
-        if dc and not maps:
-            self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
-            with open(bpath) as f:
-                maps = _t.load(f).get("maps", {})
+        return {"summary": summary, "goal": current_goal, "tasks": tasks, "locations": locations}
 
-        return {"summary": summary, "goal": current_goal, "tasks": tasks, "maps": maps, "memoryDir": _MEMORY_DIR}
-
-    def list_maps(self):
-        """List saved map files in memory/."""
+    def set_location(self, name, x, y, z=0, note=""):
+        """Save a named location. Persists across sessions."""
         self._ensure_settlement_dir()
-        if not os.path.isdir(_MEMORY_DIR):
-            return []
-        return sorted(f for f in os.listdir(_MEMORY_DIR) if f.startswith("map-") and f.endswith(".txt"))
+        brain = _load_brain_file()
+        locations = brain.get("locations", {})
+        loc = {"x": int(x), "y": int(y), "z": int(z)}
+        if note:
+            loc["note"] = note
+        locations[name] = loc
+        brain["locations"] = locations
+        _save_brain_file(brain)
+        return {"saved": name, "x": loc["x"], "y": loc["y"], "z": loc["z"]}
+
+    def remove_location(self, name):
+        """Remove a named location."""
+        self._ensure_settlement_dir()
+        brain = _load_brain_file()
+        locations = brain.get("locations", {})
+        if name not in locations:
+            return {"error": "not_found", "name": name, "available": list(locations.keys())}
+        del locations[name]
+        brain["locations"] = locations
+        _save_brain_file(brain)
+        return {"removed": name}
+
+    def list_locations(self):
+        """List all saved locations."""
+        self._ensure_settlement_dir()
+        brain = _load_brain_file()
+        return brain.get("locations", {})
 
     def clear_brain(self):
         """Wipe memory for current settlement. Run brain again to start fresh."""
