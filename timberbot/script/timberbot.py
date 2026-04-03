@@ -1744,6 +1744,13 @@ def main():
             print(f"usage: {_format_usage(method_name, method).strip()}", file=sys.stderr)
             sys.exit(1)
 
+    bad = [k for k in kwargs if k not in params]
+    if bad:
+        print(f"error: unknown parameter{'s' if len(bad) > 1 else ''} {', '.join(bad)} for '{method_name}'", file=sys.stderr)
+        print(f"valid parameters: {', '.join(params) if params else '(none)'}", file=sys.stderr)
+        print(f"usage: {_format_usage(method_name, method).strip()}", file=sys.stderr)
+        sys.exit(1)
+
     try:
         result = method(**kwargs)
     except TimberbotError as e:

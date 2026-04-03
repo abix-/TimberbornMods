@@ -284,7 +284,7 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(id);
             if (ec == null)
-                return Jw.Error("not_found", ("id", id));
+                return Jw.Error("not_found: no entity with this id, ids are ephemeral so re-query buildings or crops", ("id", id));
 
             var validationError = validateError?.Invoke(ec);
             if (validationError != null)
@@ -555,7 +555,7 @@ namespace Timberbot
             result.AstarMs = astarSw.Elapsed.TotalMilliseconds;
             if (path == null)
             {
-                result.Errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {connectorCount} connectors in graph");
+                result.Errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}). {connectorCount} connectors in graph");
                 return result;
             }
 
@@ -2172,24 +2172,12 @@ namespace Timberbot
         //    internal coordinate system uses a different origin per orientation.
         //    We translate so the caller never has to think about rotation math.
         // 3. PreviewFactory validation: creates a temporary preview entity and checks
-        //    IsValid() -- this runs the game's own 9 validators (terrain, occupancy,
+        //    IsValid(). This runs the game's own 9 validators (terrain, occupancy,
         //    water buildings, district boundaries, etc.)
         // 4. Only after all checks pass: BlockObjectPlacerService.Place() creates the
         //    real building entity in the game world.
 
-        private static int ParseOrientation(string orient)
-        {
-            if (string.IsNullOrEmpty(orient)) return 0;
-            var lower = orient.Trim().ToLowerInvariant();
-            switch (lower)
-            {
-                case "south": return 0;
-                case "west": return 1;
-                case "north": return 2;
-                case "east": return 3;
-                default: return -1;
-            }
-        }
+        private static int ParseOrientation(string orient) => TimberbotPure.ParseOrientation(orient);
 
         public PlaceBuildingResult PlaceBuilding(string prefabName, int x, int y, int z, string orientationStr)
         {
@@ -2210,7 +2198,7 @@ namespace Timberbot
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
             if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
-                return new PlaceBuildingResult { Error = "not_unlocked", X = x, Y = y, Z = z, Prefab = prefabName, ScienceCost = bs.ScienceCost, CurrentPoints = _scienceService.SciencePoints };
+                return new PlaceBuildingResult { Error = "not_unlocked: use science/unlock first", X = x, Y = y, Z = z, Prefab = prefabName, ScienceCost = bs.ScienceCost, CurrentPoints = _scienceService.SciencePoints };
 
             // Origin correction: user always specifies bottom-left corner (smallest x,y).
             var size = blockObjectSpec.Size;
@@ -2244,7 +2232,7 @@ namespace Timberbot
             });
 
             if (placedId == 0)
-                return new PlaceBuildingResult { Error = "operation_failed", X = x, Y = y, Z = z, Prefab = prefabName };
+                return new PlaceBuildingResult { Error = "operation_failed: placer returned no entity, the game rejected the placement for an unknown reason", X = x, Y = y, Z = z, Prefab = prefabName };
 
             return new PlaceBuildingResult { Id = placedId, Name = placedName, X = x, Y = y, Z = z, Orientation = OrientNames[orientation] };
         }
@@ -2311,22 +2299,22 @@ namespace Timberbot
                         {
                             var bc = block.Coordinates;
                             if (!bv2.FitsInMap(block, false))
-                                return $"out of map at ({bc.x},{bc.y},{bc.z}) -- move placement inside map bounds";
+                                return $"out of map at ({bc.x},{bc.y},{bc.z}). move placement inside map bounds";
                             if (bv2.BlockConflictsWithExistingObject(block))
                             {
                                 string blocker = FindBlockerAt(bc) ?? "unknown";
-                                return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}) -- demolish it or try a different location";
+                                return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}). demolish it or try a different location";
                             }
                             if (bv2.BlockConflictsWithTerrain(block))
-                                return $"terrain conflict at ({bc.x},{bc.y},{bc.z}) -- tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
+                                return $"terrain conflict at ({bc.x},{bc.y},{bc.z}). tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
                             if (bv2.BlockConflictsWithBlockAbove(block))
-                                return $"blocked above at ({bc.x},{bc.y},{bc.z}) -- something occupies the tile above, demolish it or use a lower z";
+                                return $"blocked above at ({bc.x},{bc.y},{bc.z}). something occupies the tile above, demolish it or use a lower z";
                             if (bv2.BlockConflictsWithBlocksBelow(block))
-                                return $"blocked below at ({bc.x},{bc.y},{bc.z}) -- no support underneath, needs solid ground or a platform below";
+                                return $"blocked below at ({bc.x},{bc.y},{bc.z}). no support underneath, needs solid ground or a platform below";
                             if (bv2.ConflictsWithUndergroundBlockObject(block))
-                                return $"underground conflict at ({bc.x},{bc.y},{bc.z}) -- underground object blocks this tile, try adjacent tiles";
+                                return $"underground conflict at ({bc.x},{bc.y},{bc.z}). underground object blocks this tile, try adjacent tiles";
                             if (bv2.UndergroundBlockIsNotUnderground(block))
-                                return $"not underground at ({bc.x},{bc.y},{bc.z}) -- this building must be placed underground";
+                                return $"not underground at ({bc.x},{bc.y},{bc.z}). this building must be placed underground";
                         }
                     z = preview.BlockObject.CoordinatesAtBaseZ.z;
                     return null;
@@ -2342,14 +2330,14 @@ namespace Timberbot
                         if (bv.BlockConflictsWithExistingObject(block))
                         {
                             string blocker = FindBlockerAt(bc) ?? "unknown";
-                            return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}) -- demolish it or try a different location";
+                            return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}). demolish it or try a different location";
                         }
                         if (bv.BlockConflictsWithTerrain(block))
-                            return $"terrain conflict at ({bc.x},{bc.y},{bc.z}) -- tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
+                            return $"terrain conflict at ({bc.x},{bc.y},{bc.z}). tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
                         if (bv.BlockConflictsWithBlocksBelow(block))
-                            return $"blocked below at ({bc.x},{bc.y},{bc.z}) -- no support underneath, needs solid ground or a platform below";
+                            return $"blocked below at ({bc.x},{bc.y},{bc.z}). no support underneath, needs solid ground or a platform below";
                         if (bv.BlockConflictsWithBlockAbove(block))
-                            return $"blocked above at ({bc.x},{bc.y},{bc.z}) -- something occupies the tile above, demolish it or use a lower z";
+                            return $"blocked above at ({bc.x},{bc.y},{bc.z}). something occupies the tile above, demolish it or use a lower z";
                     }
                 }
 

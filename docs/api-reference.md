@@ -22,33 +22,33 @@ All endpoints support two output formats via `?format=` query param or `"format"
 
 ### Error Format
 
-All errors return JSON with an `error` field in `"code: detail"` format:
+All errors return JSON with an `error` field in `"code: detail"` format. Every error is designed to be actionable: it tells you what went wrong, echoes what you sent, and tells you what to do next.
 
 ```json
-{"error": "not_found", "id": 42}
-{"error": "invalid_type: not a floodgate", "id": 42}
-{"error": "invalid_param: speed must be 0-3"}
-{"error": "insufficient_science", "building": "LargePowerWheel", "scienceCost": 60, "currentPoints": 10}
+{"error": "not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", "id": -12345}
+{"error": "invalid_type: not a floodgate. use buildings name:Floodgate to find floodgates", "id": -12345, "name": "LumberjackFlag"}
+{"error": "invalid_param: speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)", "got": 5}
+{"error": "insufficient_science: not enough science points to unlock", "building": "LargePowerWheel", "scienceCost": 60, "currentPoints": 10}
+{"error": "not_found: source district does not exist", "from": "Bad Name", "districts": ["District 1", "District 2"]}
+{"error": "not_found: recipe does not exist for this building", "recipeId": "Bad", "available": ["PlankRecipe", "TreatedPlankRecipe"]}
 ```
 
 The error string starts with a machine-readable code. Parse the prefix before `:` to switch on it. Everything after `:` is human context.
 
-| Code prefix | Meaning |
-|------|---------|
-| `not_found` | Entity, building, or district does not exist |
-| `invalid_prefab` | Prefab name does not exist. Use /api/prefabs to list valid names |
-| `invalid_type` | Entity exists but is the wrong type for this operation |
-| `invalid_param` | Parameter value is out of range or invalid |
-| `not_unlocked` | Building requires science unlock first |
-| `insufficient_science` | Not enough science points |
-| `no_population` | No beavers available to migrate |
-| `disabled` | Feature disabled in settings.json |
-| `unknown_endpoint` | Route not found |
-| `invalid_body` | Malformed JSON request body |
-| `operation_failed` | Game service threw an exception |
-| `internal_error` | Unhandled server error |
-
-Context fields (`id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.) vary by endpoint.
+| Code prefix | Meaning | Extra fields |
+|------|---------|-------------|
+| `not_found` | Entity, building, or district does not exist | `id`, `districts`, `available`, `building` |
+| `invalid_prefab` | Prefab name does not exist. Suggests similar names | `prefab` |
+| `invalid_type` | Entity exists but wrong type for this operation | `id`, `name` |
+| `invalid_param` | Parameter value out of range or invalid | `got` |
+| `not_unlocked` | Building requires science unlock first | `prefab`, `scienceCost`, `currentPoints` |
+| `insufficient_science` | Not enough science points | `building`, `scienceCost`, `currentPoints` |
+| `no_population` | No beavers available to migrate | `from`, `available`, `requested` |
+| `disabled` | Feature disabled in settings.json | |
+| `unknown_endpoint` | Route not found | `get_endpoints`, `post_endpoints` |
+| `invalid_body` | Malformed JSON request body | |
+| `operation_failed` | Game service threw an exception | varies |
+| `internal_error` | Unhandled server error | |
 
 ### Python CLI
 
@@ -379,7 +379,7 @@ Set game speed.
 #### Response (error)
 
 ```json
-{"error": "invalid_param: speed must be 0-3"}
+{"error": "invalid_param: speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)", "got": 5}
 ```
 
 ---
@@ -424,7 +424,7 @@ Set when beavers stop working.
 #### Response (error)
 
 ```json
-{"error": "invalid_param: endHours must be 1-24"}
+{"error": "invalid_param: endHours must be 1-24 (hour when work stops, default 18)", "got": 30}
 ```
 
 ---
@@ -625,7 +625,7 @@ Set import/export for a specific good in a district.
 #### Response (error)
 
 ```json
-{"error": "not_found", "district": "Bad Name"}
+{"error": "not_found: district does not exist", "district": "Bad Name", "districts": ["District 1", "District 2"]}
 ```
 
 ---
@@ -653,11 +653,11 @@ Move adult beavers between districts.
 #### Response (error)
 
 ```json
-{"error": "not_found", "from": "Bad Name"}
+{"error": "not_found: source district does not exist", "from": "Bad Name", "districts": ["District 1", "District 2"]}
 ```
 
 ```json
-{"error": "no_population", "from": "District 1", "available": 0}
+{"error": "no_population: no beavers available to migrate in this district", "from": "District 1", "available": 0, "requested": 3}
 ```
 
 ---
@@ -1135,16 +1135,16 @@ Unlock a building using science points. Matches the exact UI flow (cost deductio
 {"building": "Engine.IronTeeth", "unlocked": true, "remaining": 450, "note": "already unlocked"}
 ```
 
-#### Response (error -- insufficient points)
+#### Response (error, insufficient points)
 
 ```json
-{"error": "insufficient_science", "building": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
+{"error": "insufficient_science: not enough science points to unlock", "building": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
 ```
 
-#### Response (error -- not found)
+#### Response (error, not found)
 
 ```json
-{"error": "not_found", "building": "BadName"}
+{"error": "not_found: building not in toolbar. use prefabs to list all building names", "building": "BadName"}
 ```
 
 ---
@@ -1173,11 +1173,11 @@ Pause or unpause a building.
 #### Response (error)
 
 ```json
-{"error": "not_found", "id": 99999}
+{"error": "not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", "id": 99999}
 ```
 
 ```json
-{"error": "invalid_type: not pausable", "id": 12340}
+{"error": "invalid_type: this building cannot be paused", "id": 12340, "name": "Levee"}
 ```
 
 ---
@@ -1224,7 +1224,7 @@ Remove a building from the world.
 #### Response (error)
 
 ```json
-{"error": "not_found", "id": 99999}
+{"error": "not_found: no entity with this id, ids are ephemeral so re-query buildings or crops", "id": 99999}
 ```
 
 ---
@@ -1250,7 +1250,7 @@ Remove a planted crop entity from the world.
 #### Response (error)
 
 ```json
-{"error": "not_found", "id": 99999}
+{"error": "not_found: no entity with this id, ids are ephemeral so re-query buildings or crops", "id": 99999}
 ```
 
 ---
@@ -1283,15 +1283,15 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 #### Response (error)
 
 ```json
-{"error": "invalid_prefab: 'BadName' is not a valid prefab name. Use prefabs to list valid names", "x": 120, "y": 130, "z": 2}
+{"error": "invalid_prefab: 'BadName' not found. Similar: LumberjackFlag.IronTeeth, LumberjackFlag.Folktails", "prefab": "BadName"}
 ```
 
 ```json
-{"error": "not_unlocked", "x": 120, "y": 130, "z": 2, "prefab": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
+{"error": "not_unlocked: use science/unlock first", "x": 120, "y": 130, "z": 2, "prefab": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
 ```
 
 ```json
-{"error": "occupied by Path at (120,130,2)", "x": 120, "y": 130, "z": 2, "prefab": "LumberjackFlag.IronTeeth"}
+{"error": "occupied by Path at (120,130,2). demolish it or try a different location", "x": 120, "y": 130, "z": 2, "prefab": "LumberjackFlag.IronTeeth"}
 ```
 
 ---
@@ -1352,7 +1352,7 @@ Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non
 #### Response (error)
 
 ```json
-{"error": "invalid_prefab: 'BadName' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", "prefab": "BadName"}
+{"error": "invalid_prefab: 'BadName' not found. Similar: LumberjackFlag.IronTeeth, LumberjackFlag.Folktails", "prefab": "BadName"}
 ```
 
 ---
@@ -1379,7 +1379,7 @@ Set floodgate water gate height. Value is clamped to max.
 #### Response (error)
 
 ```json
-{"error": "invalid_type: not a floodgate", "id": 12340}
+{"error": "invalid_type: not a floodgate. use buildings name:Floodgate to find floodgates", "id": 12340, "name": "LumberjackFlag"}
 ```
 
 ---
@@ -1411,7 +1411,7 @@ Set construction or workplace priority.
 #### Response (error)
 
 ```json
-{"error": "invalid_param: use VeryLow, Normal, VeryHigh", "value": "Bad"}
+{"error": "invalid_param: priority must be one of: VeryLow, Low, Normal, High, VeryHigh", "got": "Bad"}
 ```
 
 ---
@@ -1438,7 +1438,7 @@ Set desired worker count for a workplace.
 #### Response (error)
 
 ```json
-{"error": "invalid_type: not a workplace", "id": 12340}
+{"error": "invalid_type: not a workplace. only staffed buildings (lumberjacks, farms, etc) have workers", "id": 12340, "name": "Path"}
 ```
 
 ---
@@ -1465,7 +1465,7 @@ Prioritize hauling deliveries to a building.
 #### Response (error)
 
 ```json
-{"error": "invalid_type: no haul priority", "id": 12340}
+{"error": "invalid_type: no haul priority. only buildings with inventories support haul priority", "id": 12340, "name": "Path"}
 ```
 
 ---
@@ -1493,10 +1493,10 @@ Set which recipe a manufactory produces.
 {"id": 12340, "name": "LumberMill", "recipe": "none"}
 ```
 
-#### Response (error -- recipe not found)
+#### Response (error, recipe not found)
 
 ```json
-{"error": "not_found", "recipeId": "BadRecipe", "available": ["PlankRecipe", "TreatedPlankRecipe"]}
+{"error": "not_found: recipe does not exist for this building", "recipeId": "BadRecipe", "available": ["PlankRecipe", "TreatedPlankRecipe"]}
 ```
 
 ---
@@ -1527,11 +1527,11 @@ Prioritize planting or harvesting for a farmhouse.
 #### Response (error)
 
 ```json
-{"error": "invalid_type: not a farmhouse", "id": 12340}
+{"error": "invalid_type: not a farmhouse. use buildings name:FarmHouse to find farmhouses", "id": 12340, "name": "LumberjackFlag"}
 ```
 
 ```json
-{"error": "invalid_param: use planting or harvesting", "action": "bad"}
+{"error": "invalid_param: action must be 'planting' or 'harvesting'", "got": "bad"}
 ```
 
 ---
@@ -1559,10 +1559,10 @@ Prioritize which tree/resource type a forester plants.
 {"id": 12340, "name": "Forester", "prioritized": "none"}
 ```
 
-#### Response (error -- not found)
+#### Response (error, not found)
 
 ```json
-{"error": "not_found", "plantableName": "BadTree", "available": ["Pine", "Birch", "Oak"]}
+{"error": "not_found: plantable not in this building's list", "plantableName": "BadTree", "available": ["Pine", "Birch", "Oak"]}
 ```
 
 ---
@@ -1610,7 +1610,7 @@ Set which good a single-good stockpile accepts.
 #### Response (error)
 
 ```json
-{"error": "invalid_type: not a single-good stockpile", "id": 12340}
+{"error": "invalid_type: not a single-good stockpile. only SmallWarehouse/LargeWarehouse have good filters", "id": 12340, "name": "LumberMill"}
 ```
 
 ---
@@ -1778,7 +1778,7 @@ Route a path from point A to point B using A* pathfinding over a 3D surface grap
 #### Response (no route)
 
 ```json
-{"placed": {"paths": 0}, "skipped": 0, "connectorEdgesInGrid": 0, "errors": [{"error": "A* found no route from (0,0) to (255,255) -- 0 connectors in graph"}]}
+{"placed": {"paths": 0}, "skipped": 0, "connectorEdgesInGrid": 0, "errors": [{"error": "A* found no route from (0,0) to (255,255). 0 connectors in graph"}]}
 ```
 
 #### Response fields

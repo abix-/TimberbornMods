@@ -286,7 +286,7 @@ namespace Timberbot
                     }
                     catch
                     {
-                        Respond(ctx, 400, _jw.Error("invalid_body"));
+                        Respond(ctx, 400, _jw.Error("invalid_body: POST body must be valid JSON, e.g. {\"id\":1}"));
                         continue;
                     }
                 }
@@ -393,12 +393,23 @@ namespace Timberbot
 
         private object UnknownEndpoint()
         {
-            return _jw.Error("unknown_endpoint", ("endpoints", new[] {
-                "GET /api/ping", "GET /api/summary",
-                "GET /api/buildings", "GET /api/trees",
-                "GET /api/beavers", "GET /api/resources", "GET /api/districts", "GET /api/weather",
-                "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power", "GET /api/tiles",
-                "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"
+            return _jw.Error("unknown_endpoint: check spelling and use the correct HTTP method", ("get_endpoints", new[] {
+                "/api/ping", "/api/summary", "/api/alerts", "/api/buildings", "/api/trees", "/api/crops",
+                "/api/gatherables", "/api/beavers", "/api/resources", "/api/population", "/api/districts",
+                "/api/weather", "/api/time", "/api/speed", "/api/prefabs", "/api/power", "/api/tiles",
+                "/api/distribution", "/api/science", "/api/wellbeing", "/api/notifications", "/api/workhours",
+                "/api/tree_clusters", "/api/food_clusters", "/api/settlement", "/api/webhooks", "/api/agent/status"
+            }), ("post_endpoints", new[] {
+                "/api/speed", "/api/building/place", "/api/building/demolish", "/api/building/pause",
+                "/api/building/clutch", "/api/building/floodgate", "/api/building/priority",
+                "/api/building/hauling", "/api/building/recipe", "/api/building/farmhouse",
+                "/api/building/plantable", "/api/building/workers", "/api/building/range",
+                "/api/crop/demolish", "/api/path/place", "/api/placement/find",
+                "/api/planting/mark", "/api/planting/find", "/api/planting/clear",
+                "/api/cutting/area", "/api/stockpile/capacity", "/api/stockpile/good",
+                "/api/science/unlock", "/api/distribution", "/api/workhours",
+                "/api/district/migrate", "/api/webhooks", "/api/webhooks/delete",
+                "/api/agent/start", "/api/agent/stop"
             }));
         }
 

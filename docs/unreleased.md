@@ -1,81 +1,41 @@
-## Timberbot Panel
+## Error messages
 
-The mod now has a full in-game control surface for the built-in agent.
+Every API error response is now rich and actionable. The AI gets enough context to correct the next call without guessing.
 
-**Corner widget**
-- draggable bottom-right `Timberbot API` widget
-- `Start`, `Stop`, and `Settings` buttons always available
-- minimize support so the widget can collapse to a smaller status bar
-- widget position persists in `settings.json`
+**Write endpoints (TimberbotWrite.cs)**
+- [fix] `not_found` errors explain that ids are ephemeral and tell the caller to re-query buildings
+- [fix] `invalid_type` errors include the building name and explain which building types support the operation
+- [fix] `invalid_param` errors echo the bad value and list all valid options
+- [fix] `no_population` includes requested vs available count
+- [fix] `insufficient_science` includes cost and current points with a human-readable message
+- [fix] district errors (`not_found`, `SetDistribution`) list all available district names
+- [fix] recipe and plantable errors list all available options for that building
 
-**Settings modal**
-- centered `Timberbot API - Settings` modal
-- `Agent` tab for day-to-day launch settings
-- `Startup` tab for advanced/load-time settings
-- all settings persist to `settings.json`
-- tooltips on every settings row
+**Placement (TimberbotPlacement.cs)**
+- [fix] placement validation errors name the blocking object (e.g. "occupied by Lumberjack") instead of generic "occupied"
+- [fix] every validation error includes a suggestion (e.g. "demolish it or try a different location")
+- [fix] `not_unlocked` tells the caller to use science/unlock first
+- [internal] extracted `FindBlockerAt()` helper for DRY blocker lookup across buildings, natural resources, and tracked blockers
 
-**Agent tab**
-- `Binary`, `Model`, `Effort`, and `Goal`
-- text fields with preset pickers instead of hard-locked dropdowns
-- Claude and Codex model/effort presets
-- `custom` binary support with a freeform command template
-- `Start` button in the tab that launches and closes the modal
+**HTTP server (TimberbotHttpServer.cs)**
+- [fix] `invalid_body` explains the expected format
+- [fix] `unknown_endpoint` now lists all GET and POST endpoints (was only 13, now 55+)
 
-**Startup tab**
-- `debugEndpointEnabled`
-- `httpPort`
-- `webhooksEnabled`
-- `webhookBatchMs`
-- `webhookCircuitBreaker`
-- `webhookMaxPendingEvents`
-- `writeBudgetMs`
-- `terminal`
-- `pythonCommand`
-
-The `Startup` tab warns that Timberborn must be restarted or the save reloaded after changing those settings.
+**Python client (timberbot.py)**
+- [fix] unknown CLI parameters now show the bad param, valid params, and full usage line
+- [fix] toon error output shows the full response dict instead of just the error string
 
 ## Agent
 
-- [feature] the built-in agent is an interactive Claude/Codex/custom-binary session, not an autonomous loop
-- [feature] Timberbot now generates a merged per-launch `agent-instructions.md` from `skill/timberbot.md` plus live colony state and launches Claude/Codex against that file
-- [feature] Codex launch now uses the correct Codex CLI flags instead of Claude-style prompt-file arguments
-- [feature] custom CLI launch templates support placeholders like `{skill}`, `{instructions_file}`, `{prompt}`, `{prompt_file}`, `{model}`, and `{effort}`
-- [feature] terminal launch supports templates with `{cwd}` and `{command}`
-- [feature] `agent_status` and `agent_stop` CLI commands
-- [feature] `top` dashboard shows recent agent turns
-- [feature] shipped `skill/timberbot.md` runtime prompt and Claude Code hooks (`pretool-bash.py`, `session-start.py`)
-- [fix] Windows brain gathering now runs through Python instead of trying to execute `timberbot.py` directly
-- [fix] Windows terminal-wrapped Claude/Codex launches now use a PowerShell wrapper so multiline startup prompts are not mangled
-- [fix] terminal presets now save the real command template instead of the display label (for example `wezterm start --cwd {cwd} --` instead of `WezTerm`)
-- [fix] the shipped runtime launch prompt in `skill/timberbot.md` is much smaller while keeping the critical operating rules
-- [fix] webhook buffering now has a per-webhook cap via `webhookMaxPendingEvents`, dropping the oldest queued payloads when full
+- [removed] shipped Claude Code hooks (`pretool-bash.py`, `session-start.py`) deleted. they blocked parallel tool calls and are no longer needed
 
-## macOS
+## Panel defaults
 
-- [feature] macOS path handling for the mod folder, settings, and helper scripts
-- [feature] macOS Python 3 auto-detection for `timberbot.py brain`
-- [feature] when `terminal` is blank on macOS, Timberbot opens the built-in agent in Terminal.app by default
-- [feature] macOS startup settings now include `pythonCommand` to override the detected Python launcher
-- [feature] `timberbot.py launch` on macOS prepares `autoload.json` and then expects the player to open Timberborn manually
-- [docs] added a dedicated macOS testing checklist for Steam Workshop testers
+- [fix] model and effort defaults extracted to named constants (`DefaultClaudeModel`, `DefaultCodexModel`, etc.) instead of scattered string literals
 
-## Python client (timberbot.py)
+## Docs
 
-- [feature] `brain` replaced maps with locations (`set_location`, `remove_location`, `list_locations`)
-- [feature] brain output compacted to toon format (120 lines to 46)
-- [breaking] `map` command no longer accepts `name` parameter (no longer saves to memory)
-- [internal] shared path helpers (`_mod_dir`, `_settings_path`, `_saves_dir`)
-
-## Gameplay
-
-- [feature] aquifer drills have their own building category so they no longer clutter the water tab
-- [feature] alerts now reflect actual building StatusAlerts instead of hardcoded conditions
-- [feature] misspell a prefab name and the API suggests the closest match
-- [fix] water-edge buildings (pumps, water dumps) now place at the correct height (CoordinatesAtBaseZ)
-- [fix] placement validation matches player behavior: service validation + block checks, skip MatterBelow
-- [fix] BaseZ offset applied correctly for buildings with non-zero base (e.g. DeepWaterPump)
-- [fix] enriched placement errors with terrain conflicts, occupancy, coordinates instead of generic "placement invalid"
-- [fix] game speed display works again (was always showing 0)
-- [fix] Windows Steam launch is more reliable -- uses direct applaunch instead of `steam://` protocol
-- [internal] shared `TimberbotPaths` helper for mod directory, settings path
+- [docs] "Timberbot AI" pages renamed to "Timberbot Guide"
+- [docs] getting-started page updated with setup instructions
+- [docs] Steam Workshop description rewritten and trimmed to fit the character limit
+- [docs] Workshop description mentions Python prerequisite
