@@ -1441,6 +1441,7 @@ def _start_agent(args):
     """Start AI agent loop via the mod's HTTP API.
 
     Usage: timberbot.py start binary:claude [turns:5] [model:MODEL] [interval:10] [timeout:120] [goal:"survive and grow"]
+                              binary:custom command:"aider --system-prompt-file {skill} {prompt}"
     """
     binary = "claude"
     turns = 5
@@ -1448,6 +1449,7 @@ def _start_agent(args):
     interval = 10
     proc_timeout = 120
     goal = None
+    command = None
 
     for a in args:
         if ":" in a:
@@ -1467,6 +1469,8 @@ def _start_agent(args):
                 except ValueError: pass
             elif key == "goal":
                 goal = val
+            elif key == "command":
+                command = val
 
     bot = Timberbot(json_mode=True)
     if not bot.ping():
@@ -1478,6 +1482,8 @@ def _start_agent(args):
         data["model"] = model
     if goal:
         data["goal"] = goal
+    if command:
+        data["command"] = command
 
     try:
         result = bot._post("/api/agent/start", data)
@@ -1485,7 +1491,10 @@ def _start_agent(args):
         print(f"  {_RED}error: {e.error}{_RST}", file=sys.stderr)
         sys.exit(1)
 
+    label = command or binary
     print(f"  {_BGRN}started{_RST} binary={binary} turns={turns} interval={interval}s")
+    if command:
+        print(f"  {_DIM}command: {command}{_RST}")
     print(f"  {_DIM}use 'timberbot.py top' to monitor{_RST}")
 
 

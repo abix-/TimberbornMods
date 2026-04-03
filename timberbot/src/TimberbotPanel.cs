@@ -26,9 +26,15 @@ namespace Timberbot
         private VisualElement _modalPanel;
 
         private VisualElement _settingsContainer;
+        private VisualElement _agentSettingsContainer;
+        private VisualElement _runtimeSettingsContainer;
+        private NineSliceButton _agentTabBtn;
+        private NineSliceButton _startupTabBtn;
 
         private TextField _binaryField;
         private NineSliceButton _binaryPresetBtn;
+        private TextField _commandTemplateField;
+        private VisualElement _commandTemplateRow;
         private TextField _modelField;
         private NineSliceButton _modelPresetBtn;
         private TextField _effortField;
@@ -63,11 +69,13 @@ namespace Timberbot
         private bool _widgetPositionInitialized;
 
         private float _lastUpdate;
+        private string _activeSettingsTab = "agent";
 
         private static readonly string[][] BinaryChoices = new[]
         {
             new[] { "claude", "claude" },
             new[] { "codex", "codex" },
+            new[] { "custom", "custom" },
         };
 
         private static readonly string[][] ClaudeModelChoices = new[]
@@ -77,9 +85,7 @@ namespace Timberbot
             new[] { "claude-opus-4-1", "claude-opus-4-1" },
             new[] { "claude-sonnet-4-6", "claude-sonnet-4-6" },
             new[] { "claude-sonnet-4-5", "claude-sonnet-4-5" },
-            new[] { "claude-sonnet-3-7", "claude-sonnet-3-7" },
             new[] { "claude-haiku-4-5", "claude-haiku-4-5" },
-            new[] { "claude-haiku-3-5", "claude-haiku-3-5" },
         };
 
         private static readonly string[][] CodexModelChoices = new[]
@@ -117,18 +123,19 @@ namespace Timberbot
 
         private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
         {
-            ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Presets are convenience values; you can type a custom binary name.",
+            ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Select 'custom' to provide your own command template.",
+            ["Command:"] = "Freeform command template for custom CLIs. Placeholders: {skill} = skill file path, {prompt} = inline startup text, {prompt_file} = startup text written to a temp file, {model} = model value, {effort} = effort value. If model/effort are empty, the flag before the placeholder is stripped too.",
             ["Model:"] = "Model name passed to the agent with --model. Preset choices change based on the selected binary, but you can type any model manually.",
             ["Effort:"] = "Reasoning effort passed to the agent with --effort. Preset choices change based on the selected binary, but you can type any effort value manually.",
             ["Goal:"] = "Initial task sent to the agent after it prints the boot report. The system prompt also includes the guide and current colony state.",
-            ["* debugEndpointEnabled:"] = "Enables debug and benchmark endpoints such as /api/debug and /api/benchmark. Reload save to apply.",
-            ["* httpPort:"] = "HTTP server port Timberbot listens on. The Python client reads this by default from settings.json. Reload save to apply.",
-            ["* webhooksEnabled:"] = "Turns outgoing webhook event delivery on or off. Reload save to apply.",
-            ["* webhookBatchMs:"] = "Webhook batching window in milliseconds. Use 0 for immediate delivery instead of batching. Reload save to apply.",
-            ["* webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Reload save to apply.",
-            ["* webhookMaxPendingEvents:"] = "Per-webhook cap for queued event payloads while delivery is in flight or failing. Oldest queued events are dropped when the cap is reached. Reload save to apply.",
-            ["* writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Reload save to apply.",
-            ["* terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Reload save to apply.",
+            ["debugEndpointEnabled:"] = "Enables debug and benchmark endpoints such as /api/debug and /api/benchmark. Reload save to apply.",
+            ["httpPort:"] = "HTTP server port Timberbot listens on. The Python client reads this by default from settings.json. Reload save to apply.",
+            ["webhooksEnabled:"] = "Turns outgoing webhook event delivery on or off. Reload save to apply.",
+            ["webhookBatchMs:"] = "Webhook batching window in milliseconds. Use 0 for immediate delivery instead of batching. Reload save to apply.",
+            ["webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Reload save to apply.",
+            ["webhookMaxPendingEvents:"] = "Per-webhook cap for queued event payloads while delivery is in flight or failing. Oldest queued events are dropped when the cap is reached. Reload save to apply.",
+            ["writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Reload save to apply.",
+            ["terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Reload save to apply.",
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
@@ -282,7 +289,30 @@ namespace Timberbot
             _settingsContainer.style.marginBottom = 6;
             content.Add(_settingsContainer);
 
+            var tabRow = new VisualElement();
+            tabRow.style.flexDirection = FlexDirection.Row;
+            tabRow.style.marginBottom = 6;
+            _settingsContainer.Add(tabRow);
+
+            _agentTabBtn = MakeGameButton("Agent", ShowAgentTab);
+            _agentTabBtn.style.width = 80;
+            _agentTabBtn.style.marginRight = 4;
+            tabRow.Add(_agentTabBtn);
+
+            _startupTabBtn = MakeGameButton("Startup", ShowRuntimeTab);
+            _startupTabBtn.style.width = 92;
+            tabRow.Add(_startupTabBtn);
+
+            _agentSettingsContainer = new VisualElement();
+            _agentSettingsContainer.style.flexDirection = FlexDirection.Column;
+            _settingsContainer.Add(_agentSettingsContainer);
+
+            _runtimeSettingsContainer = new VisualElement();
+            _runtimeSettingsContainer.style.flexDirection = FlexDirection.Column;
+            _settingsContainer.Add(_runtimeSettingsContainer);
+
             var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), "claude");
+            var savedCommandTemplate = _service.GetUISetting("agentCommandTemplate") ?? "";
             var savedModel = _service.GetUISetting("agentModel");
             var savedEffort = _service.GetUISetting("agentEffort");
             var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
@@ -295,8 +325,6 @@ namespace Timberbot
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
             var savedTerminal = _service.GetUISetting("terminal") ?? "";
 
-            _settingsContainer.Add(MakeSectionLabel("Agent"));
-
             _binaryField = MakeTextField(savedBinary);
             _binaryField.RegisterValueChangedCallback(evt =>
             {
@@ -305,31 +333,45 @@ namespace Timberbot
                 SyncFieldsForBinary(binary);
             });
             _binaryPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_binaryPresetBtn, _binaryField, BinaryChoices));
-            _settingsContainer.Add(MakePresetFieldRow("Binary:", _binaryField, _binaryPresetBtn));
+            _agentSettingsContainer.Add(MakePresetFieldRow("Binary:", _binaryField, _binaryPresetBtn));
+
+            _commandTemplateField = MakeTextField(savedCommandTemplate);
+            _commandTemplateField.RegisterValueChangedCallback(evt =>
+                _service.SaveUISetting("agentCommandTemplate", evt.newValue ?? ""));
+            _commandTemplateRow = MakeFieldRow("Command:", _commandTemplateField);
+            _commandTemplateRow.style.display = savedBinary == "custom" ? DisplayStyle.Flex : DisplayStyle.None;
+            _agentSettingsContainer.Add(_commandTemplateRow);
 
             var modelChoices = GetModelChoices(savedBinary);
             _modelField = MakeTextField(GetInitialChoiceValue(modelChoices, savedModel));
             _modelField.RegisterValueChangedCallback(evt =>
                 _service.SaveUISetting("agentModel", NormalizeValue(evt.newValue, modelChoices[0][0])));
             _modelPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_modelPresetBtn, _modelField, GetModelChoices(CurrentBinary())));
-            _settingsContainer.Add(MakePresetFieldRow("Model:", _modelField, _modelPresetBtn));
+            _agentSettingsContainer.Add(MakePresetFieldRow("Model:", _modelField, _modelPresetBtn));
 
             var effortChoices = GetEffortChoices(savedBinary);
             _effortField = MakeTextField(GetInitialChoiceValue(effortChoices, savedEffort));
             _effortField.RegisterValueChangedCallback(evt =>
                 _service.SaveUISetting("agentEffort", NormalizeValue(evt.newValue, effortChoices[0][0])));
             _effortPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_effortPresetBtn, _effortField, GetEffortChoices(CurrentBinary())));
-            _settingsContainer.Add(MakePresetFieldRow("Effort:", _effortField, _effortPresetBtn));
+            _agentSettingsContainer.Add(MakePresetFieldRow("Effort:", _effortField, _effortPresetBtn));
 
             _goalField = MakeTextField(savedGoal);
             _goalField.multiline = true;
             _goalField.style.height = 80;
             _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
-            _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
+            _agentSettingsContainer.Add(MakeFieldRow("Goal:", _goalField));
 
-            _settingsContainer.Add(MakeSeparator());
-            _settingsContainer.Add(MakeSectionLabel("Runtime"));
-            _settingsContainer.Add(MakeHintLabel("Runtime settings apply from settings.json. Some changes require restarting the mod or reloading the save."));
+            var agentActionRow = new VisualElement();
+            agentActionRow.style.flexDirection = FlexDirection.Row;
+            agentActionRow.style.justifyContent = Justify.FlexEnd;
+            agentActionRow.style.marginTop = 6;
+            var modalStartBtn = MakeGameButton("Start", OnModalStartClicked);
+            modalStartBtn.style.width = 70;
+            agentActionRow.Add(modalStartBtn);
+            _agentSettingsContainer.Add(agentActionRow);
+
+            _runtimeSettingsContainer.Add(MakeHintLabel("Timberborn must be restarted or save loaded after changing these settings."));
 
             _debugEndpointField = MakeTextField(savedDebugEndpointEnabled);
             _debugEndpointField.RegisterValueChangedCallback(evt =>
@@ -339,7 +381,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("debugEndpointEnabled", value == "true");
             });
             _debugEndpointPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_debugEndpointPresetBtn, _debugEndpointField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("* debugEndpointEnabled:", _debugEndpointField, _debugEndpointPresetBtn));
+            _runtimeSettingsContainer.Add(MakePresetFieldRow("debugEndpointEnabled:", _debugEndpointField, _debugEndpointPresetBtn));
 
             _httpPortField = MakeTextField(savedHttpPort);
             _httpPortField.RegisterValueChangedCallback(evt =>
@@ -348,7 +390,7 @@ namespace Timberbot
                 _httpPortField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("httpPort", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("* httpPort:", _httpPortField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("httpPort:", _httpPortField));
 
             _webhooksEnabledField = MakeTextField(savedWebhooksEnabled);
             _webhooksEnabledField.RegisterValueChangedCallback(evt =>
@@ -358,7 +400,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("webhooksEnabled", value == "true");
             });
             _webhooksEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_webhooksEnabledPresetBtn, _webhooksEnabledField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("* webhooksEnabled:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
+            _runtimeSettingsContainer.Add(MakePresetFieldRow("webhooksEnabled:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
 
             _webhookBatchMsField = MakeTextField(savedWebhookBatchMs);
             _webhookBatchMsField.RegisterValueChangedCallback(evt =>
@@ -367,7 +409,7 @@ namespace Timberbot
                 _webhookBatchMsField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookBatchMs", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("* webhookBatchMs:", _webhookBatchMsField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("webhookBatchMs:", _webhookBatchMsField));
 
             _webhookCircuitBreakerField = MakeTextField(savedWebhookCircuitBreaker);
             _webhookCircuitBreakerField.RegisterValueChangedCallback(evt =>
@@ -376,7 +418,7 @@ namespace Timberbot
                 _webhookCircuitBreakerField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookCircuitBreaker", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("* webhookCircuitBreaker:", _webhookCircuitBreakerField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("webhookCircuitBreaker:", _webhookCircuitBreakerField));
 
             _webhookMaxPendingEventsField = MakeTextField(savedWebhookMaxPendingEvents);
             _webhookMaxPendingEventsField.RegisterValueChangedCallback(evt =>
@@ -385,7 +427,7 @@ namespace Timberbot
                 _webhookMaxPendingEventsField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookMaxPendingEvents", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("* webhookMaxPendingEvents:", _webhookMaxPendingEventsField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("webhookMaxPendingEvents:", _webhookMaxPendingEventsField));
 
             _writeBudgetMsField = MakeTextField(savedWriteBudgetMs);
             _writeBudgetMsField.RegisterValueChangedCallback(evt =>
@@ -394,11 +436,11 @@ namespace Timberbot
                 _writeBudgetMsField.SetValueWithoutNotify(value);
                 _service.SaveDoubleSetting("writeBudgetMs", double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
             });
-            _settingsContainer.Add(MakeFieldRow("* writeBudgetMs:", _writeBudgetMsField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("writeBudgetMs:", _writeBudgetMsField));
 
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
-            _settingsContainer.Add(MakeFieldRow("* terminal:", _terminalField));
+            _runtimeSettingsContainer.Add(MakeFieldRow("terminal:", _terminalField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
@@ -435,6 +477,8 @@ namespace Timberbot
             _tooltipLabel.style.whiteSpace = WhiteSpace.Normal;
             _tooltipLabel.style.maxWidth = 304;
             _tooltipPopup.Add(_tooltipLabel);
+
+            SetSettingsTab(_activeSettingsTab);
         }
 
         private void ApplySavedWidgetPosition()
@@ -451,8 +495,8 @@ namespace Timberbot
             }
             else
             {
-                _widget.style.right = 0;
-                _widget.style.bottom = 0;
+                _widget.style.right = 10;
+                _widget.style.bottom = 10;
                 _widgetPositionInitialized = false;
             }
         }
@@ -527,6 +571,7 @@ namespace Timberbot
 
         private void ShowModal()
         {
+            SetSettingsTab(_activeSettingsTab);
             _modalOverlay.ToggleDisplayStyle(true);
         }
 
@@ -535,6 +580,34 @@ namespace Timberbot
             HidePresetMenu();
             HideTooltip();
             _modalOverlay.ToggleDisplayStyle(false);
+        }
+
+        private void ShowAgentTab()
+        {
+            SetSettingsTab("agent");
+        }
+
+        private void ShowRuntimeTab()
+        {
+            SetSettingsTab("runtime");
+        }
+
+        private void SetSettingsTab(string tab)
+        {
+            _activeSettingsTab = tab == "runtime" ? "runtime" : "agent";
+
+            if (_agentSettingsContainer != null)
+                _agentSettingsContainer.ToggleDisplayStyle(_activeSettingsTab == "agent");
+            if (_runtimeSettingsContainer != null)
+                _runtimeSettingsContainer.ToggleDisplayStyle(_activeSettingsTab == "runtime");
+
+            if (_agentTabBtn != null)
+                _agentTabBtn.SetEnabled(_activeSettingsTab != "agent");
+            if (_startupTabBtn != null)
+                _startupTabBtn.SetEnabled(_activeSettingsTab != "runtime");
+
+            HidePresetMenu();
+            HideTooltip();
         }
 
         private void OnStartClicked()
@@ -547,9 +620,10 @@ namespace Timberbot
             var model = NormalizeValue(_modelField.value, "");
             var effort = NormalizeValue(_effortField.value, "");
             var goal = _goalField.value;
+            var command = binary == "custom" ? (_commandTemplateField?.value ?? "") : null;
 
-            agent.Start(binary, model, effort, 120, goal);
-            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
+            agent.Start(binary, model, effort, 120, goal, command);
+            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"} custom={command != null}");
             HidePresetMenu();
         }
 
@@ -557,6 +631,12 @@ namespace Timberbot
         {
             _service.Agent?.Stop();
             TimberbotLog.Info("panel: stopped agent");
+        }
+
+        private void OnModalStartClicked()
+        {
+            OnStartClicked();
+            HideModal();
         }
 
         private void TogglePresetMenu(VisualElement anchor, TextField targetField, string[][] choices)
@@ -750,6 +830,10 @@ namespace Timberbot
 
         private void SyncFieldsForBinary(string binary)
         {
+            // show/hide command template field for custom binary
+            if (_commandTemplateRow != null)
+                _commandTemplateRow.style.display = binary == "custom" ? DisplayStyle.Flex : DisplayStyle.None;
+
             var modelChoices = GetModelChoices(binary);
             if (!ChoiceContainsValue(modelChoices, _modelField?.value))
                 _modelField.value = modelChoices[0][0];

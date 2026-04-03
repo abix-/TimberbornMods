@@ -17,6 +17,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Timberbot
@@ -37,6 +38,7 @@ namespace Timberbot
         private string _model;
         private string _effort;
         private string _goal;
+        private string _commandTemplate;  // null for claude/codex presets, set for custom CLIs
         private int _processTimeoutSeconds;
 
         public TimberbotAgent(string terminal)
@@ -64,7 +66,7 @@ namespace Timberbot
         private readonly TimberbotJw _jw = new TimberbotJw(1024);
         private readonly TimberbotJw _statusJw = new TimberbotJw(4096);
 
-        public string Start(string binary, string model, string effort, int timeout, string goal)
+        public string Start(string binary, string model, string effort, int timeout, string goal, string command = null)
         {
             if (_status != AgentStatus.Idle && _status != AgentStatus.Done && _status != AgentStatus.Error)
                 return _jw.Error("agent_busy", ("status", _status.ToString().ToLowerInvariant()));
@@ -72,6 +74,7 @@ namespace Timberbot
             _binary = binary ?? "claude";
             _model = model;
             _effort = effort;
+            _commandTemplate = string.IsNullOrWhiteSpace(command) ? null : command;
             _processTimeoutSeconds = timeout > 0 ? timeout : 120;
             _goal = string.IsNullOrEmpty(goal) ? DEFAULT_GOAL : goal;
             _lastError = null;
@@ -82,7 +85,7 @@ namespace Timberbot
             _thread = new Thread(InteractiveSession) { IsBackground = true, Name = "Timberbot-Agent" };
             _thread.Start();
 
-            TimberbotLog.Info($"agent.start binary={_binary} model={_model ?? "default"}");
+            TimberbotLog.Info($"agent.start binary={_binary} model={_model ?? "default"} custom={_commandTemplate != null}");
             return _jw.Reset().OpenObj()
                 .Prop("status", "started")
                 .Prop("binary", _binary)
@@ -177,6 +180,59 @@ namespace Timberbot
             return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
+        /// <summary>
+        /// Build launch command from a freeform template with placeholder substitution.
+        /// Returns (exe, args) for ProcessStartInfo.
+        /// </summary>
+        private (string exe, string args) BuildCustomCommand(string template, string skillFile, string startupPrompt, string modDir)
+        {
+            var cmd = template;
+
+            // substitute {skill}
+            cmd = cmd.Replace("{skill}", QuoteArg(skillFile));
+
+            // substitute {prompt_file} -- write temp file only if placeholder is used
+            if (cmd.Contains("{prompt_file}"))
+            {
+                var promptFile = Path.Combine(modDir, "agent_prompt.md");
+                File.WriteAllText(promptFile, startupPrompt, Encoding.UTF8);
+                cmd = cmd.Replace("{prompt_file}", QuoteArg(promptFile));
+                TimberbotLog.Info($"agent.custom wrote prompt file: {promptFile}");
+            }
+
+            // substitute {prompt} -- inline text
+            cmd = cmd.Replace("{prompt}", QuoteArg(startupPrompt));
+
+            // substitute {model} and {effort} -- strip orphaned flags if empty
+            if (!string.IsNullOrEmpty(_model))
+            {
+                cmd = cmd.Replace("{model}", _model);
+            }
+            else
+            {
+                // remove flag + {model} pattern (e.g. "--model {model}" or "-m {model}")
+                cmd = Regex.Replace(cmd, @"\S+\s+\{model\}", "");
+            }
+
+            if (!string.IsNullOrEmpty(_effort))
+            {
+                cmd = cmd.Replace("{effort}", _effort);
+            }
+            else
+            {
+                cmd = Regex.Replace(cmd, @"\S+\s+\{effort\}", "");
+            }
+
+            // clean up double spaces from stripped flags
+            cmd = Regex.Replace(cmd, @"\s{2,}", " ").Trim();
+
+            // split into exe + args on first space
+            var spaceIdx = cmd.IndexOf(' ');
+            if (spaceIdx < 0)
+                return (cmd, "");
+            return (cmd.Substring(0, spaceIdx), cmd.Substring(spaceIdx + 1));
+        }
+
         private string BuildStartupPrompt(string modDir)
         {
             var sb = new StringBuilder();
@@ -224,27 +280,44 @@ namespace Timberbot
                 _status = AgentStatus.Interactive;
                 _currentCmd = null;
 
-                var args = new StringBuilder();
-                if (IsCodexBinary(_binary))
+                string launchExe;
+                string launchArgs;
+
+                if (_commandTemplate != null)
                 {
-                    args.Append("-c ").Append(QuoteArg("model_instructions_file=\"" + skillFile + "\""));
-                    if (!string.IsNullOrEmpty(_model))
-                        args.Append(" --model ").Append(_model);
-                    if (!string.IsNullOrEmpty(_effort))
-                        args.Append(" -c ").Append(QuoteArg("model_reasoning_effort=\"" + _effort + "\""));
+                    // custom CLI -- freeform template with placeholder substitution
+                    var (exe, customArgs) = BuildCustomCommand(_commandTemplate, skillFile, startupPrompt, modDir);
+                    launchExe = exe;
+                    launchArgs = customArgs;
+                    TimberbotLog.Info($"agent.custom.launch exe={launchExe} args={launchArgs.Length}chars");
                 }
                 else
                 {
-                    args.Append("--system-prompt-file ").Append(QuoteArg(skillFile));
-                    if (!string.IsNullOrEmpty(_model))
-                        args.Append(" --model ").Append(_model);
-                    if (!string.IsNullOrEmpty(_effort))
-                        args.Append(" --effort ").Append(_effort);
+                    // built-in presets: claude or codex
+                    var args = new StringBuilder();
+                    if (IsCodexBinary(_binary))
+                    {
+                        args.Append("-c ").Append(QuoteArg("model_instructions_file=\"" + skillFile + "\""));
+                        if (!string.IsNullOrEmpty(_model))
+                            args.Append(" --model ").Append(_model);
+                        if (!string.IsNullOrEmpty(_effort))
+                            args.Append(" -c ").Append(QuoteArg("model_reasoning_effort=\"" + _effort + "\""));
+                    }
+                    else
+                    {
+                        args.Append("--system-prompt-file ").Append(QuoteArg(skillFile));
+                        if (!string.IsNullOrEmpty(_model))
+                            args.Append(" --model ").Append(_model);
+                        if (!string.IsNullOrEmpty(_effort))
+                            args.Append(" --effort ").Append(_effort);
+                    }
+
+                    args.Append(" ").Append(QuoteArg(startupPrompt));
+                    launchExe = _binary;
+                    launchArgs = args.ToString();
                 }
 
-                args.Append(" ").Append(QuoteArg(startupPrompt));
-
-                var launchCmd = _binary + " " + args;
+                var launchCmd = launchExe + " " + launchArgs;
 
                 ProcessStartInfo psi;
                 if (!string.IsNullOrWhiteSpace(_terminal))
@@ -270,8 +343,8 @@ namespace Timberbot
                 {
                     psi = new ProcessStartInfo
                     {
-                        FileName = _binary,
-                        Arguments = args.ToString(),
+                        FileName = launchExe,
+                        Arguments = launchArgs,
                         UseShellExecute = true,
                         WorkingDirectory = modDir
                     };
