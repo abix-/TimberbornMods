@@ -1756,6 +1756,9 @@ namespace Timberbot
                 }
                 _cachedPreview.Reposition(new Placement(new Vector3Int(bgx, bgy, tz), (Timberborn.Coordinates.Orientation)bestOrient, FlipMode.Unflipped));
 
+                // use the preview's actual base z (handles water-edge pumps that span z levels)
+                int actualZ = _cachedPreview.BlockObject.CoordinatesAtBaseZ.z;
+
                 int entranceX = tx;
                 int entranceY = ty;
                 if (_cachedPreview.BlockObject.HasEntrance)
@@ -1803,7 +1806,7 @@ namespace Timberbot
                     }
                 }
 
-                _results.Add((tx, ty, tz, bestOrient, bestHasPath, reachable, distance, nearPower, flooded, waterDepth, entranceX, entranceY));
+                _results.Add((tx, ty, actualZ, bestOrient, bestHasPath, reachable, distance, nearPower, flooded, waterDepth, entranceX, entranceY));
             }
 
             private void FinalizeResult()
