@@ -291,6 +291,14 @@ Common footprints:
 
 ## Game mechanics
 
+### Time pressure
+
+- The game clock runs continuously. Every in-game hour spent idle is an hour beavers are not eating, drinking, or building.
+- Drought arrives on a fixed schedule. Unspent time before a drought is time that could have been used to stockpile water and food.
+- There is almost always something productive to do: mark trees, place a building, assign workers, adjust priorities, plant crops, expand roads.
+- Inaction compounds. A 2-day gap with no actions can mean 2 fewer days of crop growth, 2 fewer days of resource hauling, and 2 fewer days of construction progress.
+- When in doubt, check `alerts` for unstaffed/unpowered/unreachable buildings, or `resources` for low stocks.
+
 ### Food
 
 - Beavers eat about 1 food per day.
