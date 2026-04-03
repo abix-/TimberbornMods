@@ -715,12 +715,12 @@ class Timberbot:
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
-        # compact clusters: "135,115,z2 37/69 Pine" instead of nested dicts
+        # compact clusters: "{x,y,z,grown/total,species}" header then one-line values
         def _compact_clusters(clusters):
             out = []
             for c in (clusters or []):
                 sp = ",".join(c.get("species", {}).keys())
-                out.append(f'{c["x"]},{c["y"]},z{c.get("z",0)} {c.get("grown",0)}/{c.get("total",0)} {sp}')
+                out.append({"x": c["x"], "y": c["y"], "z": c.get("z", 0), "grown": c.get("grown", 0), "total": c.get("total", 0), "species": sp})
             return out
 
         if isinstance(summary, dict):
