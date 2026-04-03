@@ -346,14 +346,32 @@ namespace Timberbot
             return sb.ToString();
         }
 
+        private string _activeSessionLockPath;  // Windows lock file for terminal session tracking
+
         private ProcessStartInfo BuildTerminalStartInfo(string modDir, string launchCmd, string terminalOverride = null)
         {
             var terminal = terminalOverride ?? _terminal;
+
+            // write a .cmd wrapper that creates a lock file, runs the command, then deletes it
+            var lockFile = Path.Combine(modDir, "agent-session.lock");
+            var scriptPath = Path.Combine(modDir, "agent-session.cmd");
+            var script = new StringBuilder();
+            script.AppendLine("@echo off");
+            script.Append("echo running > \"").Append(lockFile).AppendLine("\"");
+            script.Append("cd /d \"").Append(modDir).AppendLine("\"");
+            script.AppendLine(launchCmd);
+            script.Append("del \"").Append(lockFile).AppendLine("\" 2>nul");
+            File.WriteAllText(scriptPath, script.ToString(), Encoding.UTF8);
+            _activeSessionLockPath = lockFile;
+
             var termCmd = terminal.Trim().Replace("{cwd}", "\"" + modDir + "\"");
+            var wrappedCmd = "\"" + scriptPath + "\"";
             if (termCmd.Contains("{command}"))
-                termCmd = termCmd.Replace("{command}", launchCmd);
+                termCmd = termCmd.Replace("{command}", wrappedCmd);
             else
-                termCmd = termCmd + " " + launchCmd;
+                termCmd = termCmd + " " + wrappedCmd;
+
+            TimberbotLog.Info($"agent.terminal.launch script={scriptPath} lock={lockFile}");
 
             var termParts = SplitCommand(termCmd);
             return new ProcessStartInfo
@@ -364,6 +382,33 @@ namespace Timberbot
                 CreateNoWindow = true,
                 WorkingDirectory = modDir
             };
+        }
+
+        private bool WaitForWindowsSession()
+        {
+            if (string.IsNullOrWhiteSpace(_activeSessionLockPath))
+                return false;
+
+            // wait for lock file to appear (terminal starting the script)
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (!_cancelRequested && DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(_activeSessionLockPath))
+                    break;
+                Thread.Sleep(200);
+            }
+
+            if (!File.Exists(_activeSessionLockPath) && !_cancelRequested)
+                return false;
+
+            // wait for lock file to disappear (script finished)
+            while (!_cancelRequested)
+            {
+                if (!File.Exists(_activeSessionLockPath))
+                    return true;
+                Thread.Sleep(500);
+            }
+            return true;
         }
 
         private ProcessStartInfo BuildMacDefaultStartInfo(string modDir, string shellCommand)
@@ -539,9 +584,11 @@ namespace Timberbot
                 bool waitForMacSession = false;
                 var effectiveTerminal = _terminalOverride ?? _terminal;
 
+                bool waitForTerminalSession = false;
                 if (!string.IsNullOrWhiteSpace(effectiveTerminal))
                 {
                     psi = BuildTerminalStartInfo(modDir, launchCmd, effectiveTerminal);
+                    waitForTerminalSession = true;
                 }
                 else if (TimberbotPaths.IsMacOS)
                 {
@@ -573,6 +620,14 @@ namespace Timberbot
                     if (!WaitForMacSession() && !_cancelRequested)
                         throw new InvalidOperationException("Terminal.app did not start a tracked agent session.");
                 }
+                else if (waitForTerminalSession)
+                {
+                    proc.WaitForExit();  // terminal launcher exits immediately
+                    _activeProcess = null;
+                    TimberbotLog.Info("agent.terminal.launcher exited, polling lock file");
+                    WaitForWindowsSession();
+                    TimberbotLog.Info($"agent.terminal.session done cancelled={_cancelRequested}");
+                }
                 else
                 {
                     proc.WaitForExit();
@@ -592,6 +647,7 @@ namespace Timberbot
             {
                 _activeProcess = null;
                 _activeSessionPidPath = null;
+                _activeSessionLockPath = null;
             }
         }
     }

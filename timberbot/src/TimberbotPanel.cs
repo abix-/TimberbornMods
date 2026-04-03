@@ -753,8 +753,9 @@ namespace Timberbot
 
             foreach (var choice in choices)
             {
-                var value = choice[0];
-                _presetScroll.Add(MakePresetOptionButton(value, () =>
+                var label = choice[0];
+                var value = choice.Length > 1 ? choice[1] : choice[0];
+                _presetScroll.Add(MakePresetOptionButton(label, () =>
                 {
                     targetField.value = value;
                     HidePresetMenu();
