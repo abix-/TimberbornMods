@@ -49,6 +49,8 @@ Colony state may be pre-loaded in your system prompt (look for `## CURRENT COLON
 4. `place_building` at the coords and orientation from find_placement
 5. `set_priority` and `set_workers` as needed
 
+Placed buildings are blueprints. Beavers must haul materials and construct them before they function. A placed lodge has 0 beds until built. A placed pump produces 0 water until built. Check `finished` field in buildings output -- 0 means under construction. Unpause and wait for builders to complete them.
+
 ## Locations
 
 `brain` output includes `locations` -- named spatial anchors (dc, forest, berries). Use these coordinates for search areas in `find_placement`.
