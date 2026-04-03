@@ -21,6 +21,9 @@ namespace Timberbot
         private NineSliceButton _widgetStartBtn;
         private NineSliceButton _widgetStopBtn;
         private NineSliceButton _widgetEditBtn;
+        private NineSliceButton _widgetMinimizeBtn;
+        private VisualElement _widgetButtonRow;
+        private bool _widgetMinimized;
 
         private VisualElement _modalOverlay;
         private VisualElement _modalPanel;
@@ -50,6 +53,7 @@ namespace Timberbot
         private TextField _webhookMaxPendingEventsField;
         private TextField _writeBudgetMsField;
         private TextField _terminalField;
+        private TextField _pythonCommandField;
 
         private VisualElement _presetPopup;
         private ScrollView _presetScroll;
@@ -135,7 +139,8 @@ namespace Timberbot
             ["webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Reload save to apply.",
             ["webhookMaxPendingEvents:"] = "Per-webhook cap for queued event payloads while delivery is in flight or failing. Oldest queued events are dropped when the cap is reached. Reload save to apply.",
             ["writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Reload save to apply.",
-            ["terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Reload save to apply.",
+            ["terminal:"] = "Optional terminal launch template. Supports {cwd} and {command}. If {command} is omitted, Timberbot appends the launch command for backwards compatibility. Leave empty to use the built-in OS default. Reload save to apply.",
+            ["pythonCommand:"] = "Optional Python 3 command used to run timberbot.py for brain/startup work. Leave blank for OS auto-detect (`py -3` on Windows, common python3 locations on macOS). Reload save to apply.",
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
@@ -200,36 +205,53 @@ namespace Timberbot
             _widget.style.paddingBottom = 4;
             ApplySavedWidgetPosition();
 
+            var headerRow = new VisualElement();
+            headerRow.style.flexDirection = FlexDirection.Row;
+            headerRow.style.alignItems = Align.Center;
+
             _statusBarLabel = new NineSliceLabel { text = "Timberbot API - Idle" };
             _statusBarLabel.AddToClassList("text--yellow");
             _statusBarLabel.AddToClassList("game-text-normal");
-            _statusBarLabel.style.marginBottom = 4;
+            _statusBarLabel.style.flexGrow = 1;
             _statusBarLabel.RegisterCallback<PointerDownEvent>(OnWidgetPointerDown);
             _statusBarLabel.RegisterCallback<PointerMoveEvent>(OnWidgetPointerMove);
             _statusBarLabel.RegisterCallback<PointerUpEvent>(OnWidgetPointerUp);
-            _widget.Add(_statusBarLabel);
+            headerRow.Add(_statusBarLabel);
 
-            var buttonRow = new VisualElement();
-            buttonRow.style.flexDirection = FlexDirection.Row;
-            buttonRow.style.justifyContent = Justify.Center;
-            buttonRow.style.alignItems = Align.Center;
+            _widgetMinimized = _service.GetUISetting("widgetMinimized") == "true";
+            _widgetMinimizeBtn = MakeGameButton(_widgetMinimized ? "+" : "-", OnMinimizeClicked);
+            _widgetMinimizeBtn.style.width = 24;
+            _widgetMinimizeBtn.style.height = 20;
+            _widgetMinimizeBtn.style.marginLeft = 4;
+            _widgetMinimizeBtn.style.paddingLeft = 0;
+            _widgetMinimizeBtn.style.paddingRight = 0;
+            headerRow.Add(_widgetMinimizeBtn);
+
+            _widget.Add(headerRow);
+
+            _widgetButtonRow = new VisualElement();
+            _widgetButtonRow.style.flexDirection = FlexDirection.Row;
+            _widgetButtonRow.style.justifyContent = Justify.Center;
+            _widgetButtonRow.style.alignItems = Align.Center;
+            _widgetButtonRow.style.marginTop = 4;
+            _widgetButtonRow.style.display = _widgetMinimized ? DisplayStyle.None : DisplayStyle.Flex;
 
             _widgetStartBtn = MakeGameButton("Start", OnStartClicked);
             _widgetStartBtn.style.width = 58;
             _widgetStartBtn.style.marginRight = 4;
-            buttonRow.Add(_widgetStartBtn);
+            _widgetButtonRow.Add(_widgetStartBtn);
 
             _widgetStopBtn = MakeGameButton("Stop", OnStopClicked);
             _widgetStopBtn.style.width = 58;
             _widgetStopBtn.style.marginRight = 4;
             _widgetStopBtn.SetEnabled(false);
-            buttonRow.Add(_widgetStopBtn);
+            _widgetButtonRow.Add(_widgetStopBtn);
 
             _widgetEditBtn = MakeGameButton("Settings", ShowModal);
             _widgetEditBtn.style.width = 78;
-            buttonRow.Add(_widgetEditBtn);
+            _widgetButtonRow.Add(_widgetEditBtn);
 
-            _widget.Add(buttonRow);
+            _widget.Add(_widgetButtonRow);
         }
 
         private void BuildModal()
@@ -324,6 +346,7 @@ namespace Timberbot
             var savedWebhookMaxPendingEvents = NormalizeValue(_service.GetUISetting("webhookMaxPendingEvents"), "1000");
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
             var savedTerminal = _service.GetUISetting("terminal") ?? "";
+            var savedPythonCommand = _service.GetUISetting("pythonCommand") ?? "";
 
             _binaryField = MakeTextField(savedBinary);
             _binaryField.RegisterValueChangedCallback(evt =>
@@ -441,6 +464,10 @@ namespace Timberbot
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
             _runtimeSettingsContainer.Add(MakeFieldRow("terminal:", _terminalField));
+
+            _pythonCommandField = MakeTextField(savedPythonCommand);
+            _pythonCommandField.RegisterValueChangedCallback(evt => _service.SaveUISetting("pythonCommand", evt.newValue ?? ""));
+            _runtimeSettingsContainer.Add(MakeFieldRow("pythonCommand:", _pythonCommandField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
@@ -631,6 +658,14 @@ namespace Timberbot
         {
             _service.Agent?.Stop();
             TimberbotLog.Info("panel: stopped agent");
+        }
+
+        private void OnMinimizeClicked()
+        {
+            _widgetMinimized = !_widgetMinimized;
+            _widgetButtonRow.style.display = _widgetMinimized ? DisplayStyle.None : DisplayStyle.Flex;
+            _widgetMinimizeBtn.text = _widgetMinimized ? "+" : "-";
+            _service.SaveUISetting("widgetMinimized", _widgetMinimized ? "true" : "false");
         }
 
         private void OnModalStartClicked()
