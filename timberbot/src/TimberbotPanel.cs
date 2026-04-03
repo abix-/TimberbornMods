@@ -64,10 +64,10 @@ namespace Timberbot
 
         private static readonly string[][] EffortChoices = new[]
         {
+            new[] { "max", "max - deep thinking" },
             new[] { "high", "high - thorough (default)" },
             new[] { "medium", "medium - faster, routine" },
             new[] { "low", "low - fastest, simple" },
-            new[] { "max", "max - deep thinking" },
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, DropdownItemsSetter dropdownSetter)
