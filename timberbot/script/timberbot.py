@@ -1747,7 +1747,14 @@ def main():
     try:
         result = method(**kwargs)
     except TimberbotError as e:
-        print(json.dumps(e.response, indent=2) if json_mode else e.error, file=sys.stderr)
+        if json_mode:
+            print(json.dumps(e.response, indent=2), file=sys.stderr)
+        else:
+            try:
+                import toons
+                print(toons.dumps(e.response), file=sys.stderr)
+            except ImportError:
+                print(json.dumps(e.response, indent=2), file=sys.stderr)
         sys.exit(1)
     if isinstance(result, str):
         print(result)

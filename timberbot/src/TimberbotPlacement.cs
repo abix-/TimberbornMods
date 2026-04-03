@@ -2249,6 +2249,34 @@ namespace Timberbot
             return new PlaceBuildingResult { Id = placedId, Name = placedName, X = x, Y = y, Z = z, Orientation = OrientNames[orientation] };
         }
 
+        private string FindBlockerAt(Vector3Int bc)
+        {
+            var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
+            var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
+            for (int i = 0; i < buildingSnapshot.Count; i++)
+            {
+                var cb = buildingSnapshot.Definitions[i];
+                if (cb.OccupiedTiles == null) continue;
+                foreach (var t in cb.OccupiedTiles)
+                    if (t.x == bc.x && t.y == bc.y) return cb.Name;
+            }
+            for (int i = 0; i < naturalSnapshot.Count; i++)
+            {
+                var nd = naturalSnapshot.Definitions[i];
+                var nr = naturalSnapshot.States[i];
+                if (nr.X == bc.x && nr.Y == bc.y) return nd.Name;
+            }
+            var blk = _readV2.TrackedBlockers;
+            for (int i = 0; i < blk.Count; i++)
+            {
+                var b = blk[i];
+                if (b.OccupiedTiles == null) continue;
+                foreach (var t in b.OccupiedTiles)
+                    if (t.x == bc.x && t.y == bc.y) return b.Name;
+            }
+            return null;
+        }
+
         // Returns null if valid, or a reason string if invalid.
         // Iterates game's 9 validators individually to get the specific failure reason.
         private string ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, ref int z, int orientation)
@@ -2281,20 +2309,24 @@ namespace Timberbot
                     if (bv2 != null)
                         foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
                         {
+                            var bc = block.Coordinates;
                             if (!bv2.FitsInMap(block, false))
-                                return $"out of map at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"out of map at ({bc.x},{bc.y},{bc.z}) -- move placement inside map bounds";
                             if (bv2.BlockConflictsWithExistingObject(block))
-                                return $"occupied at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            {
+                                string blocker = FindBlockerAt(bc) ?? "unknown";
+                                return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}) -- demolish it or try a different location";
+                            }
                             if (bv2.BlockConflictsWithTerrain(block))
-                                return $"terrain conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"terrain conflict at ({bc.x},{bc.y},{bc.z}) -- tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
                             if (bv2.BlockConflictsWithBlockAbove(block))
-                                return $"blocked above at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"blocked above at ({bc.x},{bc.y},{bc.z}) -- something occupies the tile above, demolish it or use a lower z";
                             if (bv2.BlockConflictsWithBlocksBelow(block))
-                                return $"blocked below at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"blocked below at ({bc.x},{bc.y},{bc.z}) -- no support underneath, needs solid ground or a platform below";
                             if (bv2.ConflictsWithUndergroundBlockObject(block))
-                                return $"underground conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"underground conflict at ({bc.x},{bc.y},{bc.z}) -- underground object blocks this tile, try adjacent tiles";
                             if (bv2.UndergroundBlockIsNotUnderground(block))
-                                return $"not underground at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                                return $"not underground at ({bc.x},{bc.y},{bc.z}) -- this building must be placed underground";
                         }
                     z = preview.BlockObject.CoordinatesAtBaseZ.z;
                     return null;
@@ -2304,49 +2336,20 @@ namespace Timberbot
                 var bv = preview.BlockObject._blockValidator;
                 if (bv != null)
                 {
-                    var buildingSnapshot = _readV2.EnsureBuildingsFreshNow(Time.realtimeSinceStartup);
-                    var naturalSnapshot = _readV2.EnsureNaturalResourcesFreshNow(Time.realtimeSinceStartup);
                     foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
                     {
+                        var bc = block.Coordinates;
                         if (bv.BlockConflictsWithExistingObject(block))
                         {
-                            var bc = block.Coordinates;
-                            string blocker = null;
-                            for (int i = 0; i < buildingSnapshot.Count; i++)
-                            {
-                                var cb = buildingSnapshot.Definitions[i];
-                                if (cb.OccupiedTiles == null) continue;
-                                foreach (var t in cb.OccupiedTiles)
-                                    if (t.x == bc.x && t.y == bc.y) { blocker = cb.Name; break; }
-                                if (blocker != null) break;
-                            }
-                            if (blocker == null)
-                                for (int i = 0; i < naturalSnapshot.Count; i++)
-                                {
-                                    var nd = naturalSnapshot.Definitions[i];
-                                    var nr = naturalSnapshot.States[i];
-                                    if (nr.X == bc.x && nr.Y == bc.y) { blocker = nd.Name; break; }
-                                }
-                            if (blocker == null)
-                            {
-                                var blk = _readV2.TrackedBlockers;
-                                for (int i = 0; i < blk.Count; i++)
-                                {
-                                    var b = blk[i];
-                                    if (b.OccupiedTiles == null) continue;
-                                    foreach (var t in b.OccupiedTiles)
-                                        if (t.x == bc.x && t.y == bc.y) { blocker = b.Name; break; }
-                                    if (blocker != null) break;
-                                }
-                            }
-                            return $"occupied by {blocker ?? "unknown"} at ({bc.x},{bc.y},{bc.z})";
+                            string blocker = FindBlockerAt(bc) ?? "unknown";
+                            return $"occupied by {blocker} at ({bc.x},{bc.y},{bc.z}) -- demolish it or try a different location";
                         }
                         if (bv.BlockConflictsWithTerrain(block))
-                            return $"terrain conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            return $"terrain conflict at ({bc.x},{bc.y},{bc.z}) -- tile is solid rock or wrong elevation, try adjacent tiles or a different z level";
                         if (bv.BlockConflictsWithBlocksBelow(block))
-                            return $"blocked below at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            return $"blocked below at ({bc.x},{bc.y},{bc.z}) -- no support underneath, needs solid ground or a platform below";
                         if (bv.BlockConflictsWithBlockAbove(block))
-                            return $"blocked above at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            return $"blocked above at ({bc.x},{bc.y},{bc.z}) -- something occupies the tile above, demolish it or use a lower z";
                     }
                 }
 
