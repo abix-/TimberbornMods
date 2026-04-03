@@ -1,7 +1,9 @@
 // TimberbotPanel.cs -- In-game UI for agent start/stop/status.
 
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using Timberborn.CoreUI;
 using Timberborn.SingletonSystem;
 using Timberborn.UILayoutSystem;
@@ -54,6 +56,7 @@ namespace Timberbot
         private TextField _writeBudgetMsField;
         private TextField _terminalField;
         private NineSliceButton _terminalPresetBtn;
+        private Label _terminalStatusLabel;
         private TextField _pythonCommandField;
 
         private VisualElement _presetPopup;
@@ -71,6 +74,9 @@ namespace Timberbot
         private int _dragPointerId;
         private Vector2 _dragStartPointer;
         private Vector2 _dragStartWidget;
+        private float _preMinimizeLeft;
+        private float _preMinimizeTop;
+        private bool _hadPreMinimizePosition;
         private bool _widgetPositionInitialized;
 
         private float _lastUpdate;
@@ -211,7 +217,16 @@ namespace Timberbot
             _widget.style.paddingRight = 6;
             _widget.style.paddingTop = 4;
             _widget.style.paddingBottom = 4;
-            ApplySavedWidgetPosition();
+            _widgetMinimized = _service.GetUISetting("widgetMinimized") == "true";
+            if (_widgetMinimized)
+            {
+                _widget.style.right = 10;
+                _widget.style.bottom = 10;
+            }
+            else
+            {
+                ApplySavedWidgetPosition();
+            }
 
             var headerRow = new VisualElement();
             headerRow.style.flexDirection = FlexDirection.Row;
@@ -225,8 +240,6 @@ namespace Timberbot
             _statusBarLabel.RegisterCallback<PointerMoveEvent>(OnWidgetPointerMove);
             _statusBarLabel.RegisterCallback<PointerUpEvent>(OnWidgetPointerUp);
             headerRow.Add(_statusBarLabel);
-
-            _widgetMinimized = _service.GetUISetting("widgetMinimized") == "true";
             _widgetMinimizeBtn = MakeGameButton(_widgetMinimized ? "+" : "-", OnMinimizeClicked);
             _widgetMinimizeBtn.style.width = 24;
             _widgetMinimizeBtn.style.height = 20;
@@ -355,7 +368,12 @@ namespace Timberbot
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
             var savedTerminal = _service.GetUISetting("terminal");
             if (savedTerminal == null)
-                savedTerminal = Application.platform == RuntimePlatform.WindowsPlayer ? "wt -d {cwd} --" : "";
+            {
+                if (Application.platform == RuntimePlatform.WindowsPlayer && IsExeInPath("wt"))
+                    savedTerminal = "wt -d {cwd} --";
+                else
+                    savedTerminal = "";
+            }
             var savedPythonCommand = _service.GetUISetting("pythonCommand") ?? "";
 
             _binaryField = MakeTextField(savedBinary);
@@ -472,9 +490,21 @@ namespace Timberbot
             _runtimeSettingsContainer.Add(MakeFieldRow("writeBudgetMs:", _writeBudgetMsField));
 
             _terminalField = MakeTextField(savedTerminal);
-            _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
+            _terminalField.RegisterValueChangedCallback(evt =>
+            {
+                var val = evt.newValue ?? "";
+                _service.SaveUISetting("terminal", val);
+                ValidateTerminalField(val);
+            });
             _terminalPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_terminalPresetBtn, _terminalField, TerminalChoices));
             _runtimeSettingsContainer.Add(MakePresetFieldRow("terminal:", _terminalField, _terminalPresetBtn));
+
+            _terminalStatusLabel = new Label("");
+            _terminalStatusLabel.AddToClassList("game-text-small");
+            _terminalStatusLabel.style.marginLeft = 8;
+            _terminalStatusLabel.style.height = 16;
+            _runtimeSettingsContainer.Add(_terminalStatusLabel);
+            ValidateTerminalField(savedTerminal);
 
             _pythonCommandField = MakeTextField(savedPythonCommand);
             _pythonCommandField.RegisterValueChangedCallback(evt => _service.SaveUISetting("pythonCommand", evt.newValue ?? ""));
@@ -677,6 +707,24 @@ namespace Timberbot
             _widgetButtonRow.style.display = _widgetMinimized ? DisplayStyle.None : DisplayStyle.Flex;
             _widgetMinimizeBtn.text = _widgetMinimized ? "+" : "-";
             _service.SaveUISetting("widgetMinimized", _widgetMinimized ? "true" : "false");
+
+            if (_widgetMinimized)
+            {
+                _preMinimizeLeft = _widget.resolvedStyle.left;
+                _preMinimizeTop = _widget.resolvedStyle.top;
+                _hadPreMinimizePosition = _widgetPositionInitialized;
+                _widget.style.left = StyleKeyword.Auto;
+                _widget.style.top = StyleKeyword.Auto;
+                _widget.style.right = 10;
+                _widget.style.bottom = 10;
+            }
+            else if (_hadPreMinimizePosition)
+            {
+                _widget.style.left = _preMinimizeLeft;
+                _widget.style.top = _preMinimizeTop;
+                _widget.style.right = StyleKeyword.Auto;
+                _widget.style.bottom = StyleKeyword.Auto;
+            }
         }
 
         private void OnModalStartClicked()
@@ -887,6 +935,45 @@ namespace Timberbot
             var effortChoices = GetEffortChoices(binary);
             if (!ChoiceContainsValue(effortChoices, _effortField?.value))
                 _effortField.value = effortChoices[0][0];
+        }
+
+        private static bool IsExeInPath(string exeName)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("where", exeName)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                using var proc = Process.Start(psi);
+                proc.WaitForExit(3000);
+                return proc.ExitCode == 0;
+            }
+            catch { return false; }
+        }
+
+        private void ValidateTerminalField(string value)
+        {
+            if (_terminalStatusLabel == null) return;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _terminalStatusLabel.text = "";
+                return;
+            }
+            var exe = value.Trim().Split(' ')[0];
+            if (IsExeInPath(exe))
+            {
+                _terminalStatusLabel.text = exe + " found";
+                _terminalStatusLabel.style.color = new Color(0.5f, 1f, 0.5f);
+            }
+            else
+            {
+                _terminalStatusLabel.text = exe + " not found!";
+                _terminalStatusLabel.style.color = new Color(1f, 0.5f, 0.5f);
+            }
         }
 
         private static bool ChoiceContainsValue(string[][] choices, string value)
