@@ -686,7 +686,7 @@ namespace Timberbot
             int homeless = Math.Max(0, beaverCount - occupiedBeds);
             int unemployed = Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
-            int currentSpeed = Array.IndexOf(SpeedScale, _speedManager.CurrentSpeed);
+            int currentSpeed = Array.IndexOf(SpeedScale, (int)_speedManager.CurrentSpeed);
             if (currentSpeed < 0) currentSpeed = 0;
 
             if (format == "json")
