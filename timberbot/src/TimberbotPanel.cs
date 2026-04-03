@@ -28,7 +28,6 @@ namespace Timberbot
         private VisualElement _expanded;
         private Label _statusLabel;
         private Label _goalLabel;
-        private Label _cmdLabel;
         private TextField _binaryField;
         private TextField _modelField;
         private VisualElement _modelDropdown;
@@ -107,7 +106,6 @@ namespace Timberbot
             _statusBarLabel.text = "Timberbot API:" + statusText;
             _statusLabel.text = "Status: " + statusText;
             _goalLabel.text = "Goal: " + Truncate(agent.CurrentGoal, 40);
-            _cmdLabel.text = "Cmd: " + Truncate(agent.CurrentCommand, 40);
 
             bool running = status == AgentStatus.GatheringState ||
                            status == AgentStatus.Interactive;
@@ -183,8 +181,6 @@ namespace Timberbot
             _expanded.Add(_statusLabel);
             _goalLabel = MakeLabel("Goal: (none)");
             _expanded.Add(_goalLabel);
-            _cmdLabel = MakeLabel("Cmd: (none)");
-            _expanded.Add(_cmdLabel);
 
             // separator
             _expanded.Add(MakeSeparator());

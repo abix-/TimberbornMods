@@ -208,7 +208,7 @@ namespace Timberbot
                 var promptFile = BuildCombinedPrompt(modDir);
 
                 _status = AgentStatus.Interactive;
-                _currentCmd = "interactive session";
+                _currentCmd = null;
 
                 var args = new StringBuilder();
                 args.Append("--system-prompt-file \"").Append(promptFile).Append("\"");
