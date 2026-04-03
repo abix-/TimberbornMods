@@ -725,7 +725,7 @@ class Timberbot:
             with open(bpath) as f:
                 maps = _t.load(f).get("maps", {})
 
-        return {"summary": summary, "goal": current_goal, "tasks": tasks, "maps": maps}
+        return {"summary": summary, "goal": current_goal, "tasks": tasks, "maps": maps, "memoryDir": _MEMORY_DIR}
 
     def list_maps(self):
         """List saved map files in memory/."""
