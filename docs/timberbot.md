@@ -365,7 +365,8 @@ Berries are a bridge to farming, not a long-term food plan.
 
 ### Water
 
-- Pumps must straddle the land/water edge.
+- Pumps must straddle the land/water edge. Waterfront tiles are limited and irreplaceable -- once a path or non-pump building occupies a waterfront tile, no pump can go there. Reserve waterfront tiles for pumps.
+- Place paths and non-water buildings away from the water's edge. Route paths around waterfront, not along it.
 - Folktails use `WaterPump.Folktails` or `LargeWaterPump.Folktails`.
 - Iron Teeth use `DeepWaterPump.IronTeeth`.
 - Rough rule: 2 pumps per 15 beavers, 3 pumps once you are above that and preparing for drought.
