@@ -370,8 +370,8 @@ namespace Timberbot
         internal ITimberbotWriteJob CreateRoutePathJob(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0, bool timings = false, long queuedAtTicks = 0, int queuedAtFrame = 0)
             => new RoutePathJob(this, x1, y1, x2, y2, style, sections, timings, queuedAtTicks, queuedAtFrame);
 
-        internal ITimberbotWriteJob CreateFindPlacementJob(string prefabName, int x1, int y1, int x2, int y2)
-            => new FindPlacementJob(this, prefabName, x1, y1, x2, y2);
+        internal ITimberbotWriteJob CreateFindPlacementJob(string prefabName, int x1, int y1, int x2, int y2, string format = "toon")
+            => new FindPlacementJob(this, prefabName, x1, y1, x2, y2, format);
 
         private PathPlanningData CapturePathPlanningData(int x1, int y1, int x2, int y2, string style)
         {
@@ -1495,6 +1495,7 @@ namespace Timberbot
         {
             private readonly TimberbotPlacement _owner;
             private readonly string _prefabName;
+            private readonly string _format;
             private readonly int _x1;
             private readonly int _y1;
             private readonly int _x2;
@@ -1520,10 +1521,11 @@ namespace Timberbot
             private int _statusCode = 200;
             private object _result;
 
-            public FindPlacementJob(TimberbotPlacement owner, string prefabName, int x1, int y1, int x2, int y2)
+            public FindPlacementJob(TimberbotPlacement owner, string prefabName, int x1, int y1, int x2, int y2, string format)
             {
                 _owner = owner;
                 _prefabName = prefabName;
+                _format = format ?? "toon";
                 _x1 = x1;
                 _y1 = y1;
                 _x2 = x2;
@@ -1802,27 +1804,54 @@ namespace Timberbot
                 });
 
                 int count = _results.Count > 10 ? 10 : _results.Count;
-                var jw = _owner.Jw.Reset().BeginObj()
-                    .Prop("prefab", _prefabName)
-                    .Prop("sizeX", _size.x).Prop("sizeY", _size.y)
-                    .Arr("placements");
-                for (int i = 0; i < count; i++)
+                var jw = _owner.Jw.Reset();
+                if (_format == "toon")
                 {
-                    var r = _results[i];
-                    jw.OpenObj()
-                        .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
-                        .Prop("orientation", _orientNames[r.orient])
-                        .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
-                        .Prop("pathAccess", r.pathAccess ? 1 : 0)
-                        .Prop("reachable", r.reachable ? 1 : 0)
-                        .Prop("distance", r.distance, "F1")
-                        .Prop("nearPower", r.nearPower ? 1 : 0)
-                        .Prop("flooded", r.flooded ? 1 : 0);
-                    if (_waterInputLocal.HasValue)
-                        jw.Prop("waterDepth", r.waterDepth, "F2");
-                    jw.CloseObj();
+                    // toon: flat array of compact objects (toons library renders as table)
+                    jw.OpenArr();
+                    for (int i = 0; i < count; i++)
+                    {
+                        var r = _results[i];
+                        jw.OpenObj()
+                            .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
+                            .Prop("o", _orientNames[r.orient])
+                            .Prop("eX", r.entranceX).Prop("eY", r.entranceY)
+                            .Prop("path", r.pathAccess ? 1 : 0)
+                            .Prop("reach", r.reachable ? 1 : 0)
+                            .Prop("dist", r.distance, "F0")
+                            .Prop("pwr", r.nearPower ? 1 : 0)
+                            .Prop("flood", r.flooded ? 1 : 0);
+                        if (_waterInputLocal.HasValue)
+                            jw.Prop("water", r.waterDepth, "F1");
+                        jw.CloseObj();
+                    }
+                    _result = jw.CloseArr().ToString();
                 }
-                _result = jw.CloseArr().CloseObj().ToString();
+                else
+                {
+                    // json: nested object with metadata
+                    jw.BeginObj()
+                        .Prop("prefab", _prefabName)
+                        .Prop("sizeX", _size.x).Prop("sizeY", _size.y)
+                        .Arr("placements");
+                    for (int i = 0; i < count; i++)
+                    {
+                        var r = _results[i];
+                        jw.OpenObj()
+                            .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
+                            .Prop("orientation", _orientNames[r.orient])
+                            .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
+                            .Prop("pathAccess", r.pathAccess ? 1 : 0)
+                            .Prop("reachable", r.reachable ? 1 : 0)
+                            .Prop("distance", r.distance, "F1")
+                            .Prop("nearPower", r.nearPower ? 1 : 0)
+                            .Prop("flooded", r.flooded ? 1 : 0);
+                        if (_waterInputLocal.HasValue)
+                            jw.Prop("waterDepth", r.waterDepth, "F2");
+                        jw.CloseObj();
+                    }
+                    _result = jw.CloseArr().CloseObj().ToString();
+                }
                 CleanupPreview();
                 _completed = true;
             }
