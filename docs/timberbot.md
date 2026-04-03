@@ -46,13 +46,13 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 > **boot result** `<PASSED | FAILED>`
 ```
 
-If boot is `PASSED`, continue immediately to `Brain` and run the `brain` call.
+If boot is `PASSED`, continue immediately to `Brain`.
 If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be stated, boot is `FAILED`. Report the issue, ask the user for guidance, and do not make any game API calls.
-### Brain (one command)
+### Brain (pre-loaded -- do NOT call brain again)
 
-3. `timberbot.py` is on PATH. Run it directly -- never use `python` prefix, never `cd` anywhere. Example: `timberbot.py brain goal:"<player's request>"`. This is the only boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement and stored in `memory/<settlement>/`.
-4. If existing memory is found for this settlement, ask the human whether to load it or start fresh. If they choose fresh, run `timberbot.py clear_brain`, then `brain` again.
-5. If no existing memory exists, `brain` auto-creates it with the district-center map. Print this readout:
+Colony state was already gathered and injected into your system prompt before this session started. Look for the `## CURRENT COLONY STATE` section in your context. Do NOT run `timberbot.py brain` -- it was already run for you.
+
+3. Print this readout using the colony state from your system prompt:
 
 ```md
 > **settlement** `<name>` | `<faction>` | <"new" or "loaded">
@@ -70,7 +70,9 @@ If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be st
 
 If food or water is `<= 1d`, append `CRITICAL` after the value. If alerts are all zero, show `all clear`.
 
-6. If there are failed or active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
+If the colony state section is missing from your system prompt, fall back to running `timberbot.py brain goal:"<goal>"` manually.
+
+4. If there are failed or active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
 
 Only after both phases are complete should you begin working on the user's request.
 
