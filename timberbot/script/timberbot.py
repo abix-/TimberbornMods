@@ -665,8 +665,6 @@ class Timberbot:
         global _MEMORY_DIR
 
         summary = self._get_json("/api/summary")
-        # toon summary for display (compact flat format)
-        toon_summary = self._get("/api/summary")
 
         # set per-settlement memory dir
         settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
@@ -717,7 +715,70 @@ class Timberbot:
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
-        # compact locations: "dc:124,143,z2" instead of nested dicts
+        # compact summary: flatten nested dicts into CSV-style for toon rendering
+        if isinstance(summary, dict):
+            s = summary
+            # flatten time (insert after faction to keep at top)
+            if "time" in s:
+                t = s.pop("time")
+                # insert after settlement/faction
+                insert = {}
+                for k in list(s.keys()):
+                    insert[k] = s.pop(k)
+                    if k == "faction":
+                        insert["day"] = t.get("dayNumber", 0)
+                        insert["dayProgress"] = round(t.get("dayProgress", 0), 2)
+                        insert["speed"] = t.get("speed", 0)
+                s.update(insert)
+            # flatten weather (insert right after speed)
+            if "weather" in s:
+                w = s.pop("weather")
+                insert = {}
+                for k in list(s.keys()):
+                    insert[k] = s.pop(k)
+                    if k == "speed":
+                        insert["weather"] = f'cycle {w.get("cycle",0)} day {w.get("cycleDay",0)} {"DROUGHT" if w.get("isHazardous") else "temperate"} {w.get("temperateWeatherDuration",0)}t/{w.get("hazardousWeatherDuration",0)}d'
+                s.update(insert)
+            # flatten districts into compact rows
+            if "districts" in s:
+                compact_districts = []
+                for d in s["districts"]:
+                    cd = {"name": d.get("name", "")}
+                    pop = d.get("population", {})
+                    cd["pop"] = f'{pop.get("adults",0)}a {pop.get("children",0)}c {pop.get("bots",0)}b'
+                    res = d.get("resources", {})
+                    cd["resources"] = " ".join(f'{k}:{v}' for k, v in res.items())
+                    h = d.get("housing", {})
+                    cd["beds"] = f'{h.get("occupiedBeds",0)}/{h.get("totalBeds",0)} homeless:{h.get("homeless",0)}'
+                    e = d.get("employment", {})
+                    cd["workers"] = f'{e.get("assigned",0)}/{e.get("vacancies",0)} idle:{e.get("unemployed",0)}'
+                    wb = d.get("wellbeing", {})
+                    cd["wellbeing"] = f'{wb.get("average",0)}/77 miserable:{wb.get("miserable",0)} critical:{wb.get("critical",0)}'
+                    dc = d.get("dc", {})
+                    if dc:
+                        cd["dc"] = f'{dc["x"]},{dc["y"]},z{dc.get("z",0)} {dc.get("orientation","")} entrance:{dc.get("entranceX",0)},{dc.get("entranceY",0)}'
+                    compact_districts.append(cd)
+                s["districts"] = compact_districts
+            # flatten tree/crop species into CSV
+            if "trees" in s and isinstance(s["trees"], dict):
+                sp = s["trees"].get("species", [])
+                s["trees"] = {"marked": s["trees"].get("markedGrown", 0), "seedling": s["trees"].get("markedSeedling", 0), "unmarked": s["trees"].get("unmarkedGrown", 0),
+                              "species": [{k: v for k, v in x.items()} for x in sp]}
+            if "crops" in s and isinstance(s["crops"], dict):
+                sp = s["crops"].get("species", [])
+                s["crops"] = {"ready": s["crops"].get("ready", 0), "growing": s["crops"].get("growing", 0),
+                              "species": [{k: v for k, v in x.items()} for x in sp]}
+            # flatten wellbeing categories
+            if "wellbeing" in s and isinstance(s["wellbeing"], dict):
+                cats = s["wellbeing"].get("categories", [])
+                s["wellbeing"] = {"avg": s["wellbeing"].get("average", 0), "miserable": s["wellbeing"].get("miserable", 0), "critical": s["wellbeing"].get("critical", 0),
+                                  "categories": [{k: v for k, v in c.items()} for c in cats]}
+            # flatten clusters
+            for key in ("treeClusters", "foodClusters"):
+                if key in s:
+                    s[key] = [{"x": c["x"], "y": c["y"], "z": c.get("z", 0), "grown": c.get("grown", 0), "total": c.get("total", 0), "species": ",".join(c.get("species", {}).keys())} for c in s[key]]
+
+        # compact locations
         compact_locs = {}
         for name, loc in locations.items():
             sp = ",".join(loc.get("species", [])) if "species" in loc else ""
@@ -729,7 +790,7 @@ class Timberbot:
                 val += " " + note
             compact_locs[name] = val
 
-        return {"summary": toon_summary, "goal": current_goal, "tasks": tasks, "locations": compact_locs}
+        return {"summary": summary, "goal": current_goal, "tasks": tasks, "locations": compact_locs}
 
     def set_location(self, name, x, y, z=0, note=""):
         """Save a named location. Persists across sessions."""
