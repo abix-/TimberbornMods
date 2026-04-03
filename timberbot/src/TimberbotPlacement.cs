@@ -2224,15 +2224,12 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            int tz = GetTerrainHeight(x, y);
-            if (tz > 0) z = tz;
-
             var validationReason = ValidatePlacement(buildingSpec, blockObjectSpec, x, y, ref z, orientation);
             if (validationReason != null)
                 return new PlaceBuildingResult { Error = validationReason, X = x, Y = y, Z = z, Prefab = prefabName };
 
             var orient = (Timberborn.Coordinates.Orientation)orientation;
-            var placement = new Placement(new Vector3Int(gx, gy, tz), orient, FlipMode.Unflipped);
+            var placement = new Placement(new Vector3Int(gx, gy, z), orient, FlipMode.Unflipped);
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
