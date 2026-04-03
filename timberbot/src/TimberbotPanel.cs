@@ -53,17 +53,14 @@ namespace Timberbot
 
         private static readonly string[][] ModelChoices = new[]
         {
-            new[] { "opus", "opus (latest) $$$$" },
             new[] { "claude-opus-4-6", "opus 4.6 - strongest $$$$" },
             new[] { "claude-opus-4-5", "opus 4.5 $$$$" },
             new[] { "claude-opus-4-1", "opus 4.1 $$$$" },
-            new[] { "sonnet", "sonnet (latest) $$$" },
             new[] { "claude-sonnet-4-6", "sonnet 4.6 - best value $$$" },
             new[] { "claude-sonnet-4-5", "sonnet 4.5 $$$" },
-            new[] { "claude-sonnet-3-7", "sonnet 3.7 - older $$" },
-            new[] { "haiku", "haiku (latest) $" },
+            new[] { "claude-sonnet-3-7", "sonnet 3.7 $$" },
             new[] { "claude-haiku-4-5", "haiku 4.5 $" },
-            new[] { "claude-haiku-3-5", "haiku 3.5 - older $" },
+            new[] { "claude-haiku-3-5", "haiku 3.5 $" },
         };
 
         private static readonly string[][] EffortChoices = new[]
@@ -265,7 +262,7 @@ namespace Timberbot
             _binaryField = MakeTextField("claude");
             _settingsContainer.Add(MakeFieldRow("Binary:", _binaryField));
 
-            _modelDropdown = MakeNativeDropdown(ModelChoices, "sonnet (latest) $$$", _modelDisplayToValue);
+            _modelDropdown = MakeNativeDropdown(ModelChoices, "sonnet 4.6 - best value $$$", _modelDisplayToValue);
             _settingsContainer.Add(MakeFieldRow("Model:", _modelDropdown));
 
             _effortDropdown = MakeNativeDropdown(EffortChoices, "high - thorough (default)", _effortDisplayToValue);
