@@ -104,7 +104,7 @@ namespace Timberbot
             var status = agent.CurrentStatus;
             string statusText = FormatStatus(agent);
 
-            _statusBarLabel.text = "Timberbot: " + statusText;
+            _statusBarLabel.text = "Timberbot API:" + statusText;
             _statusLabel.text = "Status: " + statusText;
             _goalLabel.text = "Goal: " + Truncate(agent.CurrentGoal, 40);
             _cmdLabel.text = "Cmd: " + Truncate(agent.CurrentCommand, 40);
@@ -129,7 +129,7 @@ namespace Timberbot
             _collapsedWrapper.Add(panel);
 
             _statusBarLabel = new NineSliceLabel();
-            _statusBarLabel.text = "Timberbot: Idle";
+            _statusBarLabel.text = "Timberbot API:Idle";
             _statusBarLabel.AddToClassList("text--yellow");
             _statusBarLabel.AddToClassList("game-text-normal");
             _statusBarLabel.style.marginRight = 4;
@@ -164,7 +164,7 @@ namespace Timberbot
             header.style.alignItems = Align.Center;
             header.style.marginBottom = 4;
 
-            var title = new NineSliceLabel { text = "Timberbot Agent" };
+            var title = new NineSliceLabel { text = "Timberbot API" };
             title.AddToClassList("text--yellow");
             title.AddToClassList("game-text-normal");
             title.AddToClassList("text--bold");
