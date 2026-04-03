@@ -1934,7 +1934,7 @@ namespace Timberbot
             var bo = t.BlockObject;
             if (bo != null)
             {
-                var coords = bo.Coordinates;
+                var coords = bo.CoordinatesAtBaseZ;
                 def.X = coords.x;
                 def.Y = coords.y;
                 def.Z = coords.z;
