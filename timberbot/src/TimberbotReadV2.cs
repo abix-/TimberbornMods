@@ -1272,7 +1272,7 @@ namespace Timberbot
         private SpeedSnapshot BuildSpeedSnapshot()
         {
             var raw = _speedManager.CurrentSpeed;
-            int level = Array.IndexOf(SpeedScale, raw);
+            int level = Array.IndexOf(SpeedScale, (int)raw);
             if (level < 0) level = 0;
             return new SpeedSnapshot { Speed = level };
         }
