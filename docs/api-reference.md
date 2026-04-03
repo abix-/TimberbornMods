@@ -216,7 +216,7 @@ Current built-in agent status.
 
 ### POST /api/agent/start
 
-Start the built-in interactive agent. This gathers fresh colony state via `timberbot.py brain`, points the agent at the static `skill/timberbot.md` instructions file, and launches the selected binary interactively with the live colony state as the startup prompt.
+Start the built-in interactive agent. This gathers fresh colony state via `timberbot.py brain`, generates a merged per-launch instructions file from `skill/timberbot.md` plus live colony state, and launches the selected binary interactively against that generated file.
 
 #### Body
 

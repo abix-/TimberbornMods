@@ -286,11 +286,43 @@ namespace Timberbot
             return false;
         }
 
-        private (string exe, string args) BuildCustomCommand(string template, string skillFile, string startupPrompt, string modDir)
+        private string BuildMergedInstructions(string skillFile, string startupPrompt, string modDir)
+        {
+            var mergedPath = Path.Combine(modDir, "agent-instructions.md");
+            var staticPrompt = "";
+            try
+            {
+                staticPrompt = File.ReadAllText(skillFile);
+            }
+            catch (Exception ex)
+            {
+                TimberbotLog.Info($"agent.instructions.read.fail: {ex.Message}");
+            }
+
+            var sb = new StringBuilder();
+            if (!string.IsNullOrWhiteSpace(staticPrompt))
+                sb.AppendLine(staticPrompt.TrimEnd());
+            if (sb.Length > 0)
+                sb.AppendLine().AppendLine();
+            sb.AppendLine(startupPrompt.TrimEnd());
+
+            var merged = sb.ToString();
+            File.WriteAllText(mergedPath, merged, new UTF8Encoding(false));
+            TimberbotLog.Info($"agent.instructions.generated path={mergedPath} bytes={Encoding.UTF8.GetByteCount(merged)}");
+            return mergedPath;
+        }
+
+        private static string BuildStartupKickoff()
+        {
+            return "Begin now. Print the boot report first.";
+        }
+
+        private (string exe, string args) BuildCustomCommand(string template, string skillFile, string startupPrompt, string instructionsFile, string modDir)
         {
             var cmd = template;
 
             cmd = cmd.Replace("{skill}", QuoteArg(skillFile));
+            cmd = cmd.Replace("{instructions_file}", QuoteArg(instructionsFile));
 
             if (cmd.Contains("{prompt_file}"))
             {
@@ -347,33 +379,83 @@ namespace Timberbot
         }
 
         private string _activeSessionLockPath;  // Windows lock file for terminal session tracking
+        private string _activeSessionLogPath;   // Windows wrapper log with launch/exit details
+        private string _activeStartupPromptPath;
 
-        private ProcessStartInfo BuildTerminalStartInfo(string modDir, string launchCmd, string terminalOverride = null)
+        private ProcessStartInfo BuildWindowsTerminalStartInfo(string modDir, string instructionsFile, string kickoffPrompt, string terminalOverride = null)
         {
             var terminal = terminalOverride ?? _terminal;
-
-            // write a .cmd wrapper that creates a lock file, runs the command, then deletes it
             var lockFile = Path.Combine(modDir, "agent-session.lock");
-            var scriptPath = Path.Combine(modDir, "agent-session.cmd");
+            var sessionLog = Path.Combine(modDir, "agent-session.log");
+            var scriptPath = Path.Combine(modDir, "agent-session.ps1");
+            var promptPath = Path.Combine(modDir, "agent-startup-prompt.txt");
+            File.WriteAllText(promptPath, kickoffPrompt, new UTF8Encoding(false));
+            _activeStartupPromptPath = promptPath;
             var script = new StringBuilder();
-            script.AppendLine("@echo off");
-            script.Append("echo running > \"").Append(lockFile).AppendLine("\"");
-            script.Append("cd /d \"").Append(modDir).AppendLine("\"");
-            script.AppendLine(launchCmd);
-            script.Append("del \"").Append(lockFile).AppendLine("\" 2>nul");
+            script.AppendLine("$ErrorActionPreference = 'Stop'");
+            script.Append("$lockFile = ").AppendLine(ShellQuoteArg(lockFile));
+            script.Append("$logFile = ").AppendLine(ShellQuoteArg(sessionLog));
+            script.Append("$promptFile = ").AppendLine(ShellQuoteArg(promptPath));
+            script.Append("$cwd = ").AppendLine(ShellQuoteArg(modDir));
+            script.Append("$binary = ").AppendLine(ShellQuoteArg(_binary ?? ""));
+            script.Append("$instructionsFile = ").AppendLine(ShellQuoteArg(instructionsFile));
+            script.Append("$model = ").AppendLine(ShellQuoteArg(_model ?? ""));
+            script.Append("$effort = ").AppendLine(ShellQuoteArg(_effort ?? ""));
+            script.Append("$isCodex = ").AppendLine(IsCodexBinary(_binary) ? "$true" : "$false");
+            script.AppendLine("Set-Content -Path $logFile -Value '[Timberbot] wrapper start' -Encoding UTF8");
+            script.AppendLine("Add-Content -Path $logFile -Value ('[Timberbot] cwd=' + $cwd)");
+            script.AppendLine("Add-Content -Path $logFile -Value ('[Timberbot] binary=' + $binary)");
+            script.AppendLine("Add-Content -Path $logFile -Value ('[Timberbot] instructions=' + $instructionsFile)");
+            script.AppendLine("Add-Content -Path $logFile -Value ('[Timberbot] promptFile=' + $promptFile)");
+            script.AppendLine("if ($model) { Add-Content -Path $logFile -Value ('[Timberbot] model=' + $model) }");
+            script.AppendLine("if ($effort) { Add-Content -Path $logFile -Value ('[Timberbot] effort=' + $effort) }");
+            script.AppendLine("Set-Content -Path $lockFile -Value 'running' -Encoding UTF8");
+            script.AppendLine("Set-Location -Path $cwd");
+            script.AppendLine("$prompt = Get-Content -Path $promptFile -Raw");
+            script.AppendLine("Add-Content -Path $logFile -Value ('[Timberbot] promptBytes=' + ([Text.Encoding]::UTF8.GetByteCount($prompt)))");
+            script.AppendLine("$args = New-Object System.Collections.Generic.List[string]");
+            script.AppendLine("if ($isCodex) {");
+            script.AppendLine("  $args.Add('-c')");
+            script.AppendLine("  $args.Add('model_instructions_file=\"' + $instructionsFile + '\"')");
+            script.AppendLine("  if ($model) { $args.Add('--model'); $args.Add($model) }");
+            script.AppendLine("  if ($effort) { $args.Add('-c'); $args.Add('model_reasoning_effort=\"' + $effort + '\"') }");
+            script.AppendLine("} else {");
+            script.AppendLine("  $args.Add('--system-prompt-file')");
+            script.AppendLine("  $args.Add($instructionsFile)");
+            script.AppendLine("  if ($model) { $args.Add('--model'); $args.Add($model) }");
+            script.AppendLine("  if ($effort) { $args.Add('--effort'); $args.Add($effort) }");
+            script.AppendLine("}");
+            script.AppendLine("$args.Add($prompt)");
+            script.AppendLine("$exitCode = 0");
+            script.AppendLine("try {");
+            script.AppendLine("  & $binary @args");
+            script.AppendLine("  $exitCode = $LASTEXITCODE");
+            script.AppendLine("} catch {");
+            script.AppendLine("  Add-Content -Path $logFile -Value ('[Timberbot] exception=' + $_.Exception.Message)");
+            script.AppendLine("  $exitCode = 1");
+            script.AppendLine("} finally {");
+            script.AppendLine("  Add-Content -Path $logFile -Value ('[Timberbot] exitCode=' + $exitCode)");
+            script.AppendLine("  Remove-Item -LiteralPath $lockFile -ErrorAction SilentlyContinue");
+            script.AppendLine("}");
+            script.AppendLine("if ($exitCode -ne 0) {");
+            script.AppendLine("  Add-Content -Path $logFile -Value '[Timberbot] launch failed, press Enter to close'");
+            script.AppendLine("  Read-Host | Out-Null");
+            script.AppendLine("}");
+            script.AppendLine("exit $exitCode");
             File.WriteAllText(scriptPath, script.ToString(), Encoding.UTF8);
             _activeSessionLockPath = lockFile;
+            _activeSessionLogPath = sessionLog;
 
             var termCmd = terminal.Trim().Replace("{cwd}", "\"" + modDir + "\"");
-            var wrappedCmd = "\"" + scriptPath + "\"";
+            var wrappedCmd = "powershell.exe -ExecutionPolicy Bypass -File " + QuoteArg(scriptPath);
             if (termCmd.Contains("{command}"))
                 termCmd = termCmd.Replace("{command}", wrappedCmd);
             else
                 termCmd = termCmd + " " + wrappedCmd;
 
-            TimberbotLog.Info($"agent.terminal.launch script={scriptPath} lock={lockFile}");
-
             var termParts = SplitCommand(termCmd);
+            TimberbotLog.Info($"agent.terminal.launch script={scriptPath} prompt={promptPath} lock={lockFile} log={sessionLog}");
+            TimberbotLog.Info($"agent.terminal.command exe={termParts.exe} args={termParts.args}");
             return new ProcessStartInfo
             {
                 FileName = termParts.exe,
@@ -399,16 +481,44 @@ namespace Timberbot
             }
 
             if (!File.Exists(_activeSessionLockPath) && !_cancelRequested)
+            {
+                LogWindowsSessionTail("agent.terminal.no_lock");
                 return false;
+            }
 
             // wait for lock file to disappear (script finished)
             while (!_cancelRequested)
             {
                 if (!File.Exists(_activeSessionLockPath))
+                {
+                    LogWindowsSessionTail("agent.terminal.session_tail");
                     return true;
+                }
                 Thread.Sleep(500);
             }
+            LogWindowsSessionTail("agent.terminal.cancelled_tail");
             return true;
+        }
+
+        private void LogWindowsSessionTail(string prefix)
+        {
+            if (string.IsNullOrWhiteSpace(_activeSessionLogPath) || !File.Exists(_activeSessionLogPath))
+            {
+                TimberbotLog.Info($"{prefix} log=missing");
+                return;
+            }
+
+            try
+            {
+                var lines = File.ReadAllLines(_activeSessionLogPath);
+                var start = Math.Max(0, lines.Length - 8);
+                var tail = string.Join(" | ", lines, start, lines.Length - start);
+                TimberbotLog.Info($"{prefix} {tail}");
+            }
+            catch (Exception ex)
+            {
+                TimberbotLog.Info($"{prefix} read_fail={ex.Message}");
+            }
         }
 
         private ProcessStartInfo BuildMacDefaultStartInfo(string modDir, string shellCommand)
@@ -492,13 +602,13 @@ namespace Timberbot
             return false;
         }
 
-        private string BuildMacBuiltInShellCommand(string skillFile, string startupPrompt)
+        private string BuildMacBuiltInShellCommand(string instructionsFile, string kickoffPrompt)
         {
             var parts = new List<string> { ShellQuoteArg(_binary) };
             if (IsCodexBinary(_binary))
             {
                 parts.Add(ShellQuoteArg("-c"));
-                parts.Add(ShellQuoteArg("model_instructions_file=\"" + skillFile + "\""));
+                parts.Add(ShellQuoteArg("model_instructions_file=\"" + instructionsFile + "\""));
                 if (!string.IsNullOrEmpty(_model))
                 {
                     parts.Add(ShellQuoteArg("--model"));
@@ -513,7 +623,7 @@ namespace Timberbot
             else
             {
                 parts.Add(ShellQuoteArg("--system-prompt-file"));
-                parts.Add(ShellQuoteArg(skillFile));
+                parts.Add(ShellQuoteArg(instructionsFile));
                 if (!string.IsNullOrEmpty(_model))
                 {
                     parts.Add(ShellQuoteArg("--model"));
@@ -526,7 +636,7 @@ namespace Timberbot
                 }
             }
 
-            parts.Add(ShellQuoteArg(startupPrompt));
+            parts.Add(ShellQuoteArg(kickoffPrompt));
             return string.Join(" ", parts);
         }
 
@@ -539,7 +649,9 @@ namespace Timberbot
                 var modDir = TimberbotPaths.ModDir;
                 var skillFile = TimberbotPaths.SkillFile;
                 var startupPrompt = BuildStartupPrompt(modDir);
-                TimberbotLog.Info($"agent.launch binary={_binary} model={_model ?? "default"} effort={_effort ?? "default"} instructions={skillFile} startupBytes={Encoding.UTF8.GetByteCount(startupPrompt)}");
+                var instructionsFile = BuildMergedInstructions(skillFile, startupPrompt, modDir);
+                var kickoffPrompt = BuildStartupKickoff();
+                TimberbotLog.Info($"agent.launch binary={_binary} model={_model ?? "default"} effort={_effort ?? "default"} instructions={instructionsFile} startupBytes={Encoding.UTF8.GetByteCount(startupPrompt)} kickoffBytes={Encoding.UTF8.GetByteCount(kickoffPrompt)}");
 
                 _status = AgentStatus.Interactive;
                 _currentCmd = null;
@@ -549,7 +661,7 @@ namespace Timberbot
 
                 if (_commandTemplate != null)
                 {
-                    var custom = BuildCustomCommand(_commandTemplate, skillFile, startupPrompt, modDir);
+                    var custom = BuildCustomCommand(_commandTemplate, skillFile, kickoffPrompt, instructionsFile, modDir);
                     launchExe = custom.exe;
                     launchArgs = custom.args;
                     TimberbotLog.Info($"agent.custom.launch exe={launchExe} args={launchArgs.Length}chars");
@@ -559,7 +671,7 @@ namespace Timberbot
                     var args = new StringBuilder();
                     if (IsCodexBinary(_binary))
                     {
-                        args.Append("-c ").Append(QuoteArg("model_instructions_file=\"" + skillFile + "\""));
+                        args.Append("-c ").Append(QuoteArg("model_instructions_file=\"" + instructionsFile + "\""));
                         if (!string.IsNullOrEmpty(_model))
                             args.Append(" --model ").Append(_model);
                         if (!string.IsNullOrEmpty(_effort))
@@ -567,19 +679,18 @@ namespace Timberbot
                     }
                     else
                     {
-                        args.Append("--system-prompt-file ").Append(QuoteArg(skillFile));
+                        args.Append("--system-prompt-file ").Append(QuoteArg(instructionsFile));
                         if (!string.IsNullOrEmpty(_model))
                             args.Append(" --model ").Append(_model);
                         if (!string.IsNullOrEmpty(_effort))
                             args.Append(" --effort ").Append(_effort);
                     }
 
-                    args.Append(" ").Append(QuoteArg(startupPrompt));
+                    args.Append(" ").Append(QuoteArg(kickoffPrompt));
                     launchExe = _binary;
                     launchArgs = args.ToString();
                 }
 
-                var launchCmd = launchExe + " " + launchArgs;
                 ProcessStartInfo psi;
                 bool waitForMacSession = false;
                 var effectiveTerminal = _terminalOverride ?? _terminal;
@@ -587,7 +698,10 @@ namespace Timberbot
                 bool waitForTerminalSession = false;
                 if (!string.IsNullOrWhiteSpace(effectiveTerminal))
                 {
-                    psi = BuildTerminalStartInfo(modDir, launchCmd, effectiveTerminal);
+                    if (_commandTemplate != null)
+                        throw new InvalidOperationException("Custom command templates are not supported with terminal wrappers on Windows yet. Clear Startup -> terminal or use built-in claude/codex.");
+
+                    psi = BuildWindowsTerminalStartInfo(modDir, instructionsFile, kickoffPrompt, effectiveTerminal);
                     waitForTerminalSession = true;
                 }
                 else if (TimberbotPaths.IsMacOS)
@@ -595,7 +709,7 @@ namespace Timberbot
                     if (_commandTemplate != null)
                         throw new InvalidOperationException("Custom binaries on macOS require Startup -> terminal.");
 
-                    psi = BuildMacDefaultStartInfo(modDir, BuildMacBuiltInShellCommand(skillFile, startupPrompt));
+                    psi = BuildMacDefaultStartInfo(modDir, BuildMacBuiltInShellCommand(instructionsFile, kickoffPrompt));
                     waitForMacSession = true;
                 }
                 else
@@ -648,6 +762,8 @@ namespace Timberbot
                 _activeProcess = null;
                 _activeSessionPidPath = null;
                 _activeSessionLockPath = null;
+                _activeSessionLogPath = null;
+                _activeStartupPromptPath = null;
             }
         }
     }

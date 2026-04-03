@@ -142,7 +142,7 @@ namespace Timberbot
         private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
         {
             ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Select 'custom' to provide your own command template.",
-            ["Command:"] = "Freeform command template for custom CLIs. Placeholders: {skill} = skill file path, {prompt} = inline startup text, {prompt_file} = startup text written to a temp file, {model} = model value, {effort} = effort value. If model/effort are empty, the flag before the placeholder is stripped too. On macOS, custom binaries should also set Startup -> terminal.",
+            ["Command:"] = "Freeform command template for custom CLIs. Placeholders: {skill} = static skill file path, {instructions_file} = merged per-launch instructions file, {prompt} = small startup message, {prompt_file} = startup message written to a temp file, {model} = model value, {effort} = effort value. If model/effort are empty, the flag before the placeholder is stripped too. On macOS, custom binaries should also set Startup -> terminal.",
             ["Model:"] = "Model name passed to the agent with --model. Preset choices change based on the selected binary, but you can type any model manually.",
             ["Effort:"] = "Reasoning effort passed to the agent with --effort. Preset choices change based on the selected binary, but you can type any effort value manually.",
             ["Goal:"] = "Initial task sent to the agent after it prints the boot report. The system prompt also includes the guide and current colony state.",
@@ -366,13 +366,17 @@ namespace Timberbot
             var savedWebhookCircuitBreaker = NormalizeValue(_service.GetUISetting("webhookCircuitBreaker"), "30");
             var savedWebhookMaxPendingEvents = NormalizeValue(_service.GetUISetting("webhookMaxPendingEvents"), "1000");
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
-            var savedTerminal = _service.GetUISetting("terminal");
+            var savedTerminal = NormalizeTerminalSetting(_service.GetUISetting("terminal"));
             if (savedTerminal == null)
             {
                 if (Application.platform == RuntimePlatform.WindowsPlayer && IsExeInPath("wt"))
                     savedTerminal = "wt -d {cwd} --";
                 else
                     savedTerminal = "";
+            }
+            else if (savedTerminal != (_service.GetUISetting("terminal") ?? ""))
+            {
+                _service.SaveUISetting("terminal", savedTerminal);
             }
             var savedPythonCommand = _service.GetUISetting("pythonCommand") ?? "";
 
@@ -492,7 +496,8 @@ namespace Timberbot
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt =>
             {
-                var val = evt.newValue ?? "";
+                var val = NormalizeTerminalSetting(evt.newValue) ?? "";
+                _terminalField.SetValueWithoutNotify(val);
                 _service.SaveUISetting("terminal", val);
                 ValidateTerminalField(val);
             });
@@ -689,7 +694,7 @@ namespace Timberbot
             var effort = NormalizeValue(_effortField.value, "");
             var goal = _goalField.value;
             var command = binary == "custom" ? (_commandTemplateField?.value ?? "") : null;
-            var terminal = _terminalField?.value;
+            var terminal = NormalizeTerminalSetting(_terminalField?.value) ?? "";
 
             agent.Start(binary, model, effort, 120, goal, command, terminal);
             TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"} custom={command != null} terminal={terminal ?? "(default)"}");
@@ -960,6 +965,7 @@ namespace Timberbot
         private void ValidateTerminalField(string value)
         {
             if (_terminalStatusLabel == null) return;
+            value = NormalizeTerminalSetting(value);
             if (string.IsNullOrWhiteSpace(value))
             {
                 _terminalStatusLabel.text = "";
@@ -976,6 +982,23 @@ namespace Timberbot
                 _terminalStatusLabel.text = exe + " not found!";
                 _terminalStatusLabel.style.color = new Color(1f, 0.5f, 0.5f);
             }
+        }
+
+        private static string NormalizeTerminalSetting(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "";
+
+            var trimmed = value.Trim();
+            for (int i = 0; i < TerminalChoices.Length; i++)
+            {
+                var label = TerminalChoices[i][0];
+                var actual = TerminalChoices[i].Length > 1 ? TerminalChoices[i][1] : TerminalChoices[i][0];
+                if (string.Equals(trimmed, label, System.StringComparison.OrdinalIgnoreCase))
+                    return actual;
+            }
+
+            return trimmed;
         }
 
         private static bool ChoiceContainsValue(string[][] choices, string value)

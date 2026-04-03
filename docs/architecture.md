@@ -104,13 +104,17 @@ Launch flow:
 1. `Start(...)` validates the agent is not already running and stores the launch settings.
 2. The agent enters `GatheringState` and starts a background thread.
 3. That thread runs `timberbot.py brain "goal:..."` to gather live colony state.
-4. The static instructions file stays `skill/timberbot.md` from the mod folder.
-5. The startup prompt is built from:
+4. The startup prompt is built from:
    - `## CURRENT COLONY STATE` followed by the fresh `brain` output, or a failure note
    - the boot-sequence requirement and current goal text
-6. The selected binary is launched interactively with the static instructions file plus that startup prompt.
-7. While the process is running, the agent is `Interactive`.
-8. When the process exits, the agent transitions to `Done`, or back to `Idle` if it was explicitly cancelled.
+5. Timberbot generates a merged per-launch instructions file that contains:
+   - the static `skill/timberbot.md`
+   - the current colony state block
+   - the current goal and boot requirement
+6. The selected binary is launched interactively against that merged instructions file.
+7. A short startup nudge is still passed to begin the first turn immediately.
+8. While the process is running, the agent is `Interactive`.
+9. When the process exits, the agent transitions to `Done`, or back to `Idle` if it was explicitly cancelled.
 
 Terminal wrapping:
 

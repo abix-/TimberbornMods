@@ -20,14 +20,29 @@ MOD_DIR = os.path.join(str(Path.home()), "Documents", "Timberborn", "Mods", "Tim
 MANIFEST = os.path.join(SRC_DIR, "manifest.json")
 DLL_PATH = os.path.join(SRC_DIR, "bin", "Release", "netstandard2.1", "Timberbot.dll")
 SCRIPT = os.path.join(SCRIPT_DIR, "timberbot.py")
-SKILL = os.path.join(ROOT, "skill", "timberbot.md")
+SKILL = os.path.join(ROOT, "timberbot", "skill", "timberbot.md")
 
 
 def run(cmd, **kwargs):
     print(f"  > {cmd}")
     subprocess.check_call(cmd, shell=True, **kwargs)
 
-PRESERVE_MOD_FILES = {"settings.json", "workshop_data.json", "memory", "autoload.json"}
+PRESERVE_MOD_FILES = {"workshop_data.json", "autoload.json"}
+
+
+def remove_path(path):
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+    except PermissionError as ex:
+        print(f"  ! warning: could not remove {path}: {ex}")
+
+
+def clean_dir_contents(path):
+    for name in os.listdir(path):
+        remove_path(os.path.join(path, name))
 
 
 def clean_mod_dir():
@@ -39,10 +54,10 @@ def clean_mod_dir():
             continue
 
         path = os.path.join(MOD_DIR, name)
-        if os.path.isdir(path):
-            shutil.rmtree(path)
-        else:
-            os.remove(path)
+        if name == "skill" and os.path.isdir(path):
+            clean_dir_contents(path)
+            continue
+        remove_path(path)
 
 
 
@@ -65,7 +80,7 @@ def main():
         shutil.rmtree(DIST_DIR)
     os.makedirs(DIST_DIR)
 
-    # mod zip (DLL + manifest + thumbnail + python client + Claude skill + docs)
+    # mod zip (DLL + manifest + thumbnail + python client + runtime prompt + docs)
     zip_name = f"TimberbotAPI-v{version}.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -76,14 +91,6 @@ def main():
             zf.write(thumb, "thumbnail.png")
         zf.write(SCRIPT, "timberbot.py")
         zf.write(SKILL, "skill/timberbot.md")
-        # include settings.json with debug disabled
-        release_settings = json.dumps({
-            "debugEndpointEnabled": False,
-            "httpPort": 8085,
-            "terminal": "",
-            "pythonCommand": ""
-        }, indent=2)
-        zf.writestr("settings.json", release_settings)
         # include docs
         docs_dir = os.path.join(ROOT, "docs")
         for doc in os.listdir(docs_dir):
