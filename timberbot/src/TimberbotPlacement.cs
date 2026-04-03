@@ -1807,22 +1807,22 @@ namespace Timberbot
                 var jw = _owner.Jw.Reset();
                 if (_format == "toon")
                 {
-                    // toon: flat array of compact objects (toons library renders as table)
+                    // toon: flat array (same keys as json, toons library renders as compact table)
                     jw.OpenArr();
                     for (int i = 0; i < count; i++)
                     {
                         var r = _results[i];
                         jw.OpenObj()
                             .Prop("x", r.x).Prop("y", r.y).Prop("z", r.z)
-                            .Prop("o", _orientNames[r.orient])
-                            .Prop("eX", r.entranceX).Prop("eY", r.entranceY)
-                            .Prop("path", r.pathAccess ? 1 : 0)
-                            .Prop("reach", r.reachable ? 1 : 0)
-                            .Prop("dist", r.distance, "F0")
-                            .Prop("pwr", r.nearPower ? 1 : 0)
-                            .Prop("flood", r.flooded ? 1 : 0);
+                            .Prop("orientation", _orientNames[r.orient])
+                            .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
+                            .Prop("pathAccess", r.pathAccess ? 1 : 0)
+                            .Prop("reachable", r.reachable ? 1 : 0)
+                            .Prop("distance", r.distance, "F1")
+                            .Prop("nearPower", r.nearPower ? 1 : 0)
+                            .Prop("flooded", r.flooded ? 1 : 0);
                         if (_waterInputLocal.HasValue)
-                            jw.Prop("water", r.waterDepth, "F1");
+                            jw.Prop("waterDepth", r.waterDepth, "F2");
                         jw.CloseObj();
                     }
                     _result = jw.CloseArr().ToString();

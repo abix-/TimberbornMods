@@ -1252,6 +1252,7 @@ Find valid placements for a building within a rectangular area. Returns at most 
 
 Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non-flooded > reachable > distance (closer first) > pathAccess > nearPower.
 
+**JSON format** (nested wrapper with prefab metadata):
 ```json
 {
   "prefab": "LumberjackFlag.IronTeeth",
@@ -1262,10 +1263,15 @@ Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non
 }
 ```
 
+**TOON format** (flat array, same keys, no wrapper):
+```json
+[{"x": 120, "y": 130, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 129, "pathAccess": 1, "reachable": 1, "distance": 12.0, "nearPower": 0, "flooded": 0}]
+```
+
 #### Response (error)
 
 ```json
-{"error": "not_found", "prefab": "BadName"}
+{"error": "invalid_prefab: 'BadName' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", "prefab": "BadName"}
 ```
 
 ---
