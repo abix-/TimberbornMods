@@ -53,6 +53,7 @@ namespace Timberbot
         private TextField _webhookMaxPendingEventsField;
         private TextField _writeBudgetMsField;
         private TextField _terminalField;
+        private NineSliceButton _terminalPresetBtn;
         private TextField _pythonCommandField;
 
         private VisualElement _presetPopup;
@@ -123,6 +124,13 @@ namespace Timberbot
         {
             new[] { "true", "true" },
             new[] { "false", "false" },
+        };
+
+        private static readonly string[][] TerminalChoices = new[]
+        {
+            new[] { "(none)", "" },
+            new[] { "Windows Terminal", "wt -d {cwd} --" },
+            new[] { "WezTerm", "wezterm start --cwd {cwd} --" },
         };
 
         private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
@@ -463,7 +471,8 @@ namespace Timberbot
 
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
-            _runtimeSettingsContainer.Add(MakeFieldRow("terminal:", _terminalField));
+            _terminalPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_terminalPresetBtn, _terminalField, TerminalChoices));
+            _runtimeSettingsContainer.Add(MakePresetFieldRow("terminal:", _terminalField, _terminalPresetBtn));
 
             _pythonCommandField = MakeTextField(savedPythonCommand);
             _pythonCommandField.RegisterValueChangedCallback(evt => _service.SaveUISetting("pythonCommand", evt.newValue ?? ""));
