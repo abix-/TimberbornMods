@@ -62,7 +62,7 @@ extra:
 nav:
   - Getting Started: getting-started.md
   - API Reference: api-reference.md
-  - Timberbot AI: timberbot.md
+  - Timberbot Guide: timberbot.md
   - Features: features.md
   - Webhooks: webhooks.md
   - Architecture: architecture.md
@@ -70,4 +70,3 @@ nav:
   - Developing: developing.md
 
 copyright: Timberbot API &mdash; Play Timberborn with an AI
-

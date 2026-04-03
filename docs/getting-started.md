@@ -189,8 +189,8 @@ The mod also ships docs for AI play with Claude Code, OpenAI Codex, ChatGPT, or 
 
 The AI docs entrypoints are:
 
-- `skill/timberbot.md` is the distributable Claude Code entrypoint
-- [timberbot.md](timberbot.md) is the single authoritative AI guide
+- `skill/timberbot.md` is the Timberbot Skill, the slim runtime prompt used at launch
+- [timberbot.md](timberbot.md) is the Timberbot Guide, the full operating guide behind that prompt
 - [api-reference.md](api-reference.md) is the endpoint and response source of truth
 
 ### Claude Code setup
@@ -265,7 +265,7 @@ Some runtime settings are applied on load, so changing them may require reloadin
 ---
 
 - [API Reference](api-reference.md) -- every endpoint with request/response examples
-- [Timberbot AI](timberbot.md) -- single authoritative AI guide for gameplay and operating rules
+- [Timberbot Guide](timberbot.md) -- full operating guide for gameplay and AI behavior
 - [Features](features.md) -- what's implemented vs gaps
 - [Developing](developing.md) -- build from source
 

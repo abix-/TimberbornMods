@@ -1,11 +1,13 @@
 ---
-title: Timberbot AI
-description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
+title: Timberbot Guide
+description: Full operating guide for Claude and other LLMs playing Timberborn via timberbot.py.
 version: "0.8.5"
 ---
-# Timberbot AI
+# Timberbot Guide
 
-This is the single authoritative AI guide for playing Timberborn through `timberbot.py`.
+This is the full Timberbot Guide for playing Timberborn through `timberbot.py`.
+
+`skill/timberbot.md` is the Timberbot Skill: the slim runtime prompt injected at launch. This page is the full guide behind that prompt. The split keeps launch tokens low while preserving the deeper operating rules and reference material the agent may need.
 
 Read this first. Use the other docs only when needed:
 
