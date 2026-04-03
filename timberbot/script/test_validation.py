@@ -51,6 +51,8 @@ class TestRunner:
         self.y2 = 158
         self.prefab_names = set()
         self._doc_contract_cache = None
+        self.debug_enabled = False
+        self.fails_only = False
 
     def _safe_call(self, fn, fallback=None):
         """Call a bot method, return fallback on any error (bad JSON, timeout, etc)."""
@@ -189,6 +191,11 @@ class TestRunner:
         bcount = len(buildings) if isinstance(buildings, list) else 0
         print(f"  buildings: {bcount}")
 
+        # detect debug endpoint availability
+        probe = self._safe_call(lambda: self.bot.debug(target="help"), {})
+        self.debug_enabled = isinstance(probe, dict) and "error" not in probe
+        print(f"  debug: {'enabled' if self.debug_enabled else 'disabled'}")
+
     def prefab(self, base):
         """Return faction-qualified prefab name. 'Barrack' -> 'Barrack.IronTeeth'"""
         # some prefabs have no faction suffix
@@ -219,7 +226,8 @@ class TestRunner:
     def check(self, name, ok, detail=""):
         if ok:
             self.passed += 1
-            print(f"  PASS  {name}")
+            if not self.fails_only:
+                print(f"  PASS  {name}")
         else:
             self.failed += 1
             print(f"  FAIL  {name}")
@@ -228,7 +236,8 @@ class TestRunner:
 
     def skip(self, name, reason=""):
         self.skipped += 1
-        print(f"  SKIP  {name}" + (f" ({reason})" if reason else ""))
+        if not self.fails_only:
+            print(f"  SKIP  {name}" + (f" ({reason})" if reason else ""))
 
     def has(self, result, key):
         """check result dict has key"""
@@ -240,10 +249,14 @@ class TestRunner:
 
     def debug_get(self, path):
         """get a value from game internals via debug endpoint"""
+        if not self.debug_enabled:
+            return {"skipped": True}
         return self.bot.debug(target="get", path=path)
 
     def debug_call(self, path, method, **kwargs):
         """call a method on a game object via debug endpoint"""
+        if not self.debug_enabled:
+            return {"skipped": True}
         args = {"target": "call", "path": path, "method": method}
         args.update(kwargs)
         return self.bot.debug(**args)
@@ -661,9 +674,12 @@ class TestRunner:
 
         # verify via debug
         verify = self.debug_get("Write._speedManager.CurrentSpeed")
-        self.check("verify speed=0 via debug",
-                   str(verify.get("result", "")) in ("0", "0.0"),
-                   f"got: {verify.get('result')}")
+        if "skipped" in verify:
+            self.skip("verify speed=0 via debug", "debug disabled")
+        else:
+            self.check("verify speed=0 via debug",
+                       str(verify.get("result", "")) in ("0", "0.0"),
+                       f"got: {verify.get('result')}")
 
         # restore
         self.bot.set_speed(orig_speed)
@@ -1860,9 +1876,12 @@ class TestRunner:
 
         # verify via debug
         verify = self.debug_get("Write._workingHoursManager.EndHours")
-        self.check("verify workhours via debug",
-                   str(verify.get("result", "")) in ("20", "20.0"),
-                   f"got: {verify.get('result')}")
+        if "skipped" in verify:
+            self.skip("verify workhours via debug", "debug disabled")
+        else:
+            self.check("verify workhours via debug",
+                       str(verify.get("result", "")) in ("20", "20.0"),
+                       f"got: {verify.get('result')}")
 
         # restore
         self.bot.set_workhours(orig_hours)
@@ -3678,9 +3697,11 @@ def main():
     parser.add_argument("--benchmark", action="store_true", help="call the in-game /api/benchmark endpoint")
     parser.add_argument("--iterations", "-n", type=int, default=100, help="iterations for perf/benchmark (default: 100)")
     parser.add_argument("--list", action="store_true", help="list all available test names")
+    parser.add_argument("--fails-only", "-f", action="store_true", help="only show failures (suppress PASS/SKIP output)")
     args = parser.parse_args()
 
     runner = TestRunner()
+    runner.fails_only = args.fails_only
 
     # collect all test methods
     all_tests = [(name.replace("test_", ""), getattr(runner, name))

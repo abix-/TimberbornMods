@@ -2224,12 +2224,15 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            var validationReason = ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation);
+            int tz = GetTerrainHeight(x, y);
+            if (tz > 0) z = tz;
+
+            var validationReason = ValidatePlacement(buildingSpec, blockObjectSpec, x, y, ref z, orientation);
             if (validationReason != null)
                 return new PlaceBuildingResult { Error = validationReason, X = x, Y = y, Z = z, Prefab = prefabName };
 
             var orient = (Timberborn.Coordinates.Orientation)orientation;
-            var placement = new Placement(new Vector3Int(gx, gy, z), orient, FlipMode.Unflipped);
+            var placement = new Placement(new Vector3Int(gx, gy, tz), orient, FlipMode.Unflipped);
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
@@ -2250,7 +2253,7 @@ namespace Timberbot
 
         // Returns null if valid, or a reason string if invalid.
         // Iterates game's 9 validators individually to get the specific failure reason.
-        private string ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
+        private string ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, ref int z, int orientation)
         {
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
@@ -2271,7 +2274,11 @@ namespace Timberbot
                     (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
                 preview = _previewFactory.Create(placeableSpec);
                 preview.Reposition(placement);
-                if (preview.BlockObject.IsValid()) return null; // valid
+                if (preview.BlockObject.IsValid())
+                {
+                    z = preview.BlockObject.CoordinatesAtBaseZ.z;
+                    return null;
+                }
 
                 // invalid -- check block-level conflicts first (occupancy, terrain)
                 var bv = preview.BlockObject._blockValidator;
@@ -2335,7 +2342,36 @@ namespace Timberbot
                             return reason ?? validators[i].GetType().Name;
                     }
                 }
-                return "placement invalid";
+                // fallback: collect all diagnostic info we can
+                var diag = new System.Text.StringBuilder("placement invalid:");
+                var blocks = preview.BlockObject.PositionedBlocks.GetAllBlocks();
+                diag.Append($" blocks=[");
+                bool first = true;
+                foreach (var block in blocks)
+                {
+                    var c = block.Coordinates;
+                    if (!first) diag.Append(",");
+                    first = false;
+                    int th = GetTerrainHeight(c.x, c.y);
+                    float wd = GetWaterDepth(c.x, c.y);
+                    diag.Append($"({c.x},{c.y},{c.z} terrain={th} water={wd:F2})");
+                }
+                diag.Append("]");
+                if (bv == null) diag.Append(" blockValidator=null");
+                if (validationSvc == null)
+                    diag.Append(" validationService=null");
+                else
+                {
+                    var vals = validationSvc._blockObjectValidators;
+                    for (int i = 0; i < vals.Length; i++)
+                    {
+                        string r2 = null;
+                        bool ok = vals[i].IsValid(preview.BlockObject, out r2);
+                        if (!ok)
+                            diag.Append($" FAIL:{vals[i].GetType().Name}={r2 ?? "no reason"}");
+                    }
+                }
+                return diag.ToString();
             }
             catch (System.Exception ex)
             {
