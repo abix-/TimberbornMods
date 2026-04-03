@@ -1573,13 +1573,13 @@ namespace Timberbot
                 try { _buildingSpec = _owner._buildingService.GetBuildingTemplate(_prefabName); }
                 catch
                 {
-                    _result = _owner.Jw.Error("not_found", ("prefab", _prefabName));
+                    _result = _owner.Jw.Error("invalid_prefab: '" + _prefabName + "' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", ("prefab", _prefabName));
                     _completed = true;
                     return false;
                 }
                 if (_buildingSpec == null)
                 {
-                    _result = _owner.Jw.Error("not_found", ("prefab", _prefabName));
+                    _result = _owner.Jw.Error("invalid_prefab: '" + _prefabName + "' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", ("prefab", _prefabName));
                     _completed = true;
                     return false;
                 }
@@ -1847,9 +1847,9 @@ namespace Timberbot
         {
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
-            catch { return Jw.Error("not_found", ("prefab", prefabName)); }
+            catch { return Jw.Error("invalid_prefab: '" + prefabName + "' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", ("prefab", prefabName)); }
             if (buildingSpec == null)
-                return Jw.Error("not_found", ("prefab", prefabName));
+                return Jw.Error("invalid_prefab: '" + prefabName + "' is not a valid prefab name. Use /api/prefabs to list valid names. Most require a faction suffix (e.g. LumberjackFlag.Folktails)", ("prefab", prefabName));
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
                 return Jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
@@ -2146,9 +2146,9 @@ namespace Timberbot
 
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }
-            catch { return new PlaceBuildingResult { Error = "not_found", X = x, Y = y, Z = z, Prefab = prefabName }; }
+            catch { return PlaceBuildingResult.Fail("invalid_prefab: '" + prefabName + "' is not a valid prefab name. Use prefabs to list valid names", x, y, z); }
             if (buildingSpec == null)
-                return new PlaceBuildingResult { Error = "not_found", X = x, Y = y, Z = z, Prefab = prefabName };
+                return PlaceBuildingResult.Fail("invalid_prefab: '" + prefabName + "' is not a valid prefab name. Use prefabs to list valid names", x, y, z);
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
