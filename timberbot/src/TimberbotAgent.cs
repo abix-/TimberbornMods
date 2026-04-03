@@ -133,9 +133,11 @@ namespace Timberbot
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
-                var proc = new Process { StartInfo = psi };
+                using var proc = new Process { StartInfo = psi };
                 var stdout = new StringBuilder();
+                var stderr = new StringBuilder();
                 proc.OutputDataReceived += (s, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
+                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
                 proc.Start();
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
@@ -144,44 +146,65 @@ namespace Timberbot
                     try { proc.Kill(); } catch { }
                     return (false, "timeout");
                 }
-                return (proc.ExitCode == 0, stdout.ToString().Trim());
+                var output = stdout.ToString().Trim();
+                var error = stderr.ToString().Trim();
+                if (!string.IsNullOrEmpty(error))
+                    output = string.IsNullOrEmpty(output) ? error : output + "\n" + error;
+                return (proc.ExitCode == 0, output);
             }
             catch (Exception ex) { return (false, ex.Message); }
         }
 
-        private string BuildCombinedPrompt(string modDir)
+        private static bool IsCodexBinary(string binary)
+        {
+            if (string.IsNullOrWhiteSpace(binary))
+                return false;
+
+            try
+            {
+                return string.Equals(Path.GetFileNameWithoutExtension(binary.Trim()), "codex", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string QuoteArg(string value)
+        {
+            if (value == null)
+                value = "";
+            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        private string BuildStartupPrompt(string modDir)
         {
             var sb = new StringBuilder();
 
-            // 1. skill (slim boot prompt with rules + game facts + pointers)
-            var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
-            if (File.Exists(skillFile))
-            {
-                sb.AppendLine(File.ReadAllText(skillFile));
-                sb.AppendLine();
-            }
-
-            // 2. live colony state via brain
             _currentCmd = "gathering colony state";
             var brainArgs = "brain \"goal:" + _goal.Replace("\"", "'") + "\"";
-            var (ok, brainOut) = RunProcess("timberbot.py", brainArgs, _processTimeoutSeconds);
+            var brainScript = Path.Combine(modDir, "timberbot.py");
+            var (ok, brainOut) = RunProcess("py", "-3 " + QuoteArg(brainScript) + " " + brainArgs, _processTimeoutSeconds);
             if (ok && !string.IsNullOrEmpty(brainOut))
             {
-                sb.AppendLine("## CURRENT COLONY STATE\n");
+                sb.AppendLine("## CURRENT COLONY STATE");
+                sb.AppendLine();
                 sb.AppendLine(brainOut);
+                sb.AppendLine();
                 TimberbotLog.Info($"agent.brain.ok bytes={brainOut.Length}");
             }
             else
             {
-                sb.AppendLine("## COLONY STATE: could not gather. Run `timberbot.py brain` manually.\n");
+                sb.AppendLine("## COLONY STATE");
+                sb.AppendLine();
+                sb.AppendLine("Could not gather colony state for this launch. Run `timberbot.py brain` manually after startup.");
+                sb.AppendLine();
                 TimberbotLog.Info($"agent.brain.fail: {brainOut}");
             }
 
-            // write combined prompt to temp file
-            var tempFile = Path.Combine(Path.GetTempPath(), "timberbot-prompt.md");
-            File.WriteAllText(tempFile, sb.ToString());
-            TimberbotLog.Info($"agent.prompt.written path={tempFile} bytes={sb.Length}");
-            return tempFile;
+            sb.Append("Your system prompt contains session rules and the game guide. Complete the boot sequence from the guide FIRST (print the boot report), then work on this goal: ")
+                .Append(_goal.Replace("\"", "'"));
+            return sb.ToString();
         }
 
         private void InteractiveSession()
@@ -194,24 +217,34 @@ namespace Timberbot
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "Timberborn", "Mods", "Timberbot");
 
-                // build combined prompt: rules + brain state + skill
-                var promptFile = BuildCombinedPrompt(modDir);
+                var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
+                var startupPrompt = BuildStartupPrompt(modDir);
+                TimberbotLog.Info($"agent.launch binary={_binary} model={_model ?? "default"} effort={_effort ?? "default"} instructions={skillFile} startupBytes={Encoding.UTF8.GetByteCount(startupPrompt)}");
 
                 _status = AgentStatus.Interactive;
                 _currentCmd = null;
 
                 var args = new StringBuilder();
-                args.Append("--system-prompt-file \"").Append(promptFile).Append("\"");
-                if (!string.IsNullOrEmpty(_model))
-                    args.Append(" --model ").Append(_model);
-                if (!string.IsNullOrEmpty(_effort))
-                    args.Append(" --effort ").Append(_effort);
-                // initial message: demand boot report, then goal
-                args.Append(" \"Your system prompt contains session rules, colony state, and the game guide. Complete the boot sequence from the guide FIRST (print the boot report), then work on this goal: ")
-                    .Append(_goal.Replace("\"", "'")).Append("\"");
+                if (IsCodexBinary(_binary))
+                {
+                    args.Append("-c ").Append(QuoteArg("model_instructions_file=\"" + skillFile + "\""));
+                    if (!string.IsNullOrEmpty(_model))
+                        args.Append(" --model ").Append(_model);
+                    if (!string.IsNullOrEmpty(_effort))
+                        args.Append(" -c ").Append(QuoteArg("model_reasoning_effort=\"" + _effort + "\""));
+                }
+                else
+                {
+                    args.Append("--system-prompt-file ").Append(QuoteArg(skillFile));
+                    if (!string.IsNullOrEmpty(_model))
+                        args.Append(" --model ").Append(_model);
+                    if (!string.IsNullOrEmpty(_effort))
+                        args.Append(" --effort ").Append(_effort);
+                }
 
-                // build the full claude command (binary + flags + goal)
-                var claudeCmd = _binary + " " + args;
+                args.Append(" ").Append(QuoteArg(startupPrompt));
+
+                var launchCmd = _binary + " " + args;
 
                 ProcessStartInfo psi;
                 if (!string.IsNullOrWhiteSpace(_terminal))
@@ -227,7 +260,7 @@ namespace Timberbot
                     psi = new ProcessStartInfo
                     {
                         FileName = termExe,
-                        Arguments = termArgs + claudeCmd,
+                        Arguments = termArgs + launchCmd,
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         WorkingDirectory = modDir
@@ -244,7 +277,7 @@ namespace Timberbot
                     };
                 }
 
-                var proc = new Process { StartInfo = psi };
+                using var proc = new Process { StartInfo = psi };
                 _activeProcess = proc;
                 proc.Start();
                 proc.WaitForExit();
