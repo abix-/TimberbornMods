@@ -153,12 +153,11 @@ namespace Timberbot
         {
             var sb = new StringBuilder();
 
-            // 1. rules
-            var rulesFile = Path.Combine(modDir, "skill", "rules.txt");
-            if (File.Exists(rulesFile))
+            // 1. skill (slim boot prompt with rules + game facts + pointers)
+            var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
+            if (File.Exists(skillFile))
             {
-                sb.AppendLine("## SESSION RULES\n");
-                sb.AppendLine(File.ReadAllText(rulesFile));
+                sb.AppendLine(File.ReadAllText(skillFile));
                 sb.AppendLine();
             }
 
@@ -170,21 +169,12 @@ namespace Timberbot
             {
                 sb.AppendLine("## CURRENT COLONY STATE\n");
                 sb.AppendLine(brainOut);
-                sb.AppendLine();
                 TimberbotLog.Info($"agent.brain.ok bytes={brainOut.Length}");
             }
             else
             {
                 sb.AppendLine("## COLONY STATE: could not gather. Run `timberbot.py brain` manually.\n");
                 TimberbotLog.Info($"agent.brain.fail: {brainOut}");
-            }
-
-            // 3. skill (game reference)
-            var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
-            if (File.Exists(skillFile))
-            {
-                sb.AppendLine("## GAME REFERENCE\n");
-                sb.AppendLine(File.ReadAllText(skillFile));
             }
 
             // write combined prompt to temp file

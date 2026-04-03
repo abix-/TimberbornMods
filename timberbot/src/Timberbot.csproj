@@ -400,7 +400,10 @@
     <Delete Files="$(ModDir)\timberbot\skill\SKILL.md" Condition="Exists('$(ModDir)\timberbot\skill\SKILL.md')" />
     <RemoveDir Directories="$(ModDir)\timberbot\skill" Condition="Exists('$(ModDir)\timberbot\skill')" />
     <MakeDir Directories="$(ModDir)\skill" />
-    <Copy SourceFiles="..\..\skill\timberbot.md" DestinationFolder="$(ModDir)\skill" />
+    <Copy SourceFiles="..\skill\timberbot.md" DestinationFolder="$(ModDir)\skill" />
+    <MakeDir Directories="$(ModDir)\hooks" />
+    <Copy SourceFiles="..\hooks\session-start.py" DestinationFolder="$(ModDir)\hooks" />
+    <Copy SourceFiles="..\hooks\pretool-bash.py" DestinationFolder="$(ModDir)\hooks" />
     <MakeDir Directories="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\getting-started.md" DestinationFolder="$(ModDir)\docs" />

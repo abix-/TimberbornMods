@@ -1,7 +1,6 @@
 """SessionStart hook for timberbot claude sessions.
 
-Injects rules + live colony state as additionalContext.
-Rules are read from skill/rules.txt (single source of truth).
+Injects skill + live colony state as additionalContext.
 """
 import json
 import os
@@ -17,13 +16,12 @@ def run(cmd, timeout=5):
 
 parts = []
 
-# read rules from skill/rules.txt
-rules_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skill", "rules.txt")
-if os.path.exists(rules_path):
-    with open(rules_path) as f:
-        parts.append("## SESSION RULES\n\n" + f.read())
-else:
-    parts.append("## SESSION RULES: rules.txt not found at " + rules_path)
+# read skill (slim boot prompt)
+mod_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+skill_path = os.path.join(mod_dir, "skill", "timberbot.md")
+if os.path.exists(skill_path):
+    with open(skill_path) as f:
+        parts.append(f.read())
 
 # try to get live colony state
 ok, ping = run("timberbot.py ping")
