@@ -37,6 +37,15 @@ namespace Timberbot
         private TextField _effortField;
         private NineSliceButton _effortPresetBtn;
         private TextField _goalField;
+        private TextField _debugEndpointField;
+        private NineSliceButton _debugEndpointPresetBtn;
+        private TextField _httpPortField;
+        private TextField _webhooksEnabledField;
+        private NineSliceButton _webhooksEnabledPresetBtn;
+        private TextField _webhookBatchMsField;
+        private TextField _webhookCircuitBreakerField;
+        private TextField _writeBudgetMsField;
+        private TextField _terminalField;
 
         private VisualElement _presetPopup;
         private ScrollView _presetScroll;
@@ -93,6 +102,12 @@ namespace Timberbot
             new[] { "high", "high" },
             new[] { "medium", "medium" },
             new[] { "low", "low" },
+        };
+
+        private static readonly string[][] BoolChoices = new[]
+        {
+            new[] { "true", "true" },
+            new[] { "false", "false" },
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, EntitySelectionService selectionService)
@@ -220,8 +235,8 @@ namespace Timberbot
             _widgetStopBtn.SetEnabled(false);
             buttonRow.Add(_widgetStopBtn);
 
-            _widgetEditBtn = MakeGameButton("Edit", ShowModal);
-            _widgetEditBtn.style.width = 58;
+            _widgetEditBtn = MakeGameButton("Settings", ShowModal);
+            _widgetEditBtn.style.width = 78;
             buttonRow.Add(_widgetEditBtn);
 
             _widget.Add(buttonRow);
@@ -249,6 +264,7 @@ namespace Timberbot
             _modalPanel.style.paddingLeft = 10;
             _modalPanel.style.paddingRight = 10;
             _modalPanel.style.flexDirection = FlexDirection.Column;
+            _modalPanel.style.overflow = Overflow.Visible;
             _modalOverlay.Add(_modalPanel);
 
             var header = new VisualElement();
@@ -257,7 +273,7 @@ namespace Timberbot
             header.style.alignItems = Align.Center;
             header.style.marginBottom = 6;
 
-            var title = new NineSliceLabel { text = "Timberbot API" };
+            var title = new NineSliceLabel { text = "Timberbot API - Settings" };
             title.AddToClassList("text--yellow");
             title.AddToClassList("game-text-normal");
             title.AddToClassList("text--bold");
@@ -271,25 +287,40 @@ namespace Timberbot
             header.Add(closeBtn);
             _modalPanel.Add(header);
 
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.maxHeight = 620;
+            content.style.paddingRight = 4;
+            _modalPanel.Add(content);
+
             _statusLabel = MakeLabel("Timberbot API - Idle");
-            _modalPanel.Add(_statusLabel);
+            content.Add(_statusLabel);
 
             _selectionLabel = MakeLabel("");
             _selectionLabel.AddToClassList("text--green");
             _selectionLabel.ToggleDisplayStyle(false);
-            _modalPanel.Add(_selectionLabel);
+            content.Add(_selectionLabel);
 
-            _modalPanel.Add(MakeSeparator());
+            content.Add(MakeSeparator());
 
             _settingsContainer = new VisualElement();
             _settingsContainer.style.flexDirection = FlexDirection.Column;
             _settingsContainer.style.marginBottom = 6;
-            _modalPanel.Add(_settingsContainer);
+            content.Add(_settingsContainer);
 
             var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), "claude");
             var savedModel = _service.GetUISetting("agentModel");
             var savedEffort = _service.GetUISetting("agentEffort");
             var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
+            var savedDebugEndpointEnabled = NormalizeBoolString(_service.GetUISetting("debugEndpointEnabled"), true);
+            var savedHttpPort = NormalizeValue(_service.GetUISetting("httpPort"), "8085");
+            var savedWebhooksEnabled = NormalizeBoolString(_service.GetUISetting("webhooksEnabled"), true);
+            var savedWebhookBatchMs = NormalizeValue(_service.GetUISetting("webhookBatchMs"), "200");
+            var savedWebhookCircuitBreaker = NormalizeValue(_service.GetUISetting("webhookCircuitBreaker"), "30");
+            var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
+            var savedTerminal = _service.GetUISetting("terminal") ?? "";
+
+            _settingsContainer.Add(MakeSectionLabel("Agent"));
 
             _binaryField = MakeTextField(savedBinary);
             _binaryField.RegisterValueChangedCallback(evt =>
@@ -320,6 +351,70 @@ namespace Timberbot
             _goalField.style.height = 80;
             _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
             _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
+
+            _settingsContainer.Add(MakeSeparator());
+            _settingsContainer.Add(MakeSectionLabel("Runtime"));
+            _settingsContainer.Add(MakeHintLabel("Runtime settings apply from settings.json. Some changes require restarting the mod or reloading the save."));
+
+            _debugEndpointField = MakeTextField(savedDebugEndpointEnabled);
+            _debugEndpointField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeBoolString(evt.newValue, true);
+                _debugEndpointField.SetValueWithoutNotify(value);
+                _service.SaveBoolSetting("debugEndpointEnabled", value == "true");
+            });
+            _debugEndpointPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_debugEndpointPresetBtn, _debugEndpointField, BoolChoices));
+            _settingsContainer.Add(MakePresetFieldRow("Debug:", _debugEndpointField, _debugEndpointPresetBtn));
+
+            _httpPortField = MakeTextField(savedHttpPort);
+            _httpPortField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeIntString(evt.newValue, 8085, 1);
+                _httpPortField.SetValueWithoutNotify(value);
+                _service.SaveIntSetting("httpPort", int.Parse(value));
+            });
+            _settingsContainer.Add(MakeFieldRow("Port:", _httpPortField));
+
+            _webhooksEnabledField = MakeTextField(savedWebhooksEnabled);
+            _webhooksEnabledField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeBoolString(evt.newValue, true);
+                _webhooksEnabledField.SetValueWithoutNotify(value);
+                _service.SaveBoolSetting("webhooksEnabled", value == "true");
+            });
+            _webhooksEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_webhooksEnabledPresetBtn, _webhooksEnabledField, BoolChoices));
+            _settingsContainer.Add(MakePresetFieldRow("Hooks:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
+
+            _webhookBatchMsField = MakeTextField(savedWebhookBatchMs);
+            _webhookBatchMsField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeIntString(evt.newValue, 200, 0);
+                _webhookBatchMsField.SetValueWithoutNotify(value);
+                _service.SaveIntSetting("webhookBatchMs", int.Parse(value));
+            });
+            _settingsContainer.Add(MakeFieldRow("Batch:", _webhookBatchMsField));
+
+            _webhookCircuitBreakerField = MakeTextField(savedWebhookCircuitBreaker);
+            _webhookCircuitBreakerField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeIntString(evt.newValue, 30, 1);
+                _webhookCircuitBreakerField.SetValueWithoutNotify(value);
+                _service.SaveIntSetting("webhookCircuitBreaker", int.Parse(value));
+            });
+            _settingsContainer.Add(MakeFieldRow("Breaker:", _webhookCircuitBreakerField));
+
+            _writeBudgetMsField = MakeTextField(savedWriteBudgetMs);
+            _writeBudgetMsField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeDoubleString(evt.newValue, 1.0, 0.001);
+                _writeBudgetMsField.SetValueWithoutNotify(value);
+                _service.SaveDoubleSetting("writeBudgetMs", double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+            });
+            _settingsContainer.Add(MakeFieldRow("Budget:", _writeBudgetMsField));
+
+            _terminalField = MakeTextField(savedTerminal);
+            _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
+            _settingsContainer.Add(MakeFieldRow("Terminal:", _terminalField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
@@ -488,24 +583,29 @@ namespace Timberbot
 
             const float optionHeight = 26f;
             const float popupPadding = 8f;
-            const float popupWidth = 188f;
-            const float panelMargin = 8f;
+            const float popupWidth = 220f;
+            const float panelMargin = 12f;
+            const float offsetY = 4f;
 
             var panelBounds = _modalPanel.worldBound;
             var anchorBounds = anchor.worldBound;
             var desiredHeight = choices.Length * optionHeight + popupPadding;
-            var belowTop = anchorBounds.yMax - panelBounds.yMin + 2f;
-            var spaceBelow = panelBounds.height - belowTop - panelMargin;
-            var spaceAbove = anchorBounds.yMin - panelBounds.yMin - panelMargin;
-            var useAbove = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
-            var popupHeight = Mathf.Min(desiredHeight, Mathf.Max(optionHeight + popupPadding, useAbove ? spaceAbove : spaceBelow));
+            var maxHeight = Mathf.Max(optionHeight + popupPadding, panelBounds.height - (panelMargin * 2f));
+            var popupHeight = Mathf.Min(desiredHeight, maxHeight);
+
+            var preferredLeft = anchorBounds.xMin - panelBounds.xMin;
+            var left = Mathf.Clamp(preferredLeft, panelMargin, panelBounds.width - popupWidth - panelMargin);
+
+            var preferredTop = anchorBounds.yMax - panelBounds.yMin + offsetY;
+            var top = preferredTop;
+            if (top + popupHeight > panelBounds.height - panelMargin)
+                top = anchorBounds.yMin - panelBounds.yMin - popupHeight - offsetY;
+            top = Mathf.Clamp(top, panelMargin, panelBounds.height - popupHeight - panelMargin);
 
             _presetPopup.style.width = popupWidth;
             _presetPopup.style.height = popupHeight;
-            _presetPopup.style.left = Mathf.Clamp(anchorBounds.xMin - panelBounds.xMin - 156f, panelMargin, panelBounds.width - popupWidth - panelMargin);
-            _presetPopup.style.top = useAbove
-                ? Mathf.Max(panelMargin, anchorBounds.yMin - panelBounds.yMin - popupHeight - 2f)
-                : Mathf.Max(panelMargin, belowTop);
+            _presetPopup.style.left = left;
+            _presetPopup.style.top = top;
             _presetPopup.ToggleDisplayStyle(true);
             _presetPopup.BringToFront();
         }
@@ -575,6 +675,28 @@ namespace Timberbot
             return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
 
+        private static string NormalizeBoolString(string value, bool fallback)
+        {
+            var normalized = NormalizeValue(value, fallback ? "true" : "false").ToLowerInvariant();
+            return normalized == "false" ? "false" : "true";
+        }
+
+        private static string NormalizeIntString(string value, int fallback, int minValue)
+        {
+            if (int.TryParse(NormalizeValue(value, fallback.ToString()), out var parsed) && parsed >= minValue)
+                return parsed.ToString();
+
+            return fallback.ToString();
+        }
+
+        private static string NormalizeDoubleString(string value, double fallback, double minValue)
+        {
+            if (double.TryParse(NormalizeValue(value, fallback.ToString(System.Globalization.CultureInfo.InvariantCulture)), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed >= minValue)
+                return parsed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            return fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private static string FormatStatus(TimberbotAgent agent)
         {
             switch (agent.CurrentStatus)
@@ -606,6 +728,27 @@ namespace Timberbot
             label.style.overflow = Overflow.Hidden;
             label.style.whiteSpace = WhiteSpace.NoWrap;
             label.style.marginBottom = 2;
+            return label;
+        }
+
+        private static NineSliceLabel MakeSectionLabel(string text)
+        {
+            var label = new NineSliceLabel { text = text };
+            label.AddToClassList("text--yellow");
+            label.AddToClassList("game-text-normal");
+            label.AddToClassList("text--bold");
+            label.style.marginTop = 2;
+            label.style.marginBottom = 6;
+            return label;
+        }
+
+        private static NineSliceLabel MakeHintLabel(string text)
+        {
+            var label = new NineSliceLabel { text = text };
+            label.AddToClassList("text--green");
+            label.AddToClassList("game-text-normal");
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.marginBottom = 6;
             return label;
         }
 
@@ -668,7 +811,7 @@ namespace Timberbot
             var lbl = new NineSliceLabel { text = labelText };
             lbl.AddToClassList("text--yellow");
             lbl.AddToClassList("game-text-normal");
-            lbl.style.width = 52;
+            lbl.style.width = 68;
             row.Add(lbl);
 
             field.style.flexGrow = 1;
@@ -685,3 +828,9 @@ namespace Timberbot
         }
     }
 }
+
+
+
+
+
+

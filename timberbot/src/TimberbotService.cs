@@ -14,6 +14,7 @@
 
 using Timberborn.SingletonSystem;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
 
 namespace Timberbot
 {
@@ -146,11 +147,9 @@ namespace Timberbot
         {
             try
             {
-                if (_settingsPath != null && System.IO.File.Exists(_settingsPath))
-                {
-                    var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
+                var json = LoadSettingsJson();
+                if (json != null)
                     return json.Value<string>(key);
-                }
             }
             catch { }
             return null;
@@ -158,14 +157,38 @@ namespace Timberbot
 
         public void SaveUISetting(string key, string value)
         {
+            SaveSettingToken(key, value);
+        }
+
+        public void SaveBoolSetting(string key, bool value)
+        {
+            SaveSettingToken(key, value);
+        }
+
+        public void SaveIntSetting(string key, int value)
+        {
+            SaveSettingToken(key, value);
+        }
+
+        public void SaveDoubleSetting(string key, double value)
+        {
+            SaveSettingToken(key, value);
+        }
+
+        private JObject LoadSettingsJson()
+        {
+            if (_settingsPath != null && System.IO.File.Exists(_settingsPath))
+                return JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
+
+            return null;
+        }
+
+        private void SaveSettingToken(string key, JToken value)
+        {
             try
             {
                 if (_settingsPath == null) return;
-                Newtonsoft.Json.Linq.JObject json;
-                if (System.IO.File.Exists(_settingsPath))
-                    json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
-                else
-                    json = new Newtonsoft.Json.Linq.JObject();
+                JObject json = LoadSettingsJson() ?? new JObject();
                 json[key] = value;
                 System.IO.File.WriteAllText(_settingsPath, json.ToString(Newtonsoft.Json.Formatting.Indented));
             }
@@ -199,4 +222,3 @@ namespace Timberbot
         }
     }
 }
-
