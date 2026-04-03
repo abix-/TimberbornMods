@@ -2,11 +2,11 @@
 //
 // Collapsed: one-line status badge in bottom-right strip with + button.
 // Expanded: absolute-positioned panel with status + controls.
-//
-// Reads agent state directly from TimberbotAgent properties (no HTTP).
-// Updates labels every ~0.5s in UpdateSingleton().
+// Uses native Timberborn Dropdown system for model and effort selection.
 
+using System.Collections.Generic;
 using Timberborn.CoreUI;
+using Timberborn.DropdownSystem;
 using Timberborn.SingletonSystem;
 using Timberborn.UILayoutSystem;
 using UnityEngine;
@@ -19,6 +19,7 @@ namespace Timberbot
         private readonly UILayout _layout;
         private readonly TimberbotService _service;
         private readonly VisualElementInitializer _veInit;
+        private readonly DropdownItemsSetter _dropdownSetter;
 
         // collapsed bar
         private VisualElement _collapsedWrapper;
@@ -29,10 +30,8 @@ namespace Timberbot
         private Label _statusLabel;
         private Label _goalLabel;
         private TextField _binaryField;
-        private TextField _modelField;
-        private VisualElement _modelDropdown;
-        private TextField _effortField;
-        private VisualElement _effortDropdown;
+        private Dropdown _modelDropdown;
+        private Dropdown _effortDropdown;
         private TextField _goalField;
         private NineSliceButton _startBtn;
         private NineSliceButton _stopBtn;
@@ -40,18 +39,22 @@ namespace Timberbot
         private float _lastUpdate;
         private bool _isExpanded;
 
-        // sorted most expensive to cheapest; $$$$ = ~$15/$75, $$$ = ~$3/$15, $ = ~$0.80/$4 per M in/out tokens
+        // value -> display label mappings
+        private readonly Dictionary<string, string> _modelValueMap = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _modelDisplayToValue = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _effortDisplayToValue = new Dictionary<string, string>();
+
         private static readonly string[][] ModelChoices = new[]
         {
-            new[] { "opus", "opus (latest) - smartest, slow $$$$" },
-            new[] { "claude-opus-4-6", "opus 4.6 - strongest model $$$$" },
+            new[] { "opus", "opus (latest) $$$$" },
+            new[] { "claude-opus-4-6", "opus 4.6 - strongest $$$$" },
             new[] { "claude-opus-4-5", "opus 4.5 $$$$" },
             new[] { "claude-opus-4-1", "opus 4.1 $$$$" },
-            new[] { "sonnet", "sonnet (latest) - balanced $$$" },
+            new[] { "sonnet", "sonnet (latest) $$$" },
             new[] { "claude-sonnet-4-6", "sonnet 4.6 - best value $$$" },
             new[] { "claude-sonnet-4-5", "sonnet 4.5 $$$" },
             new[] { "claude-sonnet-3-7", "sonnet 3.7 - older $$" },
-            new[] { "haiku", "haiku (latest) - fast, light $" },
+            new[] { "haiku", "haiku (latest) $" },
             new[] { "claude-haiku-4-5", "haiku 4.5 $" },
             new[] { "claude-haiku-3-5", "haiku 3.5 - older $" },
         };
@@ -60,15 +63,16 @@ namespace Timberbot
         {
             new[] { "high", "high - thorough (default)" },
             new[] { "medium", "medium - faster, routine" },
-            new[] { "low", "low - fastest, simple tasks" },
-            new[] { "max", "max - deep thinking, complex" },
+            new[] { "low", "low - fastest, simple" },
+            new[] { "max", "max - deep thinking" },
         };
 
-        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
+        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, DropdownItemsSetter dropdownSetter)
         {
             _layout = layout;
             _service = service;
             _veInit = veInit;
+            _dropdownSetter = dropdownSetter;
         }
 
         public void Load()
@@ -189,19 +193,13 @@ namespace Timberbot
             _binaryField = MakeTextField("claude");
             _expanded.Add(MakeFieldRow("Binary:", _binaryField));
 
-            // model dropdown
-            _modelField = MakeTextField("sonnet");
-            _modelDropdown = MakeDropdownPopup(ModelChoices, _modelField);
-            var modelRow = MakeDropdownRow("Model:", _modelField, _modelDropdown);
-            _expanded.Add(modelRow);
-            _expanded.Add(_modelDropdown);
+            // model dropdown (native)
+            _modelDropdown = MakeNativeDropdown(ModelChoices, "sonnet (latest) $$$", _modelDisplayToValue);
+            _expanded.Add(MakeFieldRow("Model:", _modelDropdown));
 
-            // effort dropdown
-            _effortField = MakeTextField("high");
-            _effortDropdown = MakeDropdownPopup(EffortChoices, _effortField);
-            var effortRow = MakeDropdownRow("Effort:", _effortField, _effortDropdown);
-            _expanded.Add(effortRow);
-            _expanded.Add(_effortDropdown);
+            // effort dropdown (native)
+            _effortDropdown = MakeNativeDropdown(EffortChoices, "high - thorough (default)", _effortDisplayToValue);
+            _expanded.Add(MakeFieldRow("Effort:", _effortDropdown));
 
             // goal field
             _goalField = MakeTextField("reach 50 beavers with 77 well-being");
@@ -226,6 +224,36 @@ namespace Timberbot
             _expanded.Add(btnRow);
         }
 
+        private Dropdown MakeNativeDropdown(string[][] choices, string defaultDisplay, Dictionary<string, string> displayToValue)
+        {
+            var displayItems = new List<string>();
+            foreach (var c in choices)
+            {
+                displayItems.Add(c[1]);
+                displayToValue[c[1]] = c[0];
+            }
+
+            var dropdown = new Dropdown();
+            dropdown.style.flexGrow = 1;
+            dropdown.style.height = 26;
+            _veInit.InitializeVisualElement(dropdown);
+
+            var provider = new SimpleDropdownProvider(displayItems, defaultDisplay);
+            _dropdownSetter.SetItems(dropdown, provider);
+
+            return dropdown;
+        }
+
+        private string GetDropdownValue(Dropdown dropdown, Dictionary<string, string> displayToValue)
+        {
+            var provider = dropdown._dropdownProvider;
+            if (provider == null) return null;
+            var display = provider.GetValue();
+            if (display != null && displayToValue.TryGetValue(display, out var val))
+                return val;
+            return display;
+        }
+
         private void ToggleExpanded()
         {
             _isExpanded = !_isExpanded;
@@ -241,12 +269,8 @@ namespace Timberbot
             string binary = _binaryField.value;
             if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
 
-            string model = _modelField.value;
-            if (string.IsNullOrWhiteSpace(model)) model = null;
-
-            string effort = _effortField.value;
-            if (string.IsNullOrWhiteSpace(effort)) effort = null;
-
+            string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
+            string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
             string goal = _goalField.value;
 
             agent.Start(binary, model, effort, 120, goal);
@@ -259,56 +283,21 @@ namespace Timberbot
             TimberbotLog.Info("panel: stopped agent");
         }
 
-        // --- dropdown helper ---
+        // --- IDropdownProvider implementation ---
 
-        private static VisualElement MakeDropdownRow(string label, TextField field, VisualElement dropdown)
+        private class SimpleDropdownProvider : IDropdownProvider
         {
-            var row = MakeFieldRow(label, field);
+            public IReadOnlyList<string> Items { get; }
+            private string _value;
 
-            var btn = new NineSliceButton { text = "v" };
-            btn.AddToClassList("button-game");
-            btn.style.width = 22;
-            btn.style.height = 22;
-            btn.style.paddingLeft = 0;
-            btn.style.paddingRight = 0;
-            btn.style.paddingTop = 0;
-            btn.style.paddingBottom = 0;
-            btn.style.marginLeft = 2;
-            btn.clicked += () =>
+            public SimpleDropdownProvider(IReadOnlyList<string> items, string defaultValue)
             {
-                bool show = dropdown.resolvedStyle.display == DisplayStyle.None;
-                dropdown.ToggleDisplayStyle(show);
-            };
-            row.Add(btn);
-
-            return row;
-        }
-
-        private static VisualElement MakeDropdownPopup(string[][] choices, TextField target)
-        {
-            var popup = new NineSliceVisualElement();
-            popup.AddToClassList("bg-sub-box--green");
-            popup.style.paddingTop = 4;
-            popup.style.paddingBottom = 4;
-            popup.style.paddingLeft = 4;
-            popup.style.paddingRight = 4;
-            popup.ToggleDisplayStyle(false);
-
-            foreach (var choice in choices)
-            {
-                var value = choice[0];
-                var label = choice[1];
-                var item = new NineSliceButton { text = label };
-                item.AddToClassList("button-game");
-                item.AddToClassList("game-text-normal");
-                item.style.height = 22;
-                item.style.marginBottom = 1;
-                item.style.paddingLeft = 6;
-                item.clicked += () => { target.value = value; popup.ToggleDisplayStyle(false); };
-                popup.Add(item);
+                Items = items;
+                _value = defaultValue ?? items[0];
             }
 
-            return popup;
+            public string GetValue() => _value;
+            public void SetValue(string value) => _value = value;
         }
 
         // --- shared helpers ---
