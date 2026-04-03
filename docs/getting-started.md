@@ -66,9 +66,9 @@ The preferred way to use Timberbot with Claude or Codex is the in-game Timberbot
 
 Timberbot gathers the current colony state, prepares the agent prompt, and launches the selected CLI interactively. You can then guide that Claude/Codex session in the terminal it opens.
 
-The widget is draggable. Its position and your settings persist automatically. On macOS, Timberbot also auto-detects a Python 3 launcher and opens the agent in Terminal.app by default, so you only need `Startup -> pythonCommand` or `Startup -> terminal` for non-standard setups.
+The widget is draggable. Its position and your settings persist automatically. Python 3 is still required because Timberbot uses `timberbot.py` during agent startup to gather live colony state. On macOS, Timberbot auto-detects a Python 3 launcher and opens the agent in Terminal.app by default, so you only need `Startup -> pythonCommand` or `Startup -> terminal` for non-standard setups.
 
-## Install the Python client (optional)
+## Install Python and the Timberbot CLI (required)
 
 The CLI lives at `timberbot/script/timberbot.py` in your local clone (or in the mod folder alongside the DLL).
 
@@ -174,7 +174,7 @@ Get building IDs from `timberbot.py buildings`. Get prefab names from `timberbot
 
 ### Raw HTTP
 
-You don't need Python. Any HTTP client works:
+You don't need Python for raw HTTP calls alone. But Python is still required for the normal Timberbot workflow, including `timberbot.py` commands and built-in agent startup.
 
 ```bash
 curl http://localhost:8085/api/summary

@@ -139,6 +139,12 @@ namespace Timberbot
             new[] { "WezTerm", "wezterm start --cwd {cwd} --" },
         };
 
+        private const string DefaultBinary = "claude";
+        private const string DefaultClaudeModel = "claude-sonnet-4-6";
+        private const string DefaultClaudeEffort = "medium";
+        private const string DefaultCodexModel = "gpt-5.4";
+        private const string DefaultCodexEffort = "medium";
+
         private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
         {
             ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Select 'custom' to provide your own command template.",
@@ -354,7 +360,7 @@ namespace Timberbot
             _runtimeSettingsContainer.style.flexDirection = FlexDirection.Column;
             _settingsContainer.Add(_runtimeSettingsContainer);
 
-            var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), "claude");
+            var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), DefaultBinary);
             var savedCommandTemplate = _service.GetUISetting("agentCommandTemplate") ?? "";
             var savedModel = _service.GetUISetting("agentModel");
             var savedEffort = _service.GetUISetting("agentEffort");
@@ -383,7 +389,7 @@ namespace Timberbot
             _binaryField = MakeTextField(savedBinary);
             _binaryField.RegisterValueChangedCallback(evt =>
             {
-                var binary = NormalizeValue(evt.newValue, "claude");
+                var binary = NormalizeValue(evt.newValue, DefaultBinary);
                 _service.SaveUISetting("agentBinary", binary);
                 SyncFieldsForBinary(binary);
             });
@@ -398,14 +404,14 @@ namespace Timberbot
             _agentSettingsContainer.Add(_commandTemplateRow);
 
             var modelChoices = GetModelChoices(savedBinary);
-            _modelField = MakeTextField(GetInitialChoiceValue(modelChoices, savedModel));
+            _modelField = MakeTextField(GetInitialChoiceValue(savedBinary, modelChoices, savedModel));
             _modelField.RegisterValueChangedCallback(evt =>
                 _service.SaveUISetting("agentModel", NormalizeValue(evt.newValue, modelChoices[0][0])));
             _modelPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_modelPresetBtn, _modelField, GetModelChoices(CurrentBinary())));
             _agentSettingsContainer.Add(MakePresetFieldRow("Model:", _modelField, _modelPresetBtn));
 
             var effortChoices = GetEffortChoices(savedBinary);
-            _effortField = MakeTextField(GetInitialChoiceValue(effortChoices, savedEffort));
+            _effortField = MakeTextField(GetInitialChoiceValue(savedBinary, effortChoices, savedEffort));
             _effortField.RegisterValueChangedCallback(evt =>
                 _service.SaveUISetting("agentEffort", NormalizeValue(evt.newValue, effortChoices[0][0])));
             _effortPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_effortPresetBtn, _effortField, GetEffortChoices(CurrentBinary())));
@@ -912,7 +918,7 @@ namespace Timberbot
             return binary == "codex" ? CodexEffortChoices : ClaudeEffortChoices;
         }
 
-        private static string GetInitialChoiceValue(string[][] choices, string savedValue)
+        private static string GetInitialChoiceValue(string binary, string[][] choices, string savedValue)
         {
             if (!string.IsNullOrWhiteSpace(savedValue))
             {
@@ -921,12 +927,27 @@ namespace Timberbot
                         return c[0];
             }
 
+            var preferred = GetDefaultChoiceValue(binary, choices == CodexEffortChoices || choices == ClaudeEffortChoices);
+            if (!string.IsNullOrEmpty(preferred))
+            {
+                foreach (var c in choices)
+                    if (c[0] == preferred)
+                        return c[0];
+            }
+
             return choices[0][0];
+        }
+
+        private static string GetDefaultChoiceValue(string binary, bool effort)
+        {
+            if (binary == "codex")
+                return effort ? DefaultCodexEffort : DefaultCodexModel;
+            return effort ? DefaultClaudeEffort : DefaultClaudeModel;
         }
 
         private string CurrentBinary()
         {
-            return NormalizeValue(_binaryField?.value, "claude");
+            return NormalizeValue(_binaryField?.value, DefaultBinary);
         }
 
         private void SyncFieldsForBinary(string binary)
@@ -937,11 +958,11 @@ namespace Timberbot
 
             var modelChoices = GetModelChoices(binary);
             if (!ChoiceContainsValue(modelChoices, _modelField?.value))
-                _modelField.value = modelChoices[0][0];
+                _modelField.value = GetInitialChoiceValue(binary, modelChoices, null);
 
             var effortChoices = GetEffortChoices(binary);
             if (!ChoiceContainsValue(effortChoices, _effortField?.value))
-                _effortField.value = effortChoices[0][0];
+                _effortField.value = GetInitialChoiceValue(binary, effortChoices, null);
         }
 
         private static bool IsExeInPath(string exeName)
