@@ -157,6 +157,7 @@ namespace Timberbot
                         FileName = termExe,
                         Arguments = termArgs + claudeCmd,
                         UseShellExecute = false,
+                        CreateNoWindow = true,
                         WorkingDirectory = modDir
                     };
                 }
