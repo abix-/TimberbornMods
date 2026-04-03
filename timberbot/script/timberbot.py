@@ -1495,6 +1495,20 @@ def _launch(args):
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
     os.startfile("steam://rungameid/1062090")
 
+    # wait for Timberborn.exe to appear (confirms Steam actually launched it)
+    print(f"  {_DIM}waiting for Timberborn.exe to start...{_RST}")
+    exe_started = False
+    for _ in range(30):
+        time.sleep(2)
+        check = subprocess.run(["tasklist", "/fi", "imagename eq Timberborn.exe"],
+                               capture_output=True, text=True)
+        if "Timberborn.exe" in check.stdout:
+            exe_started = True
+            break
+    if not exe_started:
+        print(f"  {_RED}error: Timberborn.exe did not start after 60s. Is Steam running?{_RST}", file=sys.stderr)
+        sys.exit(1)
+
     # poll until the mod's HTTP API responds
     print(f"  {_DIM}waiting for game to load (timeout {timeout}s)...{_RST}")
     start = time.time()
