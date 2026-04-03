@@ -689,9 +689,10 @@ namespace Timberbot
             var effort = NormalizeValue(_effortField.value, "");
             var goal = _goalField.value;
             var command = binary == "custom" ? (_commandTemplateField?.value ?? "") : null;
+            var terminal = _terminalField?.value;
 
-            agent.Start(binary, model, effort, 120, goal, command);
-            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"} custom={command != null}");
+            agent.Start(binary, model, effort, 120, goal, command, terminal);
+            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"} custom={command != null} terminal={terminal ?? "(default)"}");
             HidePresetMenu();
         }
 

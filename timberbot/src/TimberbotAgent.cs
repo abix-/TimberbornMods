@@ -32,6 +32,7 @@ namespace Timberbot
         private string _effort;
         private string _goal;
         private string _commandTemplate;
+        private string _terminalOverride;  // per-session override from UI, null = use constructor value
         private int _processTimeoutSeconds;
 
         private const string DEFAULT_GOAL = "reach 50 beavers with 77 well-being";
@@ -60,7 +61,7 @@ namespace Timberbot
         private readonly TimberbotJw _jw = new TimberbotJw(1024);
         private readonly TimberbotJw _statusJw = new TimberbotJw(4096);
 
-        public string Start(string binary, string model, string effort, int timeout, string goal, string command = null)
+        public string Start(string binary, string model, string effort, int timeout, string goal, string command = null, string terminal = null)
         {
             if (_status != AgentStatus.Idle && _status != AgentStatus.Done && _status != AgentStatus.Error)
                 return _jw.Error("agent_busy", ("status", _status.ToString().ToLowerInvariant()));
@@ -69,6 +70,7 @@ namespace Timberbot
             _model = model;
             _effort = effort;
             _commandTemplate = string.IsNullOrWhiteSpace(command) ? null : command;
+            _terminalOverride = terminal;  // null = use constructor default
             _processTimeoutSeconds = timeout > 0 ? timeout : 120;
             _goal = string.IsNullOrEmpty(goal) ? DEFAULT_GOAL : goal;
             _lastError = null;
@@ -344,9 +346,10 @@ namespace Timberbot
             return sb.ToString();
         }
 
-        private ProcessStartInfo BuildTerminalStartInfo(string modDir, string launchCmd)
+        private ProcessStartInfo BuildTerminalStartInfo(string modDir, string launchCmd, string terminalOverride = null)
         {
-            var termCmd = _terminal.Trim().Replace("{cwd}", QuoteArg(modDir));
+            var terminal = terminalOverride ?? _terminal;
+            var termCmd = terminal.Trim().Replace("{cwd}", "\"" + modDir + "\"");
             if (termCmd.Contains("{command}"))
                 termCmd = termCmd.Replace("{command}", launchCmd);
             else
@@ -534,10 +537,11 @@ namespace Timberbot
                 var launchCmd = launchExe + " " + launchArgs;
                 ProcessStartInfo psi;
                 bool waitForMacSession = false;
+                var effectiveTerminal = _terminalOverride ?? _terminal;
 
-                if (!string.IsNullOrWhiteSpace(_terminal))
+                if (!string.IsNullOrWhiteSpace(effectiveTerminal))
                 {
-                    psi = BuildTerminalStartInfo(modDir, launchCmd);
+                    psi = BuildTerminalStartInfo(modDir, launchCmd, effectiveTerminal);
                 }
                 else if (TimberbotPaths.IsMacOS)
                 {
