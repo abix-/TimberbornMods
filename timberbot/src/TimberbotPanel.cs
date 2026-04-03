@@ -53,10 +53,10 @@ namespace Timberbot
 
         private static readonly string[][] ModelChoices = new[]
         {
-            new[] { "claude-opus-4-6", "opus 4.6 - strongest $$$$" },
+            new[] { "claude-opus-4-6", "opus 4.6 $$$$" },
             new[] { "claude-opus-4-5", "opus 4.5 $$$$" },
             new[] { "claude-opus-4-1", "opus 4.1 $$$$" },
-            new[] { "claude-sonnet-4-6", "sonnet 4.6 - best value $$$" },
+            new[] { "claude-sonnet-4-6", "sonnet 4.6 $$$" },
             new[] { "claude-sonnet-4-5", "sonnet 4.5 $$$" },
             new[] { "claude-sonnet-3-7", "sonnet 3.7 $$" },
             new[] { "claude-haiku-4-5", "haiku 4.5 $" },
@@ -270,7 +270,7 @@ namespace Timberbot
             _settingsContainer.Add(MakeFieldRow("Binary:", _binaryField));
 
             // resolve saved model value to display label
-            string modelDefault = "sonnet 4.6 - best value $$$";
+            string modelDefault = "sonnet 4.6 $$$";
             if (savedModel != null)
                 foreach (var c in ModelChoices)
                     if (c[0] == savedModel) { modelDefault = c[1]; break; }
