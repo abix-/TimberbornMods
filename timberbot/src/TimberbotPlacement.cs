@@ -2277,6 +2277,25 @@ namespace Timberbot
                 var validationSvc = preview.BlockObject._blockObjectValidationService;
                 if (validationSvc != null && validationSvc.IsValid(preview.BlockObject))
                 {
+                    var bv2 = preview.BlockObject._blockValidator;
+                    if (bv2 != null)
+                        foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
+                        {
+                            if (!bv2.FitsInMap(block, false))
+                                return $"out of map at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.BlockConflictsWithExistingObject(block))
+                                return $"occupied at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.BlockConflictsWithTerrain(block))
+                                return $"terrain conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.BlockConflictsWithBlockAbove(block))
+                                return $"blocked above at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.BlockConflictsWithBlocksBelow(block))
+                                return $"blocked below at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.ConflictsWithUndergroundBlockObject(block))
+                                return $"underground conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                            if (bv2.UndergroundBlockIsNotUnderground(block))
+                                return $"not underground at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                        }
                     z = preview.BlockObject.CoordinatesAtBaseZ.z;
                     return null;
                 }
