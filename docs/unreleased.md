@@ -25,6 +25,22 @@ Every API error response is now rich and actionable. The AI gets enough context 
 - [fix] unknown CLI parameters now show the bad param, valid params, and full usage line
 - [fix] toon error output shows the full response dict instead of just the error string
 
+## Storage
+
+- [feature] `POST /api/building/storage` endpoint for piles, warehouses, and tanks
+- [feature] set allowed good (`good:Water`) and storage mode (`mode:obtain`) in one call
+- [feature] four storage modes matching the player UI: accept, obtain, supply, empty
+- [feature] `storageMode` and `allowedGood` fields in buildings detail:full output
+- [fix] `SingleGoodAllower` now uses `Allow()` / `Disallow()` instead of direct property set, so the UI updates correctly
+- [breaking] `/api/stockpile/good` and `/api/stockpile/capacity` removed, replaced by `/api/building/storage`
+
+## Write endpoint fixes
+
+- [fix] `Workplace.SetDesiredWorkers()` used instead of direct property set, fires `DesiredWorkersChanged` event and handles overstaffing
+- [fix] `WorkingHoursManager.WorkedPartOfDay` used instead of direct `EndHours` set, fires `WorkingHoursChangedEvent`
+- [fix] `set_workers` minimum clamped to 1 (was 0), matching player UI behavior
+- [breaking] `set_capacity` removed, player cannot change stockpile capacity
+
 ## Agent
 
 - [removed] shipped Claude Code hooks (`pretool-bash.py`, `session-start.py`) deleted. they blocked parallel tool calls and are no longer needed

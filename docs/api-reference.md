@@ -714,6 +714,8 @@ Each building includes all applicable fields (absent fields mean the component d
 | clutchEngaged | bool | Clutch is engaged |
 | stock | int | Total items in all inventories |
 | capacity | int | Total inventory capacity |
+| storageMode | string | `"accept"`, `"obtain"`, `"supply"`, or `"empty"` (storage buildings only, empty string otherwise) |
+| allowedGood | string | Selected good for storage (empty if none selected) |
 | recipes | array | Available recipe IDs for manufactories |
 | currentRecipe | string | Active recipe ID (empty if none) |
 | needsNutrients | bool | Breeding pod needs food delivered |
@@ -1567,50 +1569,40 @@ Prioritize which tree/resource type a forester plants.
 
 ---
 
-### POST /api/stockpile/capacity
+### POST /api/building/storage
 
-Set maximum capacity on a stockpile.
+Set storage mode and/or allowed good on any storage building (piles, warehouses, tanks). Set either or both fields in one call.
 
-**CLI:** `timberbot.py set_capacity id:12340 capacity:100`
-
-#### Request Body
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| id | int | yes | Building instance ID |
-| capacity | int | yes | Max storage capacity |
-
-#### Response (success)
-
-```json
-{"id": 12340, "name": "SmallWarehouse", "capacity": 100}
-```
-
----
-
-### POST /api/stockpile/good
-
-Set which good a single-good stockpile accepts.
-
-**CLI:** `timberbot.py set_good id:12340 good:Log`
+**CLI:** `timberbot.py set_storage id:12340 good:Water mode:obtain`
 
 #### Request Body
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | id | int | yes | Building instance ID |
-| good | string | yes | Good name (e.g. `"Log"`) |
+| good | string | no | Good name (e.g. `"Water"`, `"Plank"`) or `"none"` to clear |
+| mode | string | no | `"accept"` (default), `"obtain"`, `"supply"`, or `"empty"` |
+
+**Modes:**
+- `accept`: normal behavior, haulers bring/take goods naturally
+- `obtain`: haulers actively fetch this good from other stockpiles
+- `supply`: haulers actively take goods from here to other stockpiles
+- `empty`: haulers remove all goods, building stops accepting
 
 #### Response (success)
 
 ```json
-{"id": 12340, "name": "SmallWarehouse", "good": "Log"}
+{"id": 12340, "name": "SmallTank.IronTeeth", "good": "Water", "mode": "obtain"}
 ```
 
 #### Response (error)
 
 ```json
-{"error": "invalid_type: not a single-good stockpile. only SmallWarehouse/LargeWarehouse have good filters", "id": 12340, "name": "LumberMill"}
+{"error": "invalid_type: not a storage building. piles, warehouses, and tanks have storage settings", "id": 12340, "name": "LumberjackFlag"}
+```
+
+```json
+{"error": "invalid_param: mode must be accept, obtain, supply, or empty", "got": "badvalue"}
 ```
 
 ---
