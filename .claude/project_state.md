@@ -4,7 +4,7 @@
 > Updated by Claude at session end. Shared across all agent clones.
 
 ## Current Focus
-Improving AI player experience. error messages and hook cleanup
+v0.7.1 release. blocked on test failures in path routing
 
 ## Design Goals
 - Timberbot API errors should be actionable: tell the caller what went wrong AND what to do about it
@@ -12,19 +12,22 @@ Improving AI player experience. error messages and hook cleanup
 - No Claude Code hooks shipped with the mod. they interfere with parallel tool calls
 
 ## Last Session (2026-04-03)
-1. Deleted `timberbot/hooks/` (pretool-bash.py, session-start.py). hooks were blocking parallel mutating commands and annoying AI players
-2. Removed hook copy targets from Timberbot.csproj, added RemoveDir to clean deployed hooks
-3. Made all ValidatePlacement error messages actionable with blocker names and suggestions:
-   - "occupied at (x,y,z)" -> "occupied by <name> at (x,y,z). demolish it or try a different location"
-   - terrain, blocked above/below, underground, out of map. all get actionable suffixes
-4. Extracted FindBlockerAt() helper to DRY up blocker lookup (was duplicated in two code paths)
-5. Fixed toon error output in timberbot.py to print full response dict (via toons.dumps) instead of bare error string
+Attempted v0.7.1 release. Version already bumped in both files. Build succeeded (0 warnings, 0 errors). Tests: 464 passed, 5 failed, 48 skipped.
+
+Failed tests (all path routing / map verification):
+1. `verify demolish via map` . map state not refreshed after demolish
+2. `diagonal: no errors` . path routing errors during diagonal A* placement
+3. `diagonal2: no errors` . same issue, different diagonal case
+4. `obstacle: detour taken` . obstacle avoidance returned paths=4 but expected >8 (straight=8)
+5. `sections: paths placed` . placed 0 paths when some were expected
+
+Release blocked at step 3 (tests). Did not commit, tag, or publish.
 
 ## Next Steps
-- Review TimberbotWrite.cs error messages for actionable suffixes (placement done, write endpoints not yet)
-- Consider if find_placement errors also need actionable messages
-- Test error output with a live game to verify toon formatting looks right
+- Diagnose path routing test failures (likely in A* pathfinding or path placement logic in the mod)
+- Fix failures and re-run full test suite
+- Resume release from step 3 onward (test, commit, push, release, notes, Steam Workshop reminder)
 
 ## Open Questions
-- Should the `-- suggestion` suffix style be formalized (e.g. always after `--`)?
-- Are there other error paths that AI players hit frequently that need improvement?
+- Are path routing failures a regression from recent changes or a pre-existing issue with map/game state?
+- Is the `verify demolish via map` failure related to the path routing issues or independent?
