@@ -1,7 +1,7 @@
 {
-  "debugEndpointEnabled": true,
+  "debugEndpointEnabled": false,
   "webhooksEnabled": true,
   "httpPort": 8085,
-  "terminal": "",
+  "terminal": "wt -d {cwd} --",
   "pythonCommand": ""
 }

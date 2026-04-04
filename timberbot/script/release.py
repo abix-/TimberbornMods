@@ -72,6 +72,22 @@ def main():
     # clean deployed mod folder but preserve Workshop linkage and local settings
     clean_mod_dir()
 
+    # ensure settings.json ships with correct defaults
+    settings_path = os.path.join(SRC_DIR, "settings.json")
+    with open(settings_path) as f:
+        settings = json.load(f)
+    defaults = {"terminal": "wt -d {cwd} --", "debugEndpointEnabled": False}
+    changed = False
+    for key, val in defaults.items():
+        if settings.get(key) != val:
+            settings[key] = val
+            changed = True
+    if changed:
+        with open(settings_path, "w") as f:
+            json.dump(settings, f, indent=2)
+            f.write("\n")
+        print("  fixed settings.json defaults")
+
     # build
     run("dotnet build -c Release", cwd=SRC_DIR)
 
