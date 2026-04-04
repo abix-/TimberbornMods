@@ -406,7 +406,7 @@ namespace Timberbot
                 "/api/building/plantable", "/api/building/workers", "/api/building/range",
                 "/api/crop/demolish", "/api/path/place", "/api/placement/find",
                 "/api/planting/mark", "/api/planting/find", "/api/planting/clear",
-                "/api/cutting/area", "/api/stockpile/good",
+                "/api/cutting/area", "/api/building/storage",
                 "/api/science/unlock", "/api/distribution", "/api/workhours",
                 "/api/district/migrate", "/api/webhooks", "/api/webhooks/delete",
                 "/api/agent/start", "/api/agent/stop"
@@ -435,7 +435,7 @@ namespace Timberbot
                 Queued("/api/building/range", req => _service.Write.CreateCollectBuildingRangeJob(req.Body?.Value<int>("id") ?? 0)),
                 Queued("/api/planting/clear", req => new LambdaWriteJob(req.Route, () => _service.Write.UnmarkPlanting(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0))),
                 Queued("/api/cutting/area", req => new LambdaWriteJob(req.Route, () => _service.Write.MarkCuttingArea(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<bool>("marked") ?? true))),
-                Queued("/api/stockpile/good", req => new LambdaWriteJob(req.Route, () => _service.Write.SetStockpileGood(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("good") ?? ""))),
+                Queued("/api/building/storage", req => new LambdaWriteJob(req.Route, () => _service.Write.SetStorage(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("good") ?? "", req.Body?.Value<string>("mode") ?? ""))),
                 Queued("/api/workhours", req => new LambdaWriteJob(req.Route, () => _service.Write.SetWorkHours(req.Body?.Value<int>("endHours") ?? 16))),
                 Queued("/api/district/migrate", req => new LambdaWriteJob(req.Route, () => _service.Write.MigratePopulation(req.Body?.Value<string>("from") ?? "", req.Body?.Value<string>("to") ?? "", req.Body?.Value<int>("count") ?? 1))),
                 Queued("/api/science/unlock", req => new LambdaWriteJob(req.Route, () => _service.Write.UnlockBuilding(req.Body?.Value<string>("building") ?? ""))),

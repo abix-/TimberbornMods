@@ -45,6 +45,8 @@ using Timberborn.ToolSystem;
 using Timberborn.SoilMoistureSystem;
 using Timberborn.NeedSpecs;
 using Timberborn.GameFactionSystem;
+using Timberborn.StockpilePrioritySystem;
+using Timberborn.Emptying;
 using UnityEngine;
 
 namespace Timberbot
@@ -475,19 +477,49 @@ namespace Timberbot
             };
         }
 
-        // set which good a single-good stockpile accepts
-        public object SetStockpileGood(int buildingId, string goodId)
+        // set storage mode (accept/obtain/supply/empty) and/or allowed good on any storage building
+        public object SetStorage(int buildingId, string good, string mode)
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
 
-            var sga = ec.GetComponent<SingleGoodAllower>();
-            if (sga == null)
-                return _jw.Error("invalid_type: not a single-good stockpile. only SmallWarehouse/LargeWarehouse have good filters", ("id", buildingId), ("name", N(ec)));
+            var sp = ec.GetComponent<StockpilePriority>();
+            if (sp == null)
+                return _jw.Error("invalid_type: not a storage building. piles, warehouses, and tanks have storage settings", ("id", buildingId), ("name", N(ec)));
 
-            sga.Allow(goodId);
-            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("good", sga.AllowedGood));
+            // set good if requested
+            if (!string.IsNullOrEmpty(good))
+            {
+                var sga = ec.GetComponent<SingleGoodAllower>();
+                if (sga == null)
+                    return _jw.Error("invalid_type: this storage does not support good selection", ("id", buildingId), ("name", N(ec)));
+                if (good == "none")
+                    sga.Disallow();
+                else
+                    sga.Allow(good);
+            }
+
+            // set mode if requested
+            if (!string.IsNullOrEmpty(mode))
+            {
+                switch (mode.ToLowerInvariant())
+                {
+                    case "accept": sp.Accept(); break;
+                    case "obtain": sp.Obtain(); break;
+                    case "supply": sp.Supply(); break;
+                    case "empty": sp.Empty(); break;
+                    default:
+                        return _jw.Error("invalid_param: mode must be accept, obtain, supply, or empty", ("got", mode));
+                }
+            }
+
+            // build response with current state
+            var name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
+            var sga2 = ec.GetComponent<SingleGoodAllower>();
+            var currentGood = sga2 != null && sga2.HasAllowedGood ? sga2.AllowedGood : "";
+            var currentMode = sp.IsEmptyActive ? "empty" : sp.IsObtainActive ? "obtain" : sp.IsSupplyActive ? "supply" : "accept";
+            return _jw.Result(("id", buildingId), ("name", name), ("good", currentGood), ("mode", currentMode));
         }
 
         // mark area for crop planting (validates via PlantingAreaValidator.CanPlant)

@@ -226,6 +226,14 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Stockpiles.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.StockpilePrioritySystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.StockpilePrioritySystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Emptying" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Emptying.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.DistributionSystem" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>

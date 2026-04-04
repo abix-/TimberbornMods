@@ -261,6 +261,30 @@ class TestRunner:
         args.update(kwargs)
         return self.bot.debug(**args)
 
+    def debug_component_field(self, entity_id, type_suffix, field):
+        """read a field from a component on an entity via debug.
+        scans AllComponents for the type, then reads the field. returns value or None."""
+        if not self.debug_enabled:
+            return None
+        self.debug_call("Write._cache", "FindEntity", arg0=str(entity_id))
+        # scan in blocks: check [40],[45],[50],[55],[60] first (storage components cluster here)
+        for start in [40, 0, 60, 80]:
+            for i in range(start, start + 20):
+                r = self.debug_get(f"$.AllComponents.[{i}]")
+                res = r.get("result")
+                if res is None:
+                    if i > 70:
+                        return None
+                    continue
+                if not isinstance(res, dict):
+                    continue
+                if type_suffix in res.get("type", ""):
+                    # re-fetch entity and read field at this index
+                    self.debug_call("Write._cache", "FindEntity", arg0=str(entity_id))
+                    val = self.debug_get(f"$.AllComponents.[{i}].{field}")
+                    return val.get("result")
+        return None
+
     def find_spot(self, prefab="Path"):
         """find a valid placement spot for prefab using discovered search area"""
         result = self.bot.find_placement(prefab, self.x1, self.y1, self.x2, self.y2)
@@ -570,7 +594,7 @@ class TestRunner:
         "write": [
             "speed", "pause", "priority", "workers", "floodgate", "clutch",
             "haul_priority", "recipe", "farmhouse_action", "plantable_priority",
-            "stockpile", "stockpile_capacity", "workhours", "distribution",
+            "storage", "workhours", "distribution",
             "migrate", "unlock",
         ],
         "placement": [
@@ -892,19 +916,113 @@ class TestRunner:
         # clear
         self.bot.clear_trees(tx - 3, ty - 3, tx + 3, ty + 3, tz)
 
-    def test_stockpile(self):
-        print("\n=== stockpile ===\n")
+    def test_storage(self):
+        print("\n=== storage ===\n")
 
-        # find a tank
-        tank_id = self.find_building("SmallTank") or self.find_building("Tank")
-        if not tank_id:
-            self.skip("stockpile tests", "no tank found")
+        # find any storage building (tank, warehouse, or pile)
+        sid = (self.find_building("SmallTank") or self.find_building("MediumTank")
+               or self.find_building("Warehouse") or self.find_building("Pile"))
+        if not sid:
+            self.skip("storage tests", "no storage building found")
             return
 
-        # set good
-        result = self.bot.set_good(tank_id, "Water")
-        self.check("set stockpile good", not self.err(result),
-                   json.dumps(result)[:100] if self.err(result) else "")
+        # read current state from buildings detail:full
+        detail = self.bot.buildings(id=sid, detail="full")
+        items = detail if isinstance(detail, list) else detail.get("items", [detail])
+        b = items[0] if items else {}
+        self.check("has storageMode field", "storageMode" in b, f"keys: {list(b.keys())[:10]}")
+        self.check("has allowedGood field", "allowedGood" in b, f"keys: {list(b.keys())[:10]}")
+        orig_mode = b.get("storageMode", "accept")
+        orig_good = b.get("allowedGood", "")
+
+        # set good to Water
+        result = self.bot.set_storage(sid, good="Water")
+        self.check("set good to Water", not self.err(result),
+                   json.dumps(result)[:120] if self.err(result) else "")
+        self.check("response has good=Water",
+                   isinstance(result, dict) and result.get("good") == "Water",
+                   f"got: {result.get('good', '?')}")
+
+        # verify via buildings read
+        detail_v = self.bot.buildings(id=sid, detail="full")
+        items_v = detail_v if isinstance(detail_v, list) else detail_v.get("items", [detail_v])
+        bv = items_v[0] if items_v else {}
+        self.check("read confirms good=Water", bv.get("allowedGood") == "Water",
+                   f"got: {bv.get('allowedGood', '?')}")
+
+        # verify via debug (ground truth)
+        debug_good = self.debug_component_field(sid, "SingleGoodAllower", "AllowedGood")
+        if debug_good is not None:
+            self.check("debug confirms good=Water", str(debug_good) == "Water",
+                       f"got: {debug_good}")
+
+        # clear good
+        result = self.bot.set_storage(sid, good="none")
+        self.check("clear good", not self.err(result),
+                   json.dumps(result)[:120] if self.err(result) else "")
+        self.check("response has good=empty",
+                   isinstance(result, dict) and result.get("good", "x") == "",
+                   f"got: {result.get('good', '?')}")
+
+        # test each storage mode
+        for mode in ["obtain", "supply", "empty", "accept"]:
+            result = self.bot.set_storage(sid, mode=mode)
+            self.check(f"set mode {mode}", not self.err(result),
+                       json.dumps(result)[:120] if self.err(result) else "")
+            self.check(f"response mode={mode}",
+                       isinstance(result, dict) and result.get("mode") == mode,
+                       f"got: {result.get('mode', '?')}")
+
+        # verify mode via buildings read after accept
+        detail_m = self.bot.buildings(id=sid, detail="full")
+        items_m = detail_m if isinstance(detail_m, list) else detail_m.get("items", [detail_m])
+        bm = items_m[0] if items_m else {}
+        self.check("read confirms mode=accept", bm.get("storageMode") == "accept",
+                   f"got: {bm.get('storageMode', '?')}")
+
+        # verify via debug (ground truth)
+        debug_accept = self.debug_component_field(sid, "StockpilePriority", "IsAcceptActive")
+        if debug_accept is not None:
+            self.check("debug confirms accept mode",
+                       str(debug_accept).lower() in ("true", "1"),
+                       f"got: {debug_accept}")
+
+        # test set both at once
+        result = self.bot.set_storage(sid, good="Water", mode="obtain")
+        self.check("set good+mode together", not self.err(result),
+                   json.dumps(result)[:120] if self.err(result) else "")
+        self.check("combined: good=Water",
+                   isinstance(result, dict) and result.get("good") == "Water",
+                   f"got: {result.get('good', '?')}")
+        self.check("combined: mode=obtain",
+                   isinstance(result, dict) and result.get("mode") == "obtain",
+                   f"got: {result.get('mode', '?')}")
+
+        # verify via buildings read that storageMode updated
+        detail2 = self.bot.buildings(id=sid, detail="full")
+        items2 = detail2 if isinstance(detail2, list) else detail2.get("items", [detail2])
+        b2 = items2[0] if items2 else {}
+        self.check("read storageMode=obtain", b2.get("storageMode") == "obtain",
+                   f"got: {b2.get('storageMode', '?')}")
+        self.check("read allowedGood=Water", b2.get("allowedGood") == "Water",
+                   f"got: {b2.get('allowedGood', '?')}")
+
+        # bad mode
+        result = self.bot.set_storage(sid, mode="badvalue")
+        self.check("bad mode returns error",
+                   self.err(result) and "invalid_param" in str(result.get("error", "")),
+                   json.dumps(result)[:120])
+
+        # non-storage building
+        path_id = self.find_building("Path")
+        if path_id:
+            result = self.bot.set_storage(path_id, mode="obtain")
+            self.check("non-storage returns error",
+                       self.err(result) and "invalid_type" in str(result.get("error", "")),
+                       json.dumps(result)[:120])
+
+        # restore original state
+        self.bot.set_storage(sid, good=orig_good or "none", mode=orig_mode or "accept")
 
     def test_orientation(self):
         print("\n=== orientation ===\n")
@@ -1844,23 +1962,6 @@ class TestRunner:
 
         # clear
         self.bot.set_plantable_priority(fid, "none")
-
-    def test_stockpile_capacity(self):
-        print("\n=== stockpile capacity ===\n")
-
-        sid = self.find_building("SmallTank") or self.find_building("MediumTank")
-        if not sid:
-            self.skip("stockpile capacity", "no tank found")
-            return
-
-        # get current capacity via debug
-        self.bot.debug(target="call", method="FindEntity", arg0=str(sid))
-        orig = self.bot.debug(target="get", path="$~Inventories")
-
-        result = self.bot.set_capacity(sid, 50)
-        self.check("set stockpile capacity",
-                   self.has(result, "capacity"),
-                   json.dumps(result)[:100])
 
     def test_workhours(self):
         print("\n=== workhours ===\n")
@@ -2888,8 +2989,7 @@ class TestRunner:
             ("place unknown prefab",    lambda: bot.place_building("Fake", sx, sy, sz),         "invalid_prefab"),
             ("place bad orientation",   lambda: bot.place_building("Path", sx, sy, sz, "bogus"), "invalid_param"),
             ("find_placement unknown",  lambda: bot.find_placement("Fake", 0, 0, 10, 10),      "invalid_prefab"),
-            ("stockpile_capacity nonexistent", lambda: bot.set_capacity(999999, 100),           "not_found"),
-            ("stockpile_good nonexistent", lambda: bot.set_good(999999, "Water"),               "not_found"),
+            ("storage nonexistent",       lambda: bot.set_storage(999999, good="Water"),          "not_found"),
             ("building_range nonexistent", lambda: bot.building_range(999999),                  "not_found"),
             ("unlock_building fake",    lambda: bot.unlock_building("FakeBuilding"),            "not_found"),
             ("set_distribution fake",   lambda: bot.set_distribution("FakeDistrict", "Water"),  "not_found"),

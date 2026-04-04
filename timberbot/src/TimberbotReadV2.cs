@@ -79,6 +79,7 @@ using Timberborn.GameDistricts;
 using Timberborn.Gathering;
 using Timberborn.Forestry;
 using Timberborn.InventorySystem;
+using Timberborn.StockpilePrioritySystem;
 using Timberborn.LifeSystem;
 using Timberborn.MapIndexSystem;
 using Timberborn.MechanicalSystem;
@@ -1609,6 +1610,16 @@ namespace Timberbot
                 }
                 catch (Exception ex) { TimberbotLog.Error("readv2.stock", ex); }
             }
+            s.StorageMode = "";
+            s.AllowedGood = "";
+            if (t.StoragePriority != null)
+            {
+                s.StorageMode = t.StoragePriority.IsEmptyActive ? "empty" : t.StoragePriority.IsObtainActive ? "obtain" : t.StoragePriority.IsSupplyActive ? "supply" : "accept";
+            }
+            if (t.GoodAllower != null && t.GoodAllower.HasAllowedGood)
+            {
+                s.AllowedGood = t.GoodAllower.AllowedGood;
+            }
             s.StatusAlerts = System.Array.Empty<string>();
             if (t.Status != null)
             {
@@ -1937,6 +1948,8 @@ namespace Timberbot
                 BreedingPod = ec.GetComponent<BreedingPod>(),
                 RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>(),
                 DistrictBuilding = ec.GetComponent<DistrictBuilding>(),
+                StoragePriority = ec.GetComponent<StockpilePriority>(),
+                GoodAllower = ec.GetComponent<SingleGoodAllower>(),
             };
 
             var def = new BuildingDefinition
@@ -2184,6 +2197,8 @@ namespace Timberbot
             public BreedingPod BreedingPod;
             public RangedEffectBuildingSpec RangedEffect;
             public DistrictBuilding DistrictBuilding;
+            public StockpilePriority StoragePriority;
+            public SingleGoodAllower GoodAllower;
             public BuildingDefinition Definition;
         }
 
@@ -2263,6 +2278,7 @@ namespace Timberbot
             public int ReadyToProduce;
             public int NeedsNutrients, Nutrients;
             public int Stock, Capacity;
+            public string StorageMode, AllowedGood;
             public string[] StatusAlerts;
         }
 
@@ -2807,6 +2823,8 @@ namespace Timberbot
                     .Prop("hasMaterials", s.HasMaterials)
                     .Prop("stock", s.Stock)
                     .Prop("capacity", s.Capacity)
+                    .Prop("storageMode", s.StorageMode)
+                    .Prop("allowedGood", s.AllowedGood)
                     .Prop("dwellers", s.Dwellers)
                     .Prop("maxDwellers", s.MaxDwellers)
                     .Prop("floodgate", d.HasFloodgate)

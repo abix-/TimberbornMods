@@ -421,9 +421,12 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": False
         })
 
-    def set_good(self, id, good):
-        """Set allowed good on a single-good stockpile."""
-        return self._post("/api/stockpile/good", {"id": id, "good": good})
+    def set_storage(self, id, good="", mode=""):
+        """Set storage mode and/or allowed good. mode: accept, obtain, supply, empty. good: good name or 'none' to clear."""
+        body = {"id": id}
+        if good: body["good"] = good
+        if mode: body["mode"] = mode
+        return self._post("/api/building/storage", body)
 
     def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0, timings=False):
         """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N stair crossings then stop."""
