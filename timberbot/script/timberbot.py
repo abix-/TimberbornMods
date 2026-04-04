@@ -421,10 +421,6 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": False
         })
 
-    def set_capacity(self, id, capacity):
-        """Set stockpile capacity."""
-        return self._post("/api/stockpile/capacity", {"id": id, "capacity": capacity})
-
     def set_good(self, id, good):
         """Set allowed good on a single-good stockpile."""
         return self._post("/api/stockpile/good", {"id": id, "good": good})

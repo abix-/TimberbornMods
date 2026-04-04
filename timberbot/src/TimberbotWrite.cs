@@ -167,7 +167,7 @@ namespace Timberbot
         {
             if (endHours < 1 || endHours > 24)
                 return _jw.Error("invalid_param: endHours must be 1-24 (hour when work stops, default 18)", ("got", endHours));
-            _workingHoursManager.EndHours = endHours;
+            _workingHoursManager.WorkedPartOfDay = (endHours - _workingHoursManager._startHours) / 24f;
             return _jw.Result(("endHours", (_workingHoursManager.EndHours)));
         }
 
@@ -434,8 +434,8 @@ namespace Timberbot
             if (workplace == null)
                 return _jw.Error("invalid_type: not a workplace. only staffed buildings (lumberjacks, farms, etc) have workers", ("id", buildingId), ("name", N(ec)));
 
-            var clamped = Mathf.Clamp(count, 0, workplace.MaxWorkers);
-            workplace.DesiredWorkers = clamped;
+            var clamped = Mathf.Clamp(count, 1, workplace.MaxWorkers);
+            workplace.SetDesiredWorkers(clamped);
             return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("desiredWorkers", workplace.DesiredWorkers), ("maxWorkers", workplace.MaxWorkers), ("assignedWorkers", workplace.NumberOfAssignedWorkers));
         }
 
@@ -475,32 +475,6 @@ namespace Timberbot
             };
         }
 
-        // set max capacity on a stockpile building
-        public object SetStockpileCapacity(int buildingId, int capacity)
-        {
-            var ec = _cache.FindEntity(buildingId);
-            if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
-
-            var inventories = ec.GetComponent<Inventories>();
-            if (inventories == null)
-                return _jw.Error("invalid_type: no inventory. use buildings name:Stockpile to find stockpiles", ("id", buildingId), ("name", N(ec)));
-
-            // Set capacity on all inventories
-            var capInv = inventories.AllInventories;
-            for (int ci = 0; ci < capInv.Count; ci++)
-            {
-                capInv[ci].Capacity = capacity;
-            }
-
-            return new
-            {
-                id = buildingId,
-                name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name),
-                capacity
-            };
-        }
-
         // set which good a single-good stockpile accepts
         public object SetStockpileGood(int buildingId, string goodId)
         {
@@ -512,7 +486,7 @@ namespace Timberbot
             if (sga == null)
                 return _jw.Error("invalid_type: not a single-good stockpile. only SmallWarehouse/LargeWarehouse have good filters", ("id", buildingId), ("name", N(ec)));
 
-            sga.AllowedGood = goodId;
+            sga.Allow(goodId);
             return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("good", sga.AllowedGood));
         }
 
