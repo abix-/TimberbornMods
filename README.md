@@ -1,5 +1,7 @@
 # Timberbot API
 
+**Status: active -- mod works, still adding features**
+
 C# mod + Python client that lets AI agents read and control a running Timberborn game over HTTP.
 
 ```
