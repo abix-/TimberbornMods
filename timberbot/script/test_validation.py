@@ -622,6 +622,7 @@ class TestRunner:
             "bot_toon_format", "bot_durability",
         ],
         "webhooks": ["webhooks"],
+        "security": ["security"],
         "cli": ["cli_commands", "error_codes"],
         "perf": [
             "performance", "building_endpoint_perf", "brain_perf",
@@ -633,7 +634,7 @@ class TestRunner:
     # ordered list of groups for default run (perf and wipe excluded)
     DEFAULT_GROUPS = [
         "read", "write", "placement", "path", "crops",
-        "buildings", "beavers", "webhooks", "cli",
+        "buildings", "beavers", "webhooks", "security", "cli",
     ]
 
     def run(self):
@@ -2910,6 +2911,75 @@ class TestRunner:
         result = self.bot.migrate(d1, d2, 0)
         self.check("migrate call returns dict", isinstance(result, dict),
                    f"got: {type(result).__name__}")
+
+    def test_security(self):
+        """Test security hardening: removed endpoints, SSRF blocking, body size limits."""
+        print("\n=== security ===\n")
+
+        # agent endpoints should be removed (no HTTP-based process launching)
+        try:
+            r = self.bot.s.post(f"{self.bot.url}/api/agent/start",
+                                json={"binary": "claude", "goal": "test"}, timeout=5)
+            data = r.json()
+            self.check("agent/start removed",
+                       isinstance(data, dict) and "error" in data
+                       and "unknown_endpoint" in data.get("error", ""),
+                       f"expected unknown_endpoint error, got: {data}")
+        except Exception as e:
+            self.check("agent/start removed", False, f"exception: {e}")
+
+        try:
+            r = self.bot.s.post(f"{self.bot.url}/api/agent/stop", json={}, timeout=5)
+            data = r.json()
+            self.check("agent/stop removed",
+                       isinstance(data, dict) and "error" in data
+                       and "unknown_endpoint" in data.get("error", ""),
+                       f"expected unknown_endpoint error, got: {data}")
+        except Exception as e:
+            self.check("agent/stop removed", False, f"exception: {e}")
+
+        try:
+            r = self.bot.s.get(f"{self.bot.url}/api/agent/status", timeout=5)
+            data = r.json()
+            self.check("agent/status removed",
+                       isinstance(data, dict) and "error" in data
+                       and "unknown_endpoint" in data.get("error", ""),
+                       f"expected unknown_endpoint error, got: {data}")
+        except Exception as e:
+            self.check("agent/status removed", False, f"exception: {e}")
+
+        # webhook SSRF: private IPs should be rejected
+        for bad_url, label in [
+            ("http://169.254.169.254/latest/meta-data", "cloud metadata"),
+            ("http://127.0.0.1:6443/", "loopback"),
+            ("http://10.0.0.1/", "rfc1918 10.x"),
+            ("http://192.168.1.1/", "rfc1918 192.168.x"),
+            ("file:///etc/passwd", "file scheme"),
+            ("ftp://example.com/", "ftp scheme"),
+        ]:
+            try:
+                r = self.bot.s.post(f"{self.bot.url}/api/webhooks",
+                                    json={"url": bad_url}, timeout=5)
+                data = r.json()
+                blocked = isinstance(data, dict) and "error" in data and "invalid_webhook_url" in data.get("error", "")
+                self.check(f"webhook blocks {label}",
+                           blocked,
+                           f"url={bad_url} response={data}")
+            except Exception as e:
+                self.check(f"webhook blocks {label}", False, f"exception: {e}")
+
+        # body size limit: >1MB should return 413
+        try:
+            big_body = "x" * (1048576 + 100)
+            r = self.bot.s.post(f"{self.bot.url}/api/speed",
+                                data=big_body,
+                                headers={"Content-Type": "application/json"},
+                                timeout=10)
+            self.check("body size limit enforced",
+                       r.status_code == 413,
+                       f"expected 413, got {r.status_code}")
+        except Exception as e:
+            self.check("body size limit enforced", False, f"exception: {e}")
 
     def test_cli_commands(self):
         """Test every CLI command runs without crashing via subprocess."""

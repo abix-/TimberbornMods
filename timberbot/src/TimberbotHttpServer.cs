@@ -426,8 +426,6 @@ namespace Timberbot
                     return _service.Placement.CollectPrefabs();
                 case "/api/webhooks":
                     return _service.WebhookMgr.ListWebhooks();
-                case "/api/agent/status":
-                    return _service.Agent.Status();
             }
 
             return UnknownEndpoint();
@@ -446,7 +444,7 @@ namespace Timberbot
                 "/api/gatherables", "/api/beavers", "/api/resources", "/api/population", "/api/districts",
                 "/api/weather", "/api/time", "/api/speed", "/api/prefabs", "/api/power", "/api/tiles",
                 "/api/distribution", "/api/science", "/api/wellbeing", "/api/notifications", "/api/workhours",
-                "/api/tree_clusters", "/api/food_clusters", "/api/settlement", "/api/webhooks", "/api/agent/status"
+                "/api/tree_clusters", "/api/food_clusters", "/api/settlement", "/api/webhooks"
             }), ("post_endpoints", new[] {
                 "/api/speed", "/api/building/place", "/api/building/demolish", "/api/building/pause",
                 "/api/building/clutch", "/api/building/floodgate", "/api/building/priority",
@@ -456,8 +454,7 @@ namespace Timberbot
                 "/api/planting/mark", "/api/planting/find", "/api/planting/clear",
                 "/api/cutting/area", "/api/building/storage",
                 "/api/science/unlock", "/api/distribution", "/api/workhours",
-                "/api/district/migrate", "/api/webhooks", "/api/webhooks/delete",
-                "/api/agent/start", "/api/agent/stop"
+                "/api/district/migrate", "/api/webhooks", "/api/webhooks/delete"
             }));
         }
 
@@ -509,9 +506,6 @@ namespace Timberbot
                 Queued("/api/path/place", req => _service.Placement.CreateRoutePathJob(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<string>("style") ?? "direct", req.Body?.Value<int>("sections") ?? 0, req.Body?.Value<bool?>("timings") ?? false, req.QueuedAtTicks, req.QueuedAtFrame)),
                 Queued("/api/placement/find", req => _service.Placement.CreateFindPlacementJob(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Format)),
                 Queued("/api/building/place", req => new LambdaWriteJob(req.Route, () => _service.Placement.PlaceBuilding(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x") ?? 0, req.Body?.Value<int>("y") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("orientation") ?? "south").ToJson(_service.Placement.Jw))),
-                // terminal param intentionally not passed from HTTP requests (security: settings-only)
-                Queued("/api/agent/start", req => new LambdaWriteJob(req.Route, () => _service.Agent.Start(req.Body?.Value<string>("binary") ?? "claude", req.Body?.Value<string>("model"), req.Body?.Value<string>("effort"), req.Body?.Value<int>("timeout") ?? 120, req.Body?.Value<string>("goal"), req.Body?.Value<string>("command")))),
-                Queued("/api/agent/stop", req => new LambdaWriteJob(req.Route, () => _service.Agent.Stop())),
             };
 
             var result = new Dictionary<string, PostRouteDescriptor>(System.StringComparer.Ordinal);

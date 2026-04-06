@@ -66,9 +66,6 @@ namespace Timberbot
         private NineSliceButton _listenAddressPresetBtn;
         private TextField _corsOriginField;
         private NineSliceButton _corsOriginPresetBtn;
-        private TextField _agentAllowlistEnabledField;
-        private NineSliceButton _agentAllowlistEnabledPresetBtn;
-        private TextField _agentAllowedBinariesField;
         private TextField _webhookValidateUrlsField;
         private NineSliceButton _webhookValidateUrlsPresetBtn;
         private TextField _maxBodyBytesField;
@@ -189,8 +186,6 @@ namespace Timberbot
             ["pythonCommand:"] = "Optional Python 3 command used to run timberbot.py for brain/startup work. Leave blank for OS auto-detect (`py -3` on Windows, common python3 locations on macOS). Reload save to apply.",
             ["listenAddress:"] = "Network address the HTTP server binds to. 'localhost' (default) = local only. '+' = all interfaces (LAN access). Reload save to apply.",
             ["corsOrigin:"] = "Allowed CORS origin for browser requests. Empty = auto (localhost only). '*' = any origin (less secure). Reload save to apply.",
-            ["agentAllowlistEnabled:"] = "When true, only claude, codex, and binaries listed in agentAllowedBinaries can be launched via /api/agent/start. Set false to allow any binary. Reload save to apply.",
-            ["agentAllowedBinaries:"] = "Comma-separated list of additional binary names allowed for the agent (e.g. 'mybot,custom-cli'). Only used when agentAllowlistEnabled is true. Reload save to apply.",
             ["webhookValidateUrls:"] = "When true, webhook URLs are validated: must be http/https and must not resolve to private/internal IP addresses. Set false to allow any URL. Reload save to apply.",
             ["maxBodyBytes:"] = "Maximum POST request body size in bytes. 0 = unlimited. Default 1048576 (1MB). Reload save to apply.",
         };
@@ -588,22 +583,6 @@ namespace Timberbot
             _corsOriginField.RegisterValueChangedCallback(evt => _service.SaveUISetting("corsOrigin", evt.newValue ?? ""));
             _corsOriginPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_corsOriginPresetBtn, _corsOriginField, CorsOriginChoices));
             _securitySettingsContainer.Add(MakePresetFieldRow("corsOrigin:", _corsOriginField, _corsOriginPresetBtn));
-
-            var savedAgentAllowlist = NormalizeBoolString(_service.GetUISetting("agentAllowlistEnabled"), true);
-            _agentAllowlistEnabledField = MakeTextField(savedAgentAllowlist);
-            _agentAllowlistEnabledField.RegisterValueChangedCallback(evt =>
-            {
-                var value = NormalizeBoolString(evt.newValue, true);
-                _agentAllowlistEnabledField.SetValueWithoutNotify(value);
-                _service.SaveBoolSetting("agentAllowlistEnabled", value == "true");
-            });
-            _agentAllowlistEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_agentAllowlistEnabledPresetBtn, _agentAllowlistEnabledField, BoolChoices));
-            _securitySettingsContainer.Add(MakePresetFieldRow("agentAllowlistEnabled:", _agentAllowlistEnabledField, _agentAllowlistEnabledPresetBtn));
-
-            var savedAllowedBinaries = _service.GetUISetting("agentAllowedBinaries") ?? "";
-            _agentAllowedBinariesField = MakeTextField(savedAllowedBinaries);
-            _agentAllowedBinariesField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentAllowedBinaries", evt.newValue ?? ""));
-            _securitySettingsContainer.Add(MakeFieldRow("agentAllowedBinaries:", _agentAllowedBinariesField));
 
             var savedWebhookValidate = NormalizeBoolString(_service.GetUISetting("webhookValidateUrls"), true);
             _webhookValidateUrlsField = MakeTextField(savedWebhookValidate);
