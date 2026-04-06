@@ -218,8 +218,8 @@ namespace Timberbot
                     matches.Add(name);
             }
             if (matches.Count == 0)
-                return "invalid_prefab: '" + badName + "' not found. No similar prefabs. Use prefabs to list all";
-            return "invalid_prefab: '" + badName + "' not found. Similar: " + string.Join(", ", matches);
+                return "invalid_prefab: '" + badName + "' not found. no similar prefabs. run: timberbot.py prefabs to list all";
+            return "invalid_prefab: '" + badName + "' not found. similar: " + string.Join(", ", matches) + ". run: timberbot.py prefabs to list all";
         }
 
         // ================================================================
@@ -284,7 +284,7 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(id);
             if (ec == null)
-                return Jw.Error("not_found: no entity with this id, ids are ephemeral so re-query buildings or crops", ("id", id));
+                return Jw.Error("not_found: no entity with this id, ids are ephemeral and change on reload. run: timberbot.py buildings or timberbot.py crops to get current ids", ("id", id));
 
             var validationError = validateError?.Invoke(ec);
             if (validationError != null)
@@ -2183,7 +2183,7 @@ namespace Timberbot
         {
             int orientation = ParseOrientation(orientationStr);
             if (orientation < 0)
-                return PlaceBuildingResult.Fail("invalid_param: invalid orientation, use south, west, north, east");
+                return PlaceBuildingResult.Fail("invalid_param: invalid orientation, use south, west, north, east. run: timberbot.py place_building prefab:X x:N y:N z:N orientation:south");
 
             BuildingSpec buildingSpec;
             try { buildingSpec = _buildingService.GetBuildingTemplate(prefabName); }

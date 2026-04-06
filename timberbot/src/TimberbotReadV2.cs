@@ -560,7 +560,7 @@ namespace Timberbot
             }
             catch (TimeoutException)
             {
-                return _jw.Error("refresh_timeout");
+                return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s");
             }
 
             int treeMarkedGrown = 0, treeMarkedSeedling = 0, treeUnmarkedGrown = 0;
@@ -843,7 +843,7 @@ namespace Timberbot
         {
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot snapshot;
             try { snapshot = _naturalResourceSnapshot.RequestFresh(false, 2000); }
-            catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+            catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
             foreach (var kv in _clusterCells) { kv.Value[0] = 0; kv.Value[1] = 0; }
             foreach (var kv in _clusterSpecies) kv.Value.Clear();
             var cells = _clusterCells;
@@ -882,7 +882,7 @@ namespace Timberbot
         {
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot snapshot;
             try { snapshot = _naturalResourceSnapshot.RequestFresh(false, 2000); }
-            catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+            catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
             foreach (var kv in _clusterCells) { kv.Value[0] = 0; kv.Value[1] = 0; }
             foreach (var kv in _clusterSpecies) kv.Value.Clear();
             var cells = _clusterCells;
@@ -921,7 +921,7 @@ namespace Timberbot
         {
             DistrictSnapshot[] districts;
             try { districts = _districtStore.RequestFresh(2000); }
-            catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+            catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
             var jw = _jw.Reset();
             if (format == "toon")
             {
@@ -951,7 +951,7 @@ namespace Timberbot
         {
             DistrictSnapshot[] districts;
             try { districts = _districtStore.RequestFresh(2000); }
-            catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+            catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
             var jw = _jw.Reset().BeginArr();
             foreach (var dc in districts)
             {
@@ -970,7 +970,7 @@ namespace Timberbot
         {
             DistrictSnapshot[] districts;
             try { districts = _districtStore.RequestFresh(2000); }
-            catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+            catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
             var jw = _jw.Reset().BeginArr();
             foreach (var dc in districts)
             {
@@ -1012,7 +1012,7 @@ namespace Timberbot
             {
                 ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState>.Snapshot beavers;
                 try { beavers = _beaverSnapshot.RequestFresh(true, 2000); }
-                catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+                catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
                 var beaverNeeds = _cachedBeaverNeeds;
                 foreach (var kv in _wbGroupNeeds) kv.Value.Clear();
                 _wbGroupMaxTotals.Clear();
@@ -1111,7 +1111,7 @@ namespace Timberbot
             }
             catch (TimeoutException)
             {
-                return _jw.Error("refresh_timeout");
+                return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s");
             }
 
             for (int i = 0; i < buildingSnapshot.Count; i++)
@@ -2731,7 +2731,7 @@ namespace Timberbot
                 var query = CollectionQuery.Parse(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
                 ProjectionSnapshot<TDef, TState, TDetail>.Snapshot snapshot;
                 try { snapshot = _snapshotProvider(query.NeedsFullDetail, 2000); }
-                catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
+                catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
 
                 int total = snapshot.Count;
                 if (query.Paginated && query.HasFilter)
@@ -3180,8 +3180,8 @@ namespace Timberbot
             {
                 TSnapshot snapshot;
                 try { snapshot = _snapshotProvider(2000); }
-                catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
-                if (snapshot == null) return _jw.Error("not_ready");
+                catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
+                if (snapshot == null) return _jw.Error("not_ready: snapshot not yet built, retry in 1s");
                 var jw = _jw.Reset();
                 _schema.Write(jw, format ?? "toon", snapshot);
                 return jw.ToString();
@@ -3210,8 +3210,8 @@ namespace Timberbot
             {
                 TItem[] items;
                 try { items = _itemsProvider(2000); }
-                catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
-                if (items == null) return _jw.Error("not_ready");
+                catch (TimeoutException) { return _jw.Error("refresh_timeout: server is building a fresh snapshot, retry in 1s"); }
+                if (items == null) return _jw.Error("not_ready: snapshot not yet built, retry in 1s");
 
                 bool paginated = limit > 0;
                 int skipped = 0, emitted = 0;

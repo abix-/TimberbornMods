@@ -158,7 +158,7 @@ namespace Timberbot
         public object SetSpeed(int speed)
         {
             if (speed < 0 || speed > 3)
-                return _jw.Error("invalid_param: speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest)", ("got", speed));
+                return _jw.Error("invalid_param: speed must be 0-3 (0=pause, 1=normal, 2=fast, 3=fastest). run: timberbot.py set_speed speed:1", ("got", speed));
 
             _speedManager.ChangeSpeed(SpeedScale[speed]);
             return _jw.Result(("speed", speed));
@@ -168,7 +168,7 @@ namespace Timberbot
         public object SetWorkHours(int endHours)
         {
             if (endHours < 1 || endHours > 24)
-                return _jw.Error("invalid_param: endHours must be 1-24 (hour when work stops, default 18)", ("got", endHours));
+                return _jw.Error("invalid_param: endHours must be 1-24 (hour when work stops, default 18). run: timberbot.py set_workhours end_hours:18", ("got", endHours));
             _workingHoursManager.WorkedPartOfDay = (endHours - _workingHoursManager._startHours) / 24f;
             return _jw.Result(("endHours", (_workingHoursManager.EndHours)));
         }
@@ -182,8 +182,8 @@ namespace Timberbot
                 if (dc.DistrictName == fromDistrict) fromDc = dc;
                 if (dc.DistrictName == toDistrict) toDc = dc;
             }
-            if (fromDc == null) return _jw.Error("not_found: source district does not exist", ("from", fromDistrict), ("districts", DistrictNames()));
-            if (toDc == null) return _jw.Error("not_found: target district does not exist", ("to", toDistrict), ("districts", DistrictNames()));
+            if (fromDc == null) return _jw.Error("not_found: source district does not exist. run: timberbot.py districts to see valid names", ("from", fromDistrict), ("districts", DistrictNames()));
+            if (toDc == null) return _jw.Error("not_found: target district does not exist. run: timberbot.py districts to see valid names", ("to", toDistrict), ("districts", DistrictNames()));
             try
             {
                 var distributor = _populationDistributorRetriever.GetPopulationDistributor<AdultsDistributorTemplate>(fromDc);
@@ -192,7 +192,7 @@ namespace Timberbot
                 var available = distributor.Current;
                 var toMove = System.Math.Min(count, available);
                 if (toMove <= 0)
-                    return _jw.Error("no_population: no beavers available to migrate in this district", ("from", fromDistrict), ("available", available), ("requested", count));
+                    return _jw.Error("no_population: no beavers available to migrate in this district. run: timberbot.py beavers to check population", ("from", fromDistrict), ("available", available), ("requested", count));
                 distributor.MigrateTo(toDc, toMove);
                 return _jw.Result(("from", fromDistrict), ("to", toDistrict), ("migrated", toMove));
             }
@@ -208,11 +208,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var pausable = ec.GetComponent<PausableBuilding>();
             if (pausable == null)
-                return _jw.Error("invalid_type: this building cannot be paused", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: this building cannot be paused. run: timberbot.py buildings to find pausable buildings", ("id", buildingId), ("name", N(ec)));
 
             if (paused)
                 pausable.Pause();
@@ -226,11 +226,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var clutch = ec.GetComponent<Clutch>();
             if (clutch == null)
-                return _jw.Error("invalid_type: no clutch. only power-consuming buildings have clutches", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no clutch. only power-consuming buildings have clutches. run: timberbot.py buildings to find buildings with clutches", ("id", buildingId), ("name", N(ec)));
 
             clutch.SetMode(engaged ? ClutchMode.Engaged : ClutchMode.Disengaged);
             return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("engaged", clutch.IsEngaged).CloseObj().ToString();
@@ -241,11 +241,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var floodgate = ec.GetComponent<Floodgate>();
             if (floodgate == null)
-                return _jw.Error("invalid_type: not a floodgate. use buildings name:Floodgate to find floodgates", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: not a floodgate. run: timberbot.py buildings name:Floodgate to find floodgates", ("id", buildingId), ("name", N(ec)));
 
             var clamped = Mathf.Clamp(height, 0f, floodgate.MaxHeight);
             floodgate.SetHeightAndSynchronize(clamped);
@@ -262,10 +262,10 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             if (!Enum.TryParse<Priority>(priorityStr, true, out var parsed))
-                return _jw.Error("invalid_param: priority must be one of: VeryLow, Low, Normal, High, VeryHigh", ("got", priorityStr));
+                return _jw.Error("invalid_param: priority must be one of: VeryLow, Low, Normal, High, VeryHigh. run: timberbot.py set_priority id:N priority:Normal", ("got", priorityStr));
 
             // construction priority: affects how fast builders deliver materials
             if (type == "construction" || string.IsNullOrEmpty(type))
@@ -288,7 +288,7 @@ namespace Timberbot
                 }
             }
 
-            return _jw.Error("invalid_type: no priority of that type. type must be 'construction' or 'workplace', or omit for auto-detect", ("id", buildingId), ("name", N(ec)), ("type", type));
+            return _jw.Error("invalid_type: no priority of that type. type must be 'construction' or 'workplace', or omit for auto-detect. run: timberbot.py set_priority id:N priority:Normal", ("id", buildingId), ("name", N(ec)), ("type", type));
         }
 
         // haulers deliver goods to this building first
@@ -296,11 +296,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var hp = ec.GetComponent<HaulPrioritizable>();
             if (hp == null)
-                return _jw.Error("invalid_type: no haul priority. only buildings with inventories support haul priority", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no haul priority. only buildings with inventories support haul priority. run: timberbot.py buildings to find storage/workshop buildings", ("id", buildingId), ("name", N(ec)));
 
             hp.Prioritized = prioritized;
             return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("haulPrioritized", hp.Prioritized).CloseObj().ToString();
@@ -315,16 +315,16 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var manufactory = ec.GetComponent<Manufactory>();
             if (manufactory == null)
-                return _jw.Error("invalid_type: no manufactory. only workshops/factories have recipes", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no manufactory. only workshops/factories have recipes. run: timberbot.py buildings to find workshops", ("id", buildingId), ("name", N(ec)));
 
             if (string.IsNullOrEmpty(recipeId) || recipeId == "none")
             {
                 if (manufactory.ProductionRecipes == null || manufactory.ProductionRecipes.Length <= 1)
-                    return _jw.Error("invalid_type: recipe cannot be cleared. single-recipe buildings always produce", ("id", buildingId), ("name", N(ec)));
+                    return _jw.Error("invalid_type: recipe cannot be cleared. single-recipe buildings always produce. run: timberbot.py buildings id:N detail:full to see recipes", ("id", buildingId), ("name", N(ec)));
                 try
                 {
                     manufactory.SetRecipe(null);
@@ -344,7 +344,7 @@ namespace Timberbot
                 var available = new List<string>();
                 foreach (var r in manufactory.ProductionRecipes)
                     available.Add(r.Id);
-                return _jw.Error("not_found: recipe does not exist for this building", ("recipeId", recipeId), ("available", available));
+                return _jw.Error("not_found: recipe does not exist for this building. run: timberbot.py buildings id:N detail:full to see available recipes", ("recipeId", recipeId), ("available", available));
             }
 
             try
@@ -364,11 +364,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var farmhouse = ec.GetComponent<FarmHouse>();
             if (farmhouse == null)
-                return _jw.Error("invalid_type: not a farmhouse. use buildings name:FarmHouse to find farmhouses", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: not a farmhouse. run: timberbot.py buildings name:FarmHouse to find farmhouses", ("id", buildingId), ("name", N(ec)));
 
             if (action == "planting")
             {
@@ -381,7 +381,7 @@ namespace Timberbot
                 return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("action", "default").CloseObj().ToString();
             }
 
-            return _jw.Error("invalid_param: action must be 'planting' or 'harvesting'", ("got", action));
+            return _jw.Error("invalid_param: action must be 'planting' or 'harvesting'. run: timberbot.py set_farmhouse_action id:N action:planting", ("got", action));
         }
 
         // forester/gatherer prioritizes this resource type
@@ -389,11 +389,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var prioritizer = ec.GetComponent<PlantablePrioritizer>();
             if (prioritizer == null)
-                return _jw.Error("invalid_type: no plantable prioritizer. only foresters and gatherers support this", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no plantable prioritizer. only foresters and gatherers support this. run: timberbot.py buildings name:Forester to find foresters", ("id", buildingId), ("name", N(ec)));
 
             if (string.IsNullOrEmpty(plantableName) || plantableName == "none")
             {
@@ -403,7 +403,7 @@ namespace Timberbot
 
             var planterBuilding = ec.GetComponent<PlanterBuilding>();
             if (planterBuilding == null)
-                return _jw.Error("invalid_type: no planter component. only foresters and gatherers have plantable lists", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no planter component. only foresters and gatherers have plantable lists. run: timberbot.py buildings name:Forester to find foresters", ("id", buildingId), ("name", N(ec)));
 
             PlantableSpec match = null;
             var available = new List<string>();
@@ -415,7 +415,7 @@ namespace Timberbot
             }
 
             if (match == null)
-                return _jw.Error("not_found: plantable not in this building's list", ("plantableName", plantableName), ("available", available));
+                return _jw.Error("not_found: plantable not in this building's list. run: timberbot.py buildings id:N detail:full to see available plantables", ("plantableName", plantableName), ("available", available));
 
             prioritizer.PrioritizePlantable(match);
             return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("prioritized", match.TemplateName).CloseObj().ToString();
@@ -430,11 +430,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var workplace = ec.GetComponent<Workplace>();
             if (workplace == null)
-                return _jw.Error("invalid_type: not a workplace. only staffed buildings (lumberjacks, farms, etc) have workers", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: not a workplace. only staffed buildings (lumberjacks, farms, etc) have workers. run: timberbot.py buildings to find staffed buildings", ("id", buildingId), ("name", N(ec)));
 
             var clamped = Mathf.Clamp(count, 1, workplace.MaxWorkers);
             workplace.SetDesiredWorkers(clamped);
@@ -482,18 +482,18 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var sp = ec.GetComponent<StockpilePriority>();
             if (sp == null)
-                return _jw.Error("invalid_type: not a storage building. piles, warehouses, and tanks have storage settings", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: not a storage building. piles, warehouses, and tanks have storage settings. run: timberbot.py buildings to find storage buildings", ("id", buildingId), ("name", N(ec)));
 
             // set good if requested
             if (!string.IsNullOrEmpty(good))
             {
                 var sga = ec.GetComponent<SingleGoodAllower>();
                 if (sga == null)
-                    return _jw.Error("invalid_type: this storage does not support good selection", ("id", buildingId), ("name", N(ec)));
+                    return _jw.Error("invalid_type: this storage does not support good selection. run: timberbot.py buildings name:Warehouse to find configurable storage", ("id", buildingId), ("name", N(ec)));
                 if (good == "none")
                     sga.Disallow();
                 else
@@ -510,7 +510,7 @@ namespace Timberbot
                     case "supply": sp.Supply(); break;
                     case "empty": sp.Empty(); break;
                     default:
-                        return _jw.Error("invalid_param: mode must be accept, obtain, supply, or empty", ("got", mode));
+                        return _jw.Error("invalid_param: mode must be accept, obtain, supply, or empty. run: timberbot.py set_storage id:N mode:accept", ("got", mode));
                 }
             }
 
@@ -584,9 +584,9 @@ namespace Timberbot
             if (buildingId != 0)
             {
                 var ec = _cache.FindEntity(buildingId);
-                if (ec == null) return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                if (ec == null) return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
                 var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
-                if (inRange == null) return _jw.Error("invalid_type: no planting range. only farmhouses and foresters have planting ranges", ("id", buildingId), ("name", N(ec)));
+                if (inRange == null) return _jw.Error("invalid_type: no planting range. only farmhouses and foresters have planting ranges. run: timberbot.py buildings name:FarmHouse to find farmhouses", ("id", buildingId), ("name", N(ec)));
 
                 var jw = _jw.Reset().BeginObj().Prop("crop", crop).Arr("spots");
                 foreach (var c in inRange.GetCoordinates())
@@ -673,14 +673,14 @@ namespace Timberbot
                             return _jw.Result(("building", buildingName), ("unlocked", true), ("remaining", _scienceService.SciencePoints), ("note", "already unlocked"));
                         var cost = buildingSpec?.ScienceCost ?? 0;
                         if (cost > _scienceService.SciencePoints)
-                            return _jw.Error("insufficient_science: not enough science points to unlock", ("building", buildingName), ("scienceCost", cost), ("currentPoints", _scienceService.SciencePoints));
+                            return _jw.Error("insufficient_science: not enough science points to unlock. run: timberbot.py science to check current points", ("building", buildingName), ("scienceCost", cost), ("currentPoints", _scienceService.SciencePoints));
                         _buildingUnlockingService.Unlock(buildingSpec);
                         _toolUnlockingService.UnlockInternal(blockObjectTool, () => { });
                         return _jw.Result(("building", buildingName), ("unlocked", true), ("remaining", _scienceService.SciencePoints));
                     }
                 }
 
-                return _jw.Error("not_found: building not in toolbar. use prefabs to list all building names", ("building", buildingName));
+                return _jw.Error("not_found: building not in toolbar. run: timberbot.py prefabs to list all building names", ("building", buildingName));
             }
             catch (System.Exception ex)
             {
@@ -702,7 +702,7 @@ namespace Timberbot
 
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
                 if (distSetting == null)
-                    return _jw.Error("invalid_type: district has no distribution settings", ("district", districtName));
+                    return _jw.Error("invalid_type: district has no distribution settings. run: timberbot.py distribution to see district distribution state", ("district", districtName));
 
                 try
                 {
@@ -724,7 +724,7 @@ namespace Timberbot
 
                 return _jw.Result(("district", districtName), ("good", goodId), ("importOption", importOption), ("exportThreshold", exportThreshold));
             }
-            return _jw.Error("not_found: district does not exist", ("district", districtName), ("districts", DistrictNames()));
+            return _jw.Error("not_found: district does not exist. run: timberbot.py districts to see valid names", ("district", districtName), ("districts", DistrictNames()));
         }
 
         // Get the work range for a building (farmhouse, lumberjack, forester, gatherer).
@@ -735,11 +735,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return _jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", buildingId));
+                return _jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", buildingId));
 
             var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
             if (terrainRange == null)
-                return _jw.Error("invalid_type: no work range. only farmhouses, lumberjacks, foresters, gatherers, and scavengers have work ranges", ("id", buildingId), ("name", N(ec)));
+                return _jw.Error("invalid_type: no work range. only farmhouses, lumberjacks, foresters, gatherers, and scavengers have work ranges. run: timberbot.py buildings to find ranged buildings", ("id", buildingId), ("name", N(ec)));
 
             var range = terrainRange.GetRange();
             int moistCount = 0;
@@ -869,7 +869,7 @@ namespace Timberbot
                     var ec = _owner._cache.FindEntity(_buildingId);
                     if (ec == null)
                     {
-                        _result = _owner._jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", _buildingId));
+                        _result = _owner._jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", _buildingId));
                         _completed = true;
                         return false;
                     }
@@ -877,7 +877,7 @@ namespace Timberbot
                     var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
                     if (inRange == null)
                     {
-                        _result = _owner._jw.Error("invalid_type: no planting range. only farmhouses and foresters have planting ranges", ("id", _buildingId), ("name", N(ec)));
+                        _result = _owner._jw.Error("invalid_type: no planting range. only farmhouses and foresters have planting ranges. run: timberbot.py buildings name:FarmHouse to find farmhouses", ("id", _buildingId), ("name", N(ec)));
                         _completed = true;
                         return false;
                     }
@@ -966,7 +966,7 @@ namespace Timberbot
                 var ec = _owner._cache.FindEntity(_buildingId);
                 if (ec == null)
                 {
-                    _result = _owner._jw.Error("not_found: no entity with this id. ids are ephemeral, re-query buildings to get current ids", ("id", _buildingId));
+                    _result = _owner._jw.Error("not_found: no entity with this id. ids are ephemeral and change on reload. run: timberbot.py buildings to get current ids", ("id", _buildingId));
                     _completed = true;
                     return false;
                 }
@@ -974,7 +974,7 @@ namespace Timberbot
                 var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
                 if (terrainRange == null)
                 {
-                    _result = _owner._jw.Error("invalid_type: no work range. only farmhouses, lumberjacks, foresters, gatherers, and scavengers have work ranges", ("id", _buildingId), ("name", N(ec)));
+                    _result = _owner._jw.Error("invalid_type: no work range. only farmhouses, lumberjacks, foresters, gatherers, and scavengers have work ranges. run: timberbot.py buildings to find ranged buildings", ("id", _buildingId), ("name", N(ec)));
                     _completed = true;
                     return false;
                 }

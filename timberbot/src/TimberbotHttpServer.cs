@@ -334,7 +334,7 @@ namespace Timberbot
                     }
                     catch
                     {
-                        Respond(ctx, 400, _jw.Error("invalid_body: POST body must be valid JSON, e.g. {\"id\":1}"));
+                        Respond(ctx, 400, _jw.Error("invalid_body: POST body must be valid JSON, e.g. {\"id\":1}. check your request Content-Type is application/json"));
                         continue;
                     }
                 }
